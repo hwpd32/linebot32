@@ -197,7 +197,7 @@
       var q = search.value.trim();
       S.boot.people.filter(function (p) { return !q || (p.first + p.last + (p.nick || '')).indexOf(q.replace(/\s/g, '')) >= 0 || p.name.indexOf(q) >= 0; }).slice(0, 40).forEach(function (p) {
         add(list, h('div', { class: 'person', style: 'cursor:pointer', onclick: function () { chosen = p; render(); } },
-          h('input', { type: 'radio', name: 'me', checked: chosen && chosen.pid === p.pid }), h('div', { class: 'who' }, h('b', { text: p.name }))));
+          h('input', { type: 'radio', name: 'me', checked: chosen && chosen.pid === p.pid }), h('div', { class: 'who' }, h('b', { text: p.name }), p.position ? h('small', { class: 'muted', text: p.position }) : null)));
       });
       if (!list.children.length) add(list, h('p', { class: 'muted', text: 'ไม่พบชื่อ — ใช้ "ไม่พบชื่อของฉัน" ด้านล่าง' }));
     }
