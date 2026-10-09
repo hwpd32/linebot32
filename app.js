@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var CFG = window.APP_CONFIG || {};
-  var S = { boot: null, params: {}, idToken: '', stack: [] };
+  var S = { boot: null, params: {}, idToken: '', uid: '', stack: [] };
   var $app = document.getElementById('app');
 
   // ---------- ตัวช่วย DOM (ใช้ textContent เสมอ กันการฝังสคริปต์) ----------
@@ -34,7 +34,15 @@
   function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
   function toast(t, ms) { var el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(function () { el.classList.remove('show'); }, ms || 2600); }
   function setTitle(t, sub) { document.getElementById('title').textContent = t; document.getElementById('subtitle').textContent = sub || ''; document.title = t; }
-  function loading(msg) { clear($app); add($app, h('div', { class: 'loading' }, h('div', { class: 'spin' }), h('p', { text: msg || 'กำลังโหลด…' }))); }
+  function spinner() {
+    var el = h('div', { class: 'spin' });
+    // สำรองกรณี CSS animation ไม่ทำงานในเว็บวิวบางรุ่น — หมุนด้วย JS ขณะยังอยู่บนหน้า
+    var deg = 0, t0 = Date.now();
+    (function tick() { if (!el.isConnected && Date.now() - t0 > 2000) return; deg = (deg + 12) % 360; el.style.transform = 'rotate(' + deg + 'deg)'; setTimeout(tick, 40); })();
+    return el;
+  }
+  function skeleton(n) { var w = h('div', { class: 'skel' }); for (var i = 0; i < (n || 3); i++) add(w, h('div', { class: 'skel-card' }, h('div', { class: 'skel-line w60' }), h('div', { class: 'skel-line' }), h('div', { class: 'skel-line w80' }))); return w; }
+  function loading(msg) { clear($app); add($app, h('div', { class: 'loading' }, spinner(), h('p', { text: msg || 'กำลังโหลด…' })), skeleton(2)); }
   function errorBox(msg) { return h('div', { class: 'err', text: '⚠️ ' + msg }); }
   function card(title, right) { var c = h('div', { class: 'card' }); if (title) add(c, h('h3', null, title, right ? h('span', { class: 'right' }, right) : null)); return c; }
   function bar() { var b = h('div', { class: 'bar' }); add(b, Array.prototype.slice.call(arguments)); return b; }
@@ -62,7 +70,24 @@
       .then(function (v) { clearTimeout(t); return v; }, function (e) { clearTimeout(t); throw e; });
   }
   function stage(msg) { window.__stage = msg; var p = $app.querySelector('.loading p'); if (p) p.textContent = msg; }
-  function api(action, data) {
+  // แคชคำตอบระยะสั้นสำหรับคำขออ่านอย่างเดียว (เปิดหน้าเดิมซ้ำไม่ต้องรอเซิร์ฟเวอร์) + รวมคำขอซ้ำที่กำลังรอ
+  var READ_TTL = { 'shift.get': 45000, now: 30000, summary: 60000, 'shift.list': 60000, 'arrest.list': 30000, 'admin.meta': 60000 };
+  var apiCache = {}, inflight = {};
+  function apiKey(action, data) { return action + ':' + JSON.stringify(data || {}); }
+  function apiFresh(action, data) { var k = apiKey(action, data), c = apiCache[k]; return c && Date.now() - c.at < (READ_TTL[action] || 0) ? c.v : null; }
+  function apiInvalidate() { apiCache = {}; }
+  function api(action, data, opts) {
+    var ttl = READ_TTL[action] || 0, k = apiKey(action, data);
+    if (ttl && !(opts && opts.fresh)) {
+      var hit = apiCache[k]; if (hit && Date.now() - hit.at < ttl) return Promise.resolve(hit.v);
+      if (inflight[k]) return inflight[k];
+    }
+    if (!ttl) apiInvalidate(); // คำขอเขียน → ข้อมูลที่จำไว้อาจเก่า
+    var p = apiRaw(action, data).then(function (v) { if (ttl) apiCache[k] = { at: Date.now(), v: v }; delete inflight[k]; return v; }, function (e) { delete inflight[k]; throw e; });
+    if (ttl) inflight[k] = p;
+    return p;
+  }
+  function apiRaw(action, data) {
     var ctl = window.AbortController ? new AbortController() : null;
     var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken }), signal: ctl ? ctl.signal : undefined });
     return withTimeout(req, CFG.API_TIMEOUT_MS || 30000, 'ระบบตอบช้าเกินไป (เกิน 30 วินาที) กรุณากดลองใหม่').then(null, function (e) { if (ctl && e.code === 'TIMEOUT') ctl.abort(); throw e; })
@@ -184,18 +209,42 @@
       // เปิดผ่าน https://liff.line.me/<id>?v=... ครั้งแรก พารามิเตอร์อยู่ใน liff.state
       if (params['liff.state']) { new URLSearchParams(String(params['liff.state']).replace(/^[^?]*\?/, '')).forEach(function (v, k) { params[k] = v; }); }
       if (!S.idToken) throw new Error('LINE ไม่ส่งข้อมูลยืนยันตัวตน — กรุณาปิดหน้านี้แล้วเปิดใหม่จากแชทบอท');
+      S.uid = dec && dec.sub ? dec.sub : '';
       stage('กำลังโหลดข้อมูลจากระบบ…');
-      return boot().then(function () {
+      function open() {
         window.__booted = true;
         if (!S.boot.registered) return go('register', {}, true);
         var v = params.v === 'more' && !VIEWS.more ? 'home' : params.v;
         if (v === 'register') { v = 'home'; toast('✅ ท่านลงทะเบียนแล้ว — ใช้งานได้เลย', 3000); } // กดปุ่ม "ลงทะเบียน" ในแชทซ้ำหลังผูกแล้ว
         go(VIEWS[v] ? v : 'home', params, true);
-      });
+        prefetchCurrentShift();
+      }
+      var cached = S.uid ? bootCacheGet(S.uid) : null;
+      if (cached) { applyBoot(cached); open(); refreshBootQuiet(); return; }
+      return boot().then(open);
     }).catch(function (e) { window.__booted = true; fail(e, function () { location.reload(); }); });
   }
-  function boot() { return api('bootstrap').then(function (b) { S.boot = b; S._bootAt = Date.now(); setTitle('รายงานผล ' + (b.station || '').split(' ')[0], b.me ? b.me.name + ' · ' + (b.perms.roleLabel || '') : ''); return b; }); }
+  // จำ bootstrap ไว้ในเครื่อง (ต่อบัญชี LINE) → เปิดครั้งถัดไปหน้าขึ้นทันที แล้วค่อยอัปเดตเบื้องหลัง
+  var BOOT_KEY = 'boot:' + (CFG.LIFF_ID || ''), BOOT_MAX_AGE = 12 * 3600000;
+  function bootCacheGet(uid) { try { var j = JSON.parse(localStorage.getItem(BOOT_KEY) || 'null'); return j && j.uid === uid && Date.now() - j.at < BOOT_MAX_AGE && j.b && j.b.registered ? j.b : null; } catch (e) { return null; } }
+  function bootCachePut(uid, b) { try { if (b && b.registered) localStorage.setItem(BOOT_KEY, JSON.stringify({ uid: uid, at: Date.now(), b: b })); else localStorage.removeItem(BOOT_KEY); } catch (e) { } }
+  function applyBoot(b) { S.boot = b; S._bootAt = Date.now(); setTitle('รายงานผล ' + (b.station || '').split(' ')[0], b.me ? b.me.name + ' · ' + (b.perms.roleLabel || '') : ''); }
+  function boot() { return api('bootstrap').then(function (b) { applyBoot(b); bootCachePut(S.uid, b); return b; }); }
   function refreshBoot() { return boot().then(function () { renderTabs(TOP[S.view]); }, function () { }); }
+  // อัปเดตเบื้องหลังหลังเปิดจากแคช: ถ้าข้อมูลเปลี่ยนและผู้ใช้ยังไม่ได้กรอกอะไร ให้วาดหน้าหลัก/ตอนนี้ใหม่
+  function refreshBootQuiet() {
+    var before = JSON.stringify(S.boot);
+    return boot().then(function (b) {
+      renderTabs(TOP[S.view]);
+      var typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+      if (JSON.stringify(b) !== before && !typing && (S.view === 'home' || S.view === 'more')) VIEWS[S.view](S.params);
+    }, function () { });
+  }
+  function prefetchCurrentShift() {
+    var mine = (S.boot && S.boot.myShifts) || [], cur = S.boot && S.boot.current; if (!cur) return;
+    var sel = mine.filter(function (x) { return x.dutyDate === cur.dutyDate && x.shift === cur.shift; })[0] || mine[0];
+    if (sel) api('shift.get', { dutyDate: sel.dutyDate, shift: sel.shift, car: sel.car }).then(null, function () { });
+  }
   window.__app = { go: go, S: S, api: api }; // สำหรับทดสอบ
 
   // ======================= ลงทะเบียน =======================
@@ -481,14 +530,26 @@
   VIEWS.checkin = function (params) {
     setTitle('🟢 เข้าเวร', S.boot.me.name);
     clear($app);
-    var body = h('div'), cur = null, crewBox = null, eq = {}, route = h('input', { placeholder: 'เช่น ทล.3 กม.87–130 / จุดตรวจ…' }), note = h('textarea', { placeholder: 'สภาพจราจร/อื่นๆ (ไม่บังคับ)' });
+    var body = h('div'), cur = null, crewBox = null, eq = {}, checks = {}, route = h('input', { placeholder: 'เช่น ทล.3 กม.87–130 / จุดตรวจ…' }), note = h('textarea', { placeholder: 'สภาพจราจร/อื่นๆ (ไม่บังคับ)' });
     add($app, shiftPicker('checkin', params, function (sel) {
-      cur = sel; clear(body); add(body, h('div', { class: 'loading' }, h('div', { class: 'spin' })));
+      cur = sel; clear(body); add(body, h('div', { class: 'loading' }, spinner()), skeleton(2));
       api('shift.get', { dutyDate: sel.dutyDate, shift: sel.shift, car: sel.car }).then(function (g) {
         clear(body);
         if (g.record && g.record.checkinAt) add(body, h('div', { class: 'note', text: 'ผลัดนี้กดเข้าเวรแล้วเมื่อ ' + hm(g.record.checkinAt) + ' น. — บันทึกอีกครั้งเพื่อแก้ลูกเรือ/อุปกรณ์' }));
         crewBox = crewEditor(g.expected, g.record && g.record.crew);
-        var eqBox = card('🧰 อุปกรณ์', 'แตะเพื่อสลับ ✅/❌'), chips = h('div', { class: 'chips' });
+        // รายการตรวจ 3 ข้อ (ค่าตั้งต้นปกติ) — ติ๊กออกแล้วพิมพ์สิ่งที่ไม่ปกติแทน
+        var ckBox = card('📋 รายการตรวจ', 'ติ๊กออกถ้าไม่ปกติ แล้วพิมพ์รายละเอียด');
+        var saved = (g.record && g.record.checks) || {};
+        (S.boot.checkinItems || []).forEach(function (it) {
+          var key = it[0], ok = saved[key] === undefined || saved[key] === true, txt = h('input', { placeholder: it[2] + ' … (พิมพ์สิ่งที่พบ)', value: typeof saved[key] === 'string' ? saved[key] : '' });
+          var cb = h('input', { type: 'checkbox', checked: ok });
+          var row = h('div', { class: 'checkrow' }, h('label', { class: 'cap' }, cb, it[1]), txt);
+          txt.hidden = ok; checks[key] = ok ? true : (txt.value || '');
+          cb.onchange = function () { txt.hidden = cb.checked; checks[key] = cb.checked ? true : txt.value; if (!cb.checked) txt.focus(); };
+          txt.oninput = function () { checks[key] = txt.value; };
+          add(ckBox, row);
+        });
+        var eqBox = card('🧰 อุปกรณ์ประจำรถ', 'แตะเพื่อสลับ ✅/❌'), chips = h('div', { class: 'chips' });
         (S.boot.equipment || []).forEach(function (k) {
           eq[k] = !(g.record && g.record.equipment && g.record.equipment[k] === false);
           var b = h('button', { class: 'chip on', text: '✅ ' + k });
@@ -497,12 +558,12 @@
         });
         add(eqBox, chips);
         if (g.record) { route.value = g.record.route || ''; note.value = g.record.note || ''; }
-        var r = card('🛣 เส้นทาง/หมายเหตุ'); add(r, route, h('label', { class: 'f', text: 'หมายเหตุ' }), note);
-        add(body, crewBox, eqBox, r);
+        var r = card('🛣 เส้นทาง/หมายเหตุ'); add(r, route, h('label', { class: 'f', text: 'หมายเหตุ (จะขึ้นในรายงาน)' }), note);
+        add(body, crewBox, ckBox, eqBox, r);
       }, function (e) { clear(body); add(body, errorBox(e.message)); });
     }), body, bar(submitBtn('🟢 ยืนยันเข้าเวร', 'green', function () {
       if (!cur) throw new Error('กรุณาเลือกผลัดและรถ');
-      return api('checkin', { dutyDate: cur.dutyDate, shift: cur.shift, car: cur.car, zone: cur.zone, crew: crewBox.getCrew(), equipment: eq, route: route.value, note: note.value })
+      return api('checkin', { dutyDate: cur.dutyDate, shift: cur.shift, car: cur.car, zone: cur.zone, crew: crewBox.getCrew(), equipment: eq, checks: checks, route: route.value, note: note.value })
         .then(function (r) { refreshBoot(); done('เข้าเวรเรียบร้อย', r.message, { next: 'home' }); });
     })));
   };
@@ -515,7 +576,7 @@
     var state = { tickets: {}, warnings: 0, truckChecks: 0, suspectChecks: 0 }; // tickets[pid][code] = n
     var reason = h('textarea', { placeholder: 'เหตุผลการแก้ไข (จำเป็นเมื่อแก้หลัง 24 ชม. หรือแก้แทนผู้อื่น)' }), note = h('textarea', { placeholder: 'หมายเหตุ (ไม่บังคับ)' });
     add($app, shiftPicker('checkout', params, function (sel) {
-      cur = sel; clear(body); add(body, h('div', { class: 'loading' }, h('div', { class: 'spin' })));
+      cur = sel; clear(body); add(body, h('div', { class: 'loading' }, spinner()), skeleton(2));
       api('shift.get', { dutyDate: sel.dutyDate, shift: sel.shift, car: sel.car }).then(function (g) {
         rec = g.record; state.tickets = {}; state.warnings = state.truckChecks = state.suspectChecks = 0;
         g.events.forEach(function (e) {
@@ -620,24 +681,26 @@
     if (act.length) {
       var c = card('⏱ ขบวนที่กำลังนำ');
       act.forEach(function (e) {
-        var rt = h('input', { type: 'checkbox' }), ho = h('input', { placeholder: 'ส่งต่อให้ (เช่น ส.ทล.3)' });
+        var rt = h('input', { type: 'checkbox' }), ho = h('input', { placeholder: 'ส่งต่อให้ (เช่น ส.ทล.3)' }), res = h('input', { placeholder: 'ผล/หมายเหตุ เช่น ถึงปลายทางปลอดภัย (ไม่บังคับ)' });
         add(c, h('div', { class: 'list-item', style: 'display:block' }, h('b', { text: '🚔 ' + e.car + ' · ' + e.sub + (e.payload.name ? ' · ' + e.payload.name : '') }),
-          h('div', { class: 'muted small', text: 'เริ่ม ' + hm(e.payload.start) + ' น.' }), h('label', { class: 'cap' }, rt, 'ไป-กลับ (นับ 2 เที่ยว)'), ho,
+          h('div', { class: 'muted small', text: 'เริ่ม ' + hm(e.payload.start) + ' น.' }), h('label', { class: 'cap' }, rt, 'ไป-กลับ (นับ 2 ขบวน)'), ho, res,
           h('div', { style: 'margin-top:8px' }, submitBtn('🏁 จบขบวน', 'amber block', function () {
-            return api('escort.end', { eventId: e.id, roundTrip: rt.checked, handoverTo: ho.value }).then(function (r) { S.boot.activeEscorts = S.boot.activeEscorts.filter(function (x) { return x.id !== e.id; }); done('จบขบวนแล้ว', r.message, { next: 'escort' }); });
+            return api('escort.end', { eventId: e.id, roundTrip: rt.checked, handoverTo: ho.value, result: res.value }).then(function (r) { S.boot.activeEscorts = S.boot.activeEscorts.filter(function (x) { return x.id !== e.id; }); done('จบขบวนแล้ว', r.message, { next: 'escort' }); });
           }))));
       });
       add($app, c);
     }
-    var cur = null, kind = (S.boot.escortTypes || [])[2] || 'ขบวนทั่วไป';
-    var name = h('input', { placeholder: 'ชื่อขบวน/บุคคล (ไม่บังคับ)' }), from = h('input', { placeholder: 'รับช่วงจาก (ถ้ามี) เช่น ส.ทล.1' });
+    var cur = null, kind = (S.boot.escortTypes || [])[0] || 'ขบวนทั่วไป';
+    var name = h('input', { placeholder: 'เช่น นำส่งอวัยวะ / มศว. / รถอ่อนนุช' }), origin = h('input', { placeholder: 'ต้นทาง เช่น รพ.ชลบุรี' }), dest = h('input', { placeholder: 'ปลายทาง เช่น รพ.ศิริราช' }), from = h('input', { placeholder: 'รับช่วงจาก (ถ้ามี) เช่น ส.ทล.1 / 81' });
     var kinds = h('div', { class: 'chips' });
-    function rk() { clear(kinds); S.boot.escortTypes.forEach(function (k) { add(kinds, h('button', { class: 'chip' + (k === kind ? ' on' : ''), onclick: function () { kind = k; rk(); }, text: k })); }); }
-    rk();
-    var f = card('▶ เริ่มนำขบวนใหม่'); add(f, h('label', { class: 'f', text: 'ประเภทขบวน' }), kinds, h('label', { class: 'f', text: 'ชื่อขบวน' }), name, h('label', { class: 'f', text: 'รับช่วง' }), from);
+    function rk() { clear(kinds); S.boot.escortTypes.forEach(function (k) { add(kinds, h('button', { class: 'chip' + (k === kind ? ' on' : ''), onclick: function () { kind = k; if (!name.value || S.boot.escortTypes.indexOf(name.value) >= 0) name.value = k; rk(); }, text: k })); }); }
+    rk(); name.value = kind;
+    var f = card('▶ เริ่มนำขบวนใหม่'); add(f, h('label', { class: 'f', text: 'ประเภทขบวน' }), kinds, h('label', { class: 'f', text: 'ชื่อขบวน (จะขึ้นในรายงาน)' }), name,
+      h('div', { class: 'row2' }, origin, dest), h('label', { class: 'f', text: 'รับช่วง' }), from);
     add($app, shiftPicker('checkin', params, function (s) { cur = s; }), f, bar(submitBtn('▶ เริ่ม ว.42', 'amber', function () {
       if (!cur) throw new Error('กรุณาเลือกผลัดและรถ');
-      return api('escort.start', { dutyDate: cur.dutyDate, shift: cur.shift, car: cur.car, kind: kind, name: name.value, handoverFrom: from.value }).then(function (r) {
+      if (!name.value.trim()) throw new Error('กรุณาระบุชื่อขบวน');
+      return api('escort.start', { dutyDate: cur.dutyDate, shift: cur.shift, car: cur.car, kind: kind, name: name.value, from: origin.value, to: dest.value, handoverFrom: from.value }).then(function (r) {
         var t0 = bkkNow(); S.boot.activeEscorts.push({ id: r.eventId, car: cur.car, sub: kind, payload: { name: name.value, start: isoOf(t0) + 'T' + pad(t0.getHours()) + ':' + pad(t0.getMinutes()) } });
         done('เริ่ม ว.42 แล้ว', r.message, { next: 'escort' });
       });
@@ -905,7 +968,7 @@
     clear($app);
     var q = h('input', { placeholder: 'ชื่อ / เลขบัตร / เบอร์โทร (อย่างน้อย 3 ตัวอักษร)', autocomplete: 'off', enterkeyhint: 'search' }), out = h('div');
     function run() {
-      clear(out); add(out, h('div', { class: 'loading' }, h('div', { class: 'spin' })));
+      clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
       api('suspect.search', { q: q.value }).then(function (list) {
         clear(out);
         if (!list.length) return add(out, card('ไม่พบในคดีที่บันทึกในระบบ'));
@@ -1106,32 +1169,67 @@
     if (S.boot.perms.zone) { zsel.value = String(S.boot.perms.zone); zone = zsel.value; zsel.disabled = true; }
     add($app, rangePicker(function (a, b) { load(a, b); }), h('div', { class: 'card' }, zsel), out);
     function load(a, b) {
-      last = [a, b]; clear(out); add(out, h('div', { class: 'loading' }, h('div', { class: 'spin' })));
+      last = [a, b]; clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
       api('summary', { from: a, to: b, zone: zone }).then(function (s) { renderSummary(out, s); }, function (e) { clear(out); add(out, errorBox(e.message)); });
     }
   };
   function renderSummary(out, s) {
     clear(out);
-    var t = s.total;
-    var k = card('รวม ' + (s.from === s.to ? th(s.from) : th(s.from) + ' – ' + th(s.to))), kp = h('div', { class: 'kpis' });
-    [['🧾 ใบสั่ง', t.ticket], ['🚚 ขนส่ง', t.T], ['🚗 รถยนต์', t.C], ['🚦 จราจร', t.R], ['🚨 จับกุม', t.arrest + (t.arrestPending ? ' (+' + t.arrestPending + '⏳)' : '')], ['📜 หมายจับ', t.arrestWarrant],
-      ['🚔 ว.42', t.escort], ['🤝 ช่วยเหลือ', t.assist], ['🗣️ ตักเตือน', t.warning], ['🚛 ตรวจรถบรรทุก', t.truck_check], ['🔎 รถต้องสงสัย', t.suspect_check], ['🎖️ ภารกิจ', t.mission]].forEach(function (x) {
-      add(kp, h('div', { class: 'kpi' }, h('div', { class: 'n', text: x[1] }), h('div', { class: 't', text: x[0] })));
+    var t = s.total, CL = Charts.COLORS, vmap = {}; (S.boot.violations || []).forEach(function (v) { vmap[v.code] = v; });
+    var multiDay = s.from !== s.to;
+    // 1) ตัวเลขหลัก
+    var k = card('รวม ' + (multiDay ? th(s.from) + ' – ' + th(s.to) : th(s.from))), kp = h('div', { class: 'kpis' });
+    [['🧾 ใบสั่ง', t.ticket, 'ticket'], ['🚚 พ.ร.บ.ขนส่ง', t.T, 'T'], ['🚗 พ.ร.บ.รถยนต์', t.C, 'C'], ['🚨 จับกุม', t.arrest + (t.arrestPending ? ' (+' + t.arrestPending + '⏳)' : ''), 'arrest'],
+      ['🚔 ว.42', t.escort, 'escort'], ['🤝 ช่วยเหลือ', t.assist, 'assist'], ['🗣️ ตักเตือน', t.warning, 'warning'], ['🚛 ตรวจรถบรรทุก', t.truck_check, 'muted']].forEach(function (x) {
+      add(kp, h('div', { class: 'kpi', style: 'border-top:3px solid ' + (CL[x[2]] || CL.muted) }, h('div', { class: 'n', text: x[1] }), h('div', { class: 't', text: x[0] })));
     });
     add(k, kp);
-    var d = s.discipline;
-    add(k, h('p', { class: 'muted', style: 'margin:10px 0 0', text: '📋 วินัยการรายงาน: ส่งเวร ' + d.reported + '/' + d.scheduled + ' ผลัด' + (d.scheduled ? ' (' + Math.round(d.reported * 100 / d.scheduled) + '%)' : '') + (d.noResult ? ' · ไม่มีผล ' + d.noResult : '') }));
-    if (d.missing.length) add(k, h('details', null, h('summary', { class: 'small', text: '🔴 ผลัดที่ยังไม่ส่งเวร ' + d.missing.length + ' ผลัด' }), h('div', { class: 'small', text: d.missing.map(function (m) { return th(m.date) + (m.shift === 'N' ? '🌙' : '☀️') + m.car; }).join(' · ') })));
+    // 2) วินัยการรายงาน
+    var d = s.discipline, pct = d.scheduled ? Math.round(d.reported * 100 / d.scheduled) : 0;
+    if (d.scheduled) {
+      add(k, Charts.gauge(pct, '📋 วินัยการรายงาน: ส่งเวร ' + d.reported + '/' + d.scheduled + ' ผลัด (' + pct + '%)' + (d.noResult ? ' · ไม่มีผล ' + d.noResult : '') + (d.checkedInOnly ? ' · เข้าเวรแต่ไม่ส่ง ' + d.checkedInOnly : '')));
+      if (d.missing.length) add(k, h('details', null, h('summary', { class: 'small', text: '🔴 ผลัดที่ยังไม่ส่งเวร ' + d.missing.length + ' ผลัด' }), h('div', { class: 'small', text: d.missing.map(function (m) { return th(m.date) + (m.shift === 'N' ? '🌙' : '☀️') + m.car; }).join(' · ') })));
+    }
     add(out, k);
-    var ds = card('☀️ กลางวัน vs 🌙 กลางคืน'); add(ds, table(['', 'ใบสั่ง', 'ว.42', 'ช่วยเหลือ', 'จับกุม'], [['☀️ กลางวัน', s.byShift.D.ticket, s.byShift.D.escort, s.byShift.D.assist, s.byShift.D.arrest], ['🌙 กลางคืน', s.byShift.N.ticket, s.byShift.N.escort, s.byShift.N.assist, s.byShift.N.arrest]])); add(out, ds);
-    var zr = []; for (var z = 1; z <= 6; z++) { var b = s.byZone[z]; if (b) zr.push(['เขต ' + z, b.ticket, b.T, b.C, b.escort, b.assist, b.arrest]); }
-    if (zr.length) { var zc = card('รายเขต'); add(zc, table(['เขต', 'ใบสั่ง', '🚚', '🚗', 'ว.42', 'ช่วย', 'จับ'], zr)); add(out, zc); }
-    var cars = Object.keys(s.byCar).sort(function (a, b) { return s.byCar[b].ticket - s.byCar[a].ticket; });
-    if (cars.length) { var cc = card('รายรถ'); add(cc, table(['รถ', 'เขต', 'ใบสั่ง', '🚚', '🚗', 'ว.42', 'ช่วย', 'จับ'], cars.map(function (c) { var b = s.byCar[c]; return [c, b.zone, b.ticket, b.T, b.C, b.escort, b.assist, b.arrest]; }))); add(out, cc); }
+    // 3) แนวโน้มรายวัน (เฉพาะช่วงหลายวัน)
+    var days = Object.keys(s.byDay || {}).sort();
+    if (multiDay) {
+      var all = [], cur = s.from; while (cur <= s.to && all.length < 62) { all.push(cur); cur = addDays(cur, 1); }
+      var rows = all.map(function (dt) { var b = s.byDay[dt] || {}; return { label: String(+dt.slice(8, 10)), values: { ticket: b.ticket || 0, escort: b.escort || 0, arrest: b.arrest || 0, assist: b.assist || 0 } }; });
+      var tc = card('📈 แนวโน้มรายวัน', 'แกนนอน = วันที่');
+      add(tc, Charts.line(rows, [{ key: 'ticket', label: 'ใบสั่ง', color: CL.ticket }, { key: 'escort', label: 'ว.42', color: CL.escort }, { key: 'assist', label: 'ช่วยเหลือ', color: CL.assist }, { key: 'arrest', label: 'จับกุม', color: CL.arrest }]));
+      add(out, tc);
+    }
+    // 4) รายเขต (ซ้อน ขนส่ง/รถยนต์/จราจร) + ว.42/ช่วยเหลือ/จับกุม
+    var zr = []; for (var z = 1; z <= 6; z++) { var b = s.byZone[z] || {}; zr.push({ label: 'เขต ' + z, values: { T: b.T || 0, C: b.C || 0, R: b.R || 0 }, ev: { escort: b.escort || 0, assist: b.assist || 0, arrest: b.arrest || 0 } }); }
+    var zc = card('📍 ใบสั่งรายเขต');
+    add(zc, Charts.hbar(zr, [{ key: 'T', label: 'พ.ร.บ.ขนส่ง', color: CL.T }, { key: 'C', label: 'พ.ร.บ.รถยนต์', color: CL.C }, { key: 'R', label: 'พ.ร.บ.จราจร', color: CL.R }], { labelW: 60 }));
+    add(zc, h('h3', { style: 'margin-top:12px', text: 'ว.42 · ช่วยเหลือ · จับกุม รายเขต' }));
+    add(zc, Charts.bar(zr.map(function (r) { return { label: r.label.replace('เขต ', ''), values: r.ev }; }), [{ key: 'escort', label: 'ว.42', color: CL.escort }, { key: 'assist', label: 'ช่วยเหลือ', color: CL.assist }, { key: 'arrest', label: 'จับกุม', color: CL.arrest }], { height: 150 }));
+    add(out, zc);
+    // 5) รายรถ
+    var cars = Object.keys(s.byCar).sort(function (a, b) { return s.byCar[b].ticket - s.byCar[a].ticket || String(a).localeCompare(b); });
+    if (cars.length) {
+      var cc = card('🚓 ใบสั่งรายรถ', 'เรียงมาก → น้อย');
+      add(cc, Charts.hbar(cars.map(function (c) { var b = s.byCar[c]; return { label: c + (b.zone ? ' (ข.' + b.zone + ')' : ''), values: { T: b.T, C: b.C, R: b.R } }; }), [{ key: 'T', label: 'ขนส่ง', color: CL.T }, { key: 'C', label: 'รถยนต์', color: CL.C }, { key: 'R', label: 'จราจร', color: CL.R }], { labelW: 86 }));
+      add(out, cc);
+    }
+    // 6) สัดส่วนประเภทความผิด / ประเภทคดี / กลางวัน-กลางคืน
+    var codes = Object.keys(t.byCode || {}).map(function (c) { return { label: (vmap[c] && (vmap[c].short || vmap[c].label)) || c, value: t.byCode[c] }; });
+    if (codes.length) { var vc = card('🧾 สัดส่วนประเภทความผิด'); add(vc, Charts.share(codes)); add(out, vc); }
+    var cats = Object.keys(t.byArrestCat || {}).map(function (c) { return { label: c, value: t.byArrestCat[c] }; });
+    if (cats.length) { var ac = card('🚨 สัดส่วนประเภทคดี'); add(ac, Charts.share(cats)); add(out, ac); }
+    var ds = card('☀️ กลางวัน vs 🌙 กลางคืน');
+    add(ds, Charts.bar([{ label: 'ใบสั่ง', values: { D: s.byShift.D.ticket, N: s.byShift.N.ticket } }, { label: 'ว.42', values: { D: s.byShift.D.escort, N: s.byShift.N.escort } }, { label: 'ช่วยเหลือ', values: { D: s.byShift.D.assist, N: s.byShift.N.assist } }, { label: 'จับกุม', values: { D: s.byShift.D.arrest, N: s.byShift.N.arrest } }],
+      [{ key: 'D', label: 'กลางวัน', color: '#f2b544' }, { key: 'N', label: 'กลางคืน', color: '#3b4a6b' }], { height: 150 }));
+    add(out, ds);
+    // 7) รายบุคคล
     var ppl = Object.keys(s.people).map(function (k) { return s.people[k]; }).sort(function (a, b) { return b.issued - a.issued || b.nShifts - a.nShifts; });
     if (ppl.length) {
-      var pc = card('รายบุคคล', 'หลัก/ร่วม แยกกัน');
-      add(pc, table(['ชื่อ', 'ผลัด', 'ออกใบสั่ง', 'ร่วม', 'ต่อผลัด', 'จับ(หลัก/ร่วม)', 'ว.42', 'ช่วย'], ppl.map(function (p) { return [p.short || p.pid, p.nShifts + ' (☀️' + p.nDay + '/🌙' + p.nNight + ')', p.issued, p.ticketJoint, p.ratePerShift, p.arrestPrimary + '/' + p.arrestJoint, p.escort, p.assist]; })));
+      var pc = card('👮 ผลงานรายบุคคล', 'ออกใบสั่ง (หลัก) · ต่อผลัด');
+      add(pc, Charts.hbar(ppl.slice(0, 15).map(function (p) { return { label: p.short || p.pid, values: { issued: p.issued } }; }), [{ key: 'issued', label: 'ออกใบสั่ง', color: CL.ticket }], { labelW: 88 }));
+      add(pc, h('details', null, h('summary', { class: 'small', text: 'ตารางละเอียด' }),
+        table(['ชื่อ', 'ผลัด', 'ออกใบสั่ง', 'ร่วม', 'ต่อผลัด', 'จับ(หลัก/ร่วม)', 'ว.42', 'ช่วย'], ppl.map(function (p) { return [p.short || p.pid, p.nShifts + ' (☀️' + p.nDay + '/🌙' + p.nNight + ')', p.issued, p.ticketJoint, p.ratePerShift, p.arrestPrimary + '/' + p.arrestJoint, p.escort, p.assist]; }))));
       add(out, pc);
     }
   }
@@ -1148,7 +1246,7 @@
     clear($app);
     var out = h('div');
     add($app, rangePicker(function (a, b) {
-      clear(out); add(out, h('div', { class: 'loading' }, h('div', { class: 'spin' })));
+      clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
       api('summary', { from: a, to: b }).then(function (s) {
         clear(out);
         var p = s.people[S.boot.me.pid] || { issued: 0, ticketJoint: 0, arrestPrimary: 0, arrestJoint: 0, escort: 0, assist: 0, mission: 0, warning: 0, checks: 0, nShifts: 0, nDay: 0, nNight: 0, ratePerShift: 0 };
@@ -1171,7 +1269,7 @@
     if (can('roster.swap')) add($app, bar(h('button', { class: 'btn', onclick: swapForm, text: '🔁 สลับเวรชั่วคราว' })));
     var data = null;
     function load() {
-      clear(out); add(out, h('div', { class: 'loading' }, h('div', { class: 'spin' })));
+      clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
       api('roster.day', { date: date.value }).then(function (d) {
         data = d; clear(out);
         ['D', 'N'].forEach(function (sh) {
