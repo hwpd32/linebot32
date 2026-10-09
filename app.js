@@ -207,30 +207,41 @@
         h('button', { class: 'btn block', onclick: function () { S.regRetry = true; VIEWS.register(); }, text: '📝 ลงทะเบียนใหม่' }));
       return;
     }
-    var chosen = null, list = h('div'), last4 = h('input', { inputmode: 'numeric', maxlength: '4', placeholder: 'เช่น 1482', autocomplete: 'off' });
+    // ขั้น 1 เลือกชื่อ → รายการยุบเหลือชื่อที่เลือก แล้วช่องเลข 4 ตัวท้ายขึ้นทันที (ไม่ต้องเลื่อนหา)
+    var chosen = null, list = h('div'), err = h('div');
+    var last4 = h('input', { inputmode: 'numeric', pattern: '[0-9]*', maxlength: '4', placeholder: '••••', autocomplete: 'off', class: 'last4', 'aria-label': 'เลข 4 ตัวท้ายเบอร์โทร' });
     var search = h('input', { placeholder: '🔎 พิมพ์ชื่อหรือนามสกุล', oninput: render });
+    var c = card('1) เลือกชื่อของท่าน'), c2 = card('2) เลข 4 ตัวท้ายเบอร์โทรของท่าน');
+    add(c2, last4, h('p', { class: 'muted small', text: 'ถ้าตรงกับเบอร์ในทะเบียนกำลังพล จะใช้งานได้ทันที ถ้าไม่ตรงจะส่งให้แอดมินตรวจ' }), err);
+    function who(p) { return h('div', { class: 'who' }, h('b', { text: p.name }), p.position ? h('small', { class: 'muted', text: p.position }) : null); }
     function render() {
-      clear(list);
+      clear(c); add(c, h('h3', { text: '1) เลือกชื่อของท่าน' }));
+      if (chosen) {
+        add(c, h('div', { class: 'person' }, h('span', { class: 'ok-dot', text: '✅' }), who(chosen),
+          h('button', { class: 'btn ghost sm', onclick: function () { chosen = null; c2.hidden = true; render(); search.focus(); }, text: 'เปลี่ยน' })));
+        c2.hidden = false; return;
+      }
+      add(c, search, list); clear(list);
       var q = search.value.trim();
       S.boot.people.filter(function (p) { return !q || (p.first + p.last + (p.nick || '')).indexOf(q.replace(/\s/g, '')) >= 0 || p.name.indexOf(q) >= 0; }).slice(0, 40).forEach(function (p) {
-        add(list, h('div', { class: 'person', style: 'cursor:pointer', onclick: function () { chosen = p; render(); } },
-          h('input', { type: 'radio', name: 'me', checked: chosen && chosen.pid === p.pid }), h('div', { class: 'who' }, h('b', { text: p.name }), p.position ? h('small', { class: 'muted', text: p.position }) : null)));
+        add(list, h('div', { class: 'person', style: 'cursor:pointer', onclick: function () { chosen = p; render(); setTimeout(function () { last4.focus(); c2.scrollIntoView({ block: 'center' }); }, 50); } },
+          h('input', { type: 'radio', name: 'me' }), who(p)));
       });
       if (!list.children.length) add(list, h('p', { class: 'muted', text: 'ไม่พบชื่อ — ใช้ "ไม่พบชื่อของฉัน" ด้านล่าง' }));
     }
-    render();
-    var c = card('1) เลือกชื่อของท่าน'); add(c, search, list);
-    var c2 = card('2) เลข 4 ตัวท้ายเบอร์โทร (ตามคำสั่งเวร)'); add(c2, last4, h('p', { class: 'muted small', text: 'ถ้าตรงกับเบอร์ในคำสั่งเวร จะใช้งานได้ทันที ถ้าไม่ตรงจะส่งให้แอดมินตรวจ' }));
-    var err = h('div');
-    add($app, c, c2, err, h('button', { class: 'btn ghost block', onclick: notFound, text: 'ไม่พบชื่อของฉัน' }),
+    c2.hidden = true; render();
+    add($app, c, c2, h('button', { class: 'btn ghost block', onclick: notFound, text: 'ไม่พบชื่อของฉัน' }),
       bar(h('button', { class: 'btn green', onclick: submit, text: 'ลงทะเบียน' })));
+    function problem(msg, el) { clear(err); add(err, errorBox(msg)); toast('⚠️ ' + msg, 3500); if (el) { el.focus(); el.scrollIntoView({ block: 'center' }); } }
     function submit() {
       clear(err);
-      if (!chosen) return add(err, errorBox('กรุณาเลือกชื่อ'));
-      api('register', { pid: chosen.pid, last4: last4.value.trim() }).then(function (r) {
+      if (!chosen) return problem('กรุณาเลือกชื่อของท่านก่อน', search);
+      var d = last4.value.replace(/\D/g, '');
+      if (d.length !== 4) return problem('กรุณาใส่เลข 4 ตัวท้ายเบอร์โทรของท่าน', last4);
+      api('register', { pid: chosen.pid, last4: d }).then(function (r) {
         if (r.status === 'linked') return boot().then(function () { toast('✅ ลงทะเบียนสำเร็จ'); go('home', {}, true); });
-        S.boot.pending = true; S.regRetry = false; VIEWS.register(); toast('ส่งคำขอให้แอดมินตรวจแล้ว', 3500);
-      }, function (e) { add(err, errorBox(e.message)); });
+        S.boot.pending = true; S.regRetry = false; VIEWS.register(); toast('เลขไม่ตรงกับทะเบียน — ส่งคำขอให้แอดมินตรวจแล้ว', 4000);
+      }, function (e) { problem(e.message); });
     }
     function notFound() {
       var rank = h('input', { placeholder: 'ยศ เช่น ด.ต.' }), first = h('input', { placeholder: 'ชื่อ' }), last = h('input', { placeholder: 'นามสกุล' }), phone = h('input', { placeholder: 'เบอร์โทร', inputmode: 'tel' });
