@@ -201,7 +201,12 @@
   VIEWS.register = function () {
     setTitle('ลงทะเบียนครั้งแรก', 'ผูกบัญชี LINE กับรายชื่อของท่าน');
     clear($app);
-    if (S.boot.pending) { add($app, card('⏳ รอแอดมินอนุมัติ'), h('p', { class: 'muted', text: 'ส่งคำขอแล้ว เมื่ออนุมัติจะใช้งานได้ทันที (เปิดหน้านี้ใหม่)' })); return; }
+    if (S.boot.pending && !S.regRetry) {
+      add($app, card('⏳ รอแอดมินอนุมัติ'), h('p', { class: 'muted', text: 'ส่งคำขอแล้ว เมื่ออนุมัติจะใช้งานได้ทันที (เปิดหน้านี้ใหม่)' }),
+        h('p', { class: 'muted small', text: 'ใส่เลขเบอร์ผิด หรือท่านเป็นแอดมิน (พิมพ์ "ผูกแอดมิน" ในแชทบอทแล้ว)? กดลงทะเบียนใหม่ได้ — ถ้าเลข 4 ตัวท้ายตรงกับทะเบียน หรือท่านเป็นแอดมิน จะใช้งานได้ทันที' }),
+        h('button', { class: 'btn block', onclick: function () { S.regRetry = true; VIEWS.register(); }, text: '📝 ลงทะเบียนใหม่' }));
+      return;
+    }
     var chosen = null, list = h('div'), last4 = h('input', { inputmode: 'numeric', maxlength: '4', placeholder: 'เช่น 1482', autocomplete: 'off' });
     var search = h('input', { placeholder: '🔎 พิมพ์ชื่อหรือนามสกุล', oninput: render });
     function render() {
@@ -224,7 +229,7 @@
       if (!chosen) return add(err, errorBox('กรุณาเลือกชื่อ'));
       api('register', { pid: chosen.pid, last4: last4.value.trim() }).then(function (r) {
         if (r.status === 'linked') return boot().then(function () { toast('✅ ลงทะเบียนสำเร็จ'); go('home', {}, true); });
-        S.boot.pending = true; VIEWS.register();
+        S.boot.pending = true; S.regRetry = false; VIEWS.register(); toast('ส่งคำขอให้แอดมินตรวจแล้ว', 3500);
       }, function (e) { add(err, errorBox(e.message)); });
     }
     function notFound() {
@@ -233,7 +238,7 @@
         if (!first.value.trim()) { toast('กรุณากรอกชื่อ'); return false; }
         return api('register', { extra: { rank: rank.value.trim(), first: first.value.trim(), last: last.value.trim(), phone: phone.value.trim() } }).then(function (r) {
           if (r.status === 'linked') return boot().then(function () { go('home', {}, true); });
-          S.boot.pending = true; VIEWS.register();
+          S.boot.pending = true; S.regRetry = false; VIEWS.register(); toast('ส่งคำขอให้แอดมินตรวจแล้ว', 3500);
         });
       });
     }
