@@ -141,6 +141,7 @@
       card('ข้อความที่ส่ง', h('button', { class: 'btn ghost sm', onclick: function () { copyText(message).then(function () { toast('📋 คัดลอกแล้ว'); }); }, text: '📋 คัดลอก' })),
       bar(h('button', { class: 'btn gray', onclick: function () { go(opts.next || 'home', opts.nextParams || {}, !TOP[opts.next || 'home']); }, text: opts.nextText || 'ทำรายการต่อ' }), h('button', { class: 'btn', onclick: closeOrHome, text: 'ปิด' })));
     add($app.children[1], h('div', { class: 'msg-preview', text: message }));
+    add($app.children[1], h('p', { class: 'muted small', style: 'margin:8px 0 0' }, 'ส่งผิด? แก้ไขหรือยกเลิกได้ที่ ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); go('history'); }, text: 'รายการที่ส่งแล้ว' })));
     if (opts.noPost) { status.textContent = 'บันทึกเรียบร้อย'; return; }
     postToChat(message).then(function (r) {
       status.textContent = r === 'sent' ? '💬 ส่งเข้ากลุ่มแล้ว' : r === 'shared' ? '💬 แชร์แล้ว' : r === 'copied' ? '📋 บันทึกแล้ว — คัดลอกข้อความไว้ วางในกลุ่มได้เลย' : 'บันทึกแล้ว (ยังไม่ได้ส่งข้อความเข้ากลุ่ม)';
@@ -353,6 +354,7 @@
     var list = h('div', { class: 'list' });
     if (can('report.own')) add(list, rowLink('🚨', 'รายงานจับกุม', 'แบบ CCOC — ส่งให้ผู้ตรวจอนุมัติ', function () { go('arrest'); }));
     if (can('view.now')) add(list, rowLink('📍', 'ตอนนี้', 'รถแต่ละคันอยู่สถานะไหน ใครยังไม่รายงาน', function () { go('now'); }));
+    add(list, rowLink('📝', 'รายการที่ส่งแล้ว', 'ดู · แก้ไข · ยกเลิก (เข้าเวร ส่งเวร ว.42 ช่วยเหลือ คดี)', function () { go('history'); }));
     add(list, rowLink('👤', 'ผลของฉัน', 'ผลงานรายวงรอบ', function () { go('me'); }));
     if (can('pr.make')) add(list, rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'prompt สำหรับ ChatGPT + เบลอรูปบนเครื่อง', function () { go('pr'); }));
     add($app, h('div', { class: 'section-label', text: 'ทางลัด' }), list);
@@ -387,6 +389,7 @@
     clear($app);
     var pend = S.boot.pending || {};
     function group(label, rows) { rows = rows.filter(Boolean); if (rows.length) add($app, h('div', { class: 'section-label', text: label }), h('div', { class: 'list' }, rows)); }
+    group('รายงาน', [rowLink('📝', 'รายการที่ส่งแล้ว', 'ดู · แก้ไข · ยกเลิก', function () { go('history'); })]);
     group('งานคดี', [
       rowLink('📁', 'คดีจับกุม', can('case.approve') ? 'ตรวจ/อนุมัติ/แก้ไข' : 'ติดตามคดี', function () { go('cases'); }, can('case.approve') && pend.arrest ? String(pend.arrest) : ''),
       can('view.suspect') ? rowLink('🔎', 'ค้นหาผู้ต้องหา', 'ชื่อ / เลขบัตร / เบอร์ — ทุกการค้นหาถูกบันทึก', function () { go('suspects'); }) : null,
@@ -953,6 +956,10 @@
       add($app, c);
       var acts = h('div', { class: 'list' });
       add(acts, rowLink('💬', 'ส่งข้อความเข้ากลุ่ม', 'เลือกกลุ่มปลายทาง เช่น กลุ่ม CCOC', function () { postToChat(d.text).then(function (r) { toast(r === 'copied' ? '📋 คัดลอกแล้ว' : r === 'cancel' ? 'ยกเลิก' : '💬 ส่งแล้ว'); }); }));
+      if (d.sensitive && can('export')) add(acts, rowLink('📄', 'ส่งออก PDF รายงานจับกุม', 'แบบ CCOC ทุกบรรทัด — เก็บใน Drive ของสถานี', function () {
+        toast('กำลังสร้าง PDF…', 6000);
+        api('export.arrestPdf', { id: d.id }).then(function (r) { var m = h('div'); add(m, fileCard(r, 'PDF รายงานจับกุม')); modal('ส่งออกแล้ว', [m]); }, function (e) { toast(e.message, 4000); });
+      }));
       if (d.canEdit) add(acts, rowLink('✏️', 'แก้ไขรายงาน', d.status === 'approved' ? 'แก้แล้วต้องอนุมัติใหม่' : 'ฉบับเดิมจะถูกแทนที่', function () { go('arrest', { id: d.id }); }));
       if (can('pr.make') && d.status !== 'void') add(acts, rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'ใช้ข้อมูลคดีนี้ (ตัดข้อมูลส่วนบุคคลออกให้)', function () { go('pr', { caseId: d.id }); }));
       add($app, acts);
@@ -1240,6 +1247,94 @@
     return h('div', { class: 'scroll-x' }, t);
   }
 
+  // ======================= รายการที่ส่งแล้ว (แก้ไข/ยกเลิก) =======================
+  var KIND_ICON = { shift: '🚓', escort: '🚔', assist: '🤝', arrest: '🚨', mission: '🎖️' };
+  VIEWS.history = function (params) {
+    setTitle('📝 รายการที่ส่งแล้ว', can('report.editOthers') ? 'ทั้งสถานี · แก้ไข/ยกเลิกได้ทุกรายการ' : 'ของท่าน · แก้ไข/ยกเลิกได้ภายใน 24 ชม.');
+    clear($app);
+    var out = h('div'), last = null;
+    var t = today(), c = cycleOf(t);
+    var presets = [['7 วันล่าสุด', addDays(t, -6), t], ['วงรอบนี้', c.from, c.to], ['30 วัน', addDays(t, -29), t]], sel = 0, chips = h('div', { class: 'chips' });
+    function rc() { clear(chips); presets.forEach(function (p, i) { add(chips, h('button', { class: 'chip' + (i === sel ? ' on' : ''), onclick: function () { sel = i; rc(); load(); }, text: p[0] })); }); }
+    rc(); add($app, h('div', { class: 'card' }, chips), out);
+    function load(fresh) {
+      var p = presets[sel]; last = p; clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(3));
+      api('history.list', { from: p[1], to: p[2] }, { fresh: !!fresh }).then(function (rows) {
+        clear(out);
+        if (!rows.length) { var e0 = card('ไม่มีรายการ'); add(e0, h('p', { class: 'muted', text: 'ยังไม่มีรายการที่ส่งในช่วงนี้' })); return add(out, e0); }
+        var byDay = {}; rows.forEach(function (r) { (byDay[r.dutyDate] = byDay[r.dutyDate] || []).push(r); });
+        Object.keys(byDay).sort().reverse().forEach(function (d) {
+          var cd = card(th(d)), list = h('div', { class: 'list' });
+          byDay[d].forEach(function (r) { add(list, row(r)); });
+          add(cd, list); add(out, cd);
+        });
+      }, function (e) { clear(out); add(out, errorBox(e.message)); });
+    }
+    function statusTxt(r) {
+      if (r.kind === 'shift') return r.status === 'ยกเลิก' ? '🗑 ยกเลิกแล้ว' : r.status === 'ส่งเวร' ? '✅ ส่งเวรแล้ว ' + hm(r.checkoutAt) : r.status === 'ไม่มีผล' ? '⚪ ส่งเวร (ไม่มีผล)' : '🟢 เข้าเวรแล้ว ' + hm(r.checkinAt) + ' (ยังไม่ส่งเวร)';
+      var m = { void: '🗑 ยกเลิกแล้ว', active: '⏱ กำลังนำขบวน', pending: '⏳ รอตรวจ', approved: '✅ อนุมัติแล้ว', returned: '↩️ ส่งกลับแก้', ok: '✅ บันทึกแล้ว' };
+      return (m[r.status] || r.status) + (r.at ? ' ' + hm(r.at) : '');
+    }
+    function row(r) {
+      var title = r.kind === 'shift' ? (r.shift === 'N' ? '🌙' : '☀️') + ' ผลัด' + (r.shift === 'N' ? 'กลางคืน' : 'กลางวัน') + ' · รถ ' + r.car + ' · เขต ' + r.zone : r.title + (r.car ? ' · รถ ' + r.car : '');
+      var sub = statusTxt(r) + (r.kind === 'shift' && r.totals && r.totals.ticket ? ' · ใบสั่ง ' + r.totals.ticket : '') + (r.reporter ? ' · โดย ' + r.reporter : '');
+      var el = h('div', { class: 'list-item hist' + (r.status === 'void' || r.status === 'ยกเลิก' ? ' off' : '') },
+        h('div', { class: 'hist-main' }, h('span', { class: 'ic', text: KIND_ICON[r.kind] || '•' }), h('div', { class: 'tx' }, h('b', { text: title }), h('small', { text: sub }))));
+      var btns = h('div', { class: 'hist-btns' });
+      if (r.canEdit) add(btns, h('button', { class: 'btn ghost sm', onclick: function () { edit(r); }, text: '✏️ แก้ไข' }));
+      if (r.canVoid) add(btns, h('button', { class: 'btn ghost sm red-ghost', onclick: function () { cancel(r); }, text: '🗑 ยกเลิก' }));
+      if (r.kind === 'arrest') add(btns, h('button', { class: 'btn ghost sm', onclick: function () { go('case', { id: r.id }); }, text: '📄 เปิดคดี' }));
+      if (btns.children.length) add(el, btns);
+      return el;
+    }
+    function edit(r) {
+      if (r.kind === 'shift') {
+        var q = { d: r.dutyDate, s: r.shift, car: r.car };
+        if (r.status === 'ส่งเวร' || r.status === 'ไม่มีผล') return go('checkout', q);
+        return modal('แก้ไขผลัดนี้', [h('p', { class: 'muted', text: 'เลือกสิ่งที่ต้องการแก้' }),
+          h('button', { class: 'btn block', style: 'margin-bottom:8px', onclick: function () { closeModal(); go('checkin', q); }, text: '🟢 แก้ลูกเรือ/รายการตรวจ (เข้าเวร)' }),
+          h('button', { class: 'btn green block', onclick: function () { closeModal(); go('checkout', q); }, text: '✅ ส่งเวร/แก้ผลการปฏิบัติ' })]);
+      }
+      if (r.kind === 'arrest') return go('arrest', { id: r.id });
+      if (r.kind === 'escort') return editEscort(r);
+      if (r.kind === 'assist') return editAssist(r);
+      toast('รายการประเภทนี้แก้ไขจากหน้านี้ไม่ได้');
+    }
+    function reasonBox() { return h('textarea', { placeholder: 'เหตุผลการแก้ไข (จำเป็น)' }); }
+    function afterEdit(res) { apiInvalidate(); refreshBoot(); done('แก้ไขแล้ว', res.message, { next: 'history', nextText: 'กลับไปรายการ' }); }
+    function editEscort(r) {
+      var p = r.payload || {};
+      var name = h('input', { value: p.name || '', placeholder: 'ชื่อขบวน' }), from = h('input', { value: p.from || '', placeholder: 'ต้นทาง' }), to = h('input', { value: p.to || '', placeholder: 'ปลายทาง' });
+      var hf = h('input', { value: p.handoverFrom || '', placeholder: 'รับช่วงจาก' }), ht = h('input', { value: p.handoverTo || '', placeholder: 'ส่งต่อให้' }), res = h('input', { value: p.result || '', placeholder: 'ผล/หมายเหตุ' });
+      var rt = h('input', { type: 'checkbox', checked: p.trips === 2 }), reason = reasonBox();
+      modal('แก้ไข ว.42', [h('label', { class: 'f', text: 'ชื่อขบวน' }), name, h('div', { class: 'row2' }, from, to), h('div', { class: 'row2' }, hf, ht), res,
+        p.end ? h('label', { class: 'cap' }, rt, 'ไป-กลับ (นับ 2 ขบวน)') : null, h('label', { class: 'f', text: 'เหตุผล' }), reason], 'บันทึกการแก้ไข', function () {
+        return api('event.update', { id: r.id, reason: reason.value, fields: { name: name.value, from: from.value, to: to.value, handoverFrom: hf.value, handoverTo: ht.value, result: res.value, roundTrip: rt.checked } }).then(afterEdit);
+      });
+    }
+    function editAssist(r) {
+      var p = r.payload || {}, type = r.title, types = h('div', { class: 'chips' });
+      function rt() { clear(types); S.boot.assistTypes.forEach(function (k) { add(types, h('button', { class: 'chip' + (k === type ? ' on' : ''), onclick: function () { type = k; rt(); }, text: k })); }); }
+      rt();
+      var road = h('input', { value: p.road || '', placeholder: 'ทล.' }), km = h('input', { value: p.km || '', placeholder: 'กม.' }), dir = h('input', { value: p.dir || '', placeholder: 'ขาเข้า/ขาออก' });
+      var dead = h('input', { type: 'number', value: p.dead || 0 }), inj = h('input', { type: 'number', value: p.injured || 0 }), dmg = h('input', { type: 'number', value: p.damage || '', placeholder: 'ความเสียหาย (บาท)' });
+      var res = h('textarea', { value: p.result || '', placeholder: 'การดำเนินการ/ผล' }), reason = reasonBox();
+      res.value = p.result || '';
+      modal('แก้ไขช่วยเหลือ/เหตุการณ์', [types, h('div', { class: 'row2' }, road, km), dir, h('label', { class: 'f', text: 'เสียชีวิต / บาดเจ็บ' }), h('div', { class: 'row2' }, dead, inj), dmg, res, h('label', { class: 'f', text: 'เหตุผล' }), reason], 'บันทึกการแก้ไข', function () {
+        return api('event.update', { id: r.id, reason: reason.value, fields: { type: type, road: road.value, km: km.value, dir: dir.value, dead: dead.value, injured: inj.value, damage: dmg.value, result: res.value } }).then(afterEdit);
+      });
+    }
+    function cancel(r) {
+      var reason = h('textarea', { placeholder: 'เหตุผลการยกเลิก (จำเป็น) เช่น ส่งผิดรถ / ซ้ำ' });
+      var what = r.kind === 'shift' ? 'รายงานผลัดนี้ทั้งหมด (เข้าเวร + ผลการปฏิบัติ)' : r.title;
+      modal('ยกเลิก ' + what, [h('p', { class: 'muted small', text: 'ระบบจะไม่นับรายการนี้ในสถิติ และเก็บประวัติไว้ว่าใครยกเลิกเมื่อไร (ไม่ลบจริง)' }), reason], '🗑 ยืนยันยกเลิก', function () {
+        var call = r.kind === 'shift' ? api('shift.void', { id: r.id, reason: reason.value }) : api('event.void', { id: r.id, reason: reason.value });
+        return call.then(function () { toast('ยกเลิกแล้ว'); apiInvalidate(); refreshBoot(); load(true); });
+      });
+    }
+    load();
+  };
+
   // ======================= ผลของฉัน =======================
   VIEWS.me = function () {
     setTitle('👤 ผลของฉัน', S.boot.me.name);
@@ -1320,20 +1415,48 @@
 
   // ======================= ส่งออก =======================
   VIEWS.export = function () {
-    setTitle('⬇️ ส่งออก', 'Excel แบบตารางสถิติ · ข้อความ บก.ทล.');
+    setTitle('⬇️ ส่งออก', 'ไฟล์เก็บใน Google Drive ของสถานี — เปิด/แชร์เข้าไลน์ได้ทันที');
     clear($app);
-    var cur = null, out = h('div');
-    add($app, rangePicker(function (a, b) { cur = [a, b]; }, 2), out);
-    var c = card('📗 Excel แบบเจ้าหน้าที่สถิติ', '1 ชีตต่อวัน + สรุป');
-    add(c, h('p', { class: 'muted small', text: 'หัวคอลัมน์เดิม: พ.ร.บ.ขนส่ง · พ.ร.บ.รถยนต์ · ตรวจสอบฯรถบรรทุก · ตรวจรถต้องสงสัย · ช่วยเหลือฯ · หมายจับ · อาญาทั่วไป · ว.42 · ภารกิจ + หมายเหตุอัตโนมัติ' }),
-      submitBtn('⬇️ ดาวน์โหลด .xlsx', 'block', function () {
+    var cur = null, out = h('div'), zone = '';
+    var zsel = h('select', { onchange: function () { zone = zsel.value; } }, h('option', { value: '', text: 'ทั้งสถานี' }));
+    Object.keys(S.boot.zones).forEach(function (z) { add(zsel, h('option', { value: z, text: S.boot.zones[z] })); });
+    if (S.boot.perms.zone) { zsel.value = String(S.boot.perms.zone); zone = zsel.value; zsel.disabled = true; }
+    add($app, rangePicker(function (a, b) { cur = [a, b]; }, 2), h('div', { class: 'card' }, zsel), out);
+    function show(r, label) { clear(out); add(out, fileCard(r, label)); out.scrollIntoView({ behavior: 'smooth' }); }
+    var c = card('📄 รายงานสรุป PDF', 'หัวกระดาษสถานี + ตาราง + แท่งเปรียบเทียบ');
+    add(c, h('p', { class: 'muted small', text: 'ตัวเลขหลัก · รายเขต · รายรถ · ประเภทความผิด · ประเภทคดี · รายบุคคล (เฉพาะผู้มีสิทธิ์) · วินัยการรายงาน' }),
+      submitBtn('📄 สร้าง PDF สรุปผล', 'block', function () {
+        if (!cur) throw new Error('เลือกช่วงวัน');
+        toast('กำลังสร้าง PDF… ประมาณ 10–20 วินาที', 8000);
+        return api('export.pdf', { from: cur[0], to: cur[1], zone: zone }).then(function (r) { show(r, 'PDF สรุปผล'); });
+      }));
+    var c1 = card('📗 Excel แบบเจ้าหน้าที่สถิติ', '1 ชีตต่อวัน + สรุป + รายบุคคล');
+    add(c1, h('p', { class: 'muted small', text: 'หัวคอลัมน์เดิม: พ.ร.บ.ขนส่ง · พ.ร.บ.รถยนต์ · ตรวจสอบฯรถบรรทุก · ตรวจรถต้องสงสัย · ช่วยเหลือฯ · หมายจับ · อาญาทั่วไป · ว.42 · ภารกิจ + หมายเหตุอัตโนมัติ (ไม่เกิน 31 วัน)' }),
+      submitBtn('📗 สร้างไฟล์ .xlsx', 'block', function () {
         if (!cur) throw new Error('เลือกช่วงวัน');
         toast('กำลังสร้างไฟล์… อาจใช้เวลา 10–30 วินาที', 8000);
-        return api('export.xlsx', { from: cur[0], to: cur[1] }).then(function (r) { downloadB64(r.base64, r.name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); if (r.sheetUrl) toast('บันทึกสำเนาใน Google Drive แล้ว'); });
+        return api('export.xlsx', { from: cur[0], to: cur[1], zone: zone }).then(function (r) { show(r, 'Excel'); });
       }));
-    var c2 = card('💬 ข้อความสำเร็จรูป', 'กดคัดลอกแล้ววางในไลน์');
+    var c2 = card('🖼 รูปภาพหน้าสรุปกราฟ (PNG)', 'ส่งเข้ากลุ่ม/ใส่สไลด์ได้ทันที');
+    add(c2, submitBtn('🖼 สร้างรูปหน้าสรุป', 'block', function () {
+      if (!cur) throw new Error('เลือกช่วงวัน');
+      toast('กำลังวาดกราฟ…', 5000);
+      // วาดหน้าสรุปไว้นอกจอ (ความกว้างคงที่ 720px) แล้วถ่ายเป็นรูป
+      var stage = h('div', { class: 'capture', style: 'position:absolute;left:-10000px;top:0;width:720px;background:#f1f4f8;padding:16px' });
+      document.body.appendChild(stage);
+      return api('summary', { from: cur[0], to: cur[1], zone: zone }).then(function (sm) {
+        add(stage, h('div', { class: 'capture-head' }, h('b', { text: S.boot.station + ' — สรุปผลการปฏิบัติ' }), h('div', { class: 'muted', text: (cur[0] === cur[1] ? th(cur[0]) : th(cur[0]) + ' – ' + th(cur[1])) + (zone ? ' · ' + S.boot.zones[zone] : '') })));
+        var body = h('div'); add(stage, body); renderSummary(body, sm);
+        stage.querySelectorAll('details').forEach(function (d) { d.remove(); });
+        return captureNode(stage);
+      }).then(function (b64) {
+        stage.remove(); toast('กำลังบันทึกรูปไว้ใน Drive…', 5000);
+        return api('export.image', { base64: b64, name: 'สรุปผล ' + th(cur[0]).replace(/\s/g, '') + (cur[0] !== cur[1] ? '-' + th(cur[1]).replace(/\s/g, '') : '') + '.png' });
+      }).then(function (r) { show(r, 'รูปภาพ PNG'); }, function (e) { stage.remove(); throw e; });
+    }));
+    var c3 = card('💬 ข้อความสำเร็จรูป', 'กดคัดลอกแล้ววางในไลน์');
     [['bk', '📮 แบบ บก.ทล. 7 หัวข้อ'], ['cycle', '📊 สรุปวงรอบ'], ['morning', '🌅 สรุปเช้า (ของวันสุดท้ายในช่วง)']].forEach(function (k) {
-      add(c2, h('div', { style: 'margin-bottom:8px' }, submitBtn(k[1], 'ghost block', function () {
+      add(c3, h('div', { style: 'margin-bottom:8px' }, submitBtn(k[1], 'ghost block', function () {
         if (!cur) throw new Error('เลือกช่วงวัน');
         return api('texts', { kind: k[0], from: cur[0], to: cur[1], date: k[0] === 'morning' ? addDays(cur[1], 1) : cur[1] }).then(function (t) {
           clear(out); add(out, card(k[1]), h('div', { class: 'msg-preview', text: t }));
@@ -1341,8 +1464,8 @@
         });
       })));
     });
-    var c3 = card('🧾 ข้อมูลดิบ (CSV)', 'ทุกรายการในช่วง');
-    add(c3, submitBtn('⬇️ ดาวน์โหลด CSV', 'gray block', function () {
+    var c4 = card('🧾 ข้อมูลดิบ (CSV)', 'ทุกรายการในช่วง — เปิดในเบราว์เซอร์นอกไลน์เพื่อดาวน์โหลด');
+    add(c4, submitBtn('⬇️ ดาวน์โหลด CSV', 'gray block', function () {
       if (!cur) throw new Error('เลือกช่วงวัน');
       return api('export.events', { from: cur[0], to: cur[1] }).then(function (rows) {
         var head = ['id', 'statDate', 'dutyDate', 'shift', 'zone', 'car', 'type', 'sub', 'act', 'count', 'status', 'issuer', 'reporter', 'detail'];
@@ -1350,8 +1473,28 @@
         downloadB64(btoa(unescape(encodeURIComponent(csv))), 'รายการ_' + cur[0] + '_' + cur[1] + '.csv', 'text/csv');
       });
     }));
-    add($app, c, c2, c3);
+    add($app, c, c1, c2, c3, c4);
   };
+  /** การ์ดผลลัพธ์ไฟล์ที่เก็บใน Google Drive: เปิด / แชร์เข้าไลน์ / คัดลอกลิงก์ */
+  function fileCard(r, label) {
+    var c = card('✅ สร้างไฟล์แล้ว', label || '');
+    add(c, h('p', { text: r.name, style: 'word-break:break-all;margin:0 0 6px' }), h('p', { class: 'muted small', text: r.restricted ? 'ไฟล์นี้มีข้อมูลผู้ต้องหา จึงไม่เปิดลิงก์สาธารณะ — เปิดด้วยบัญชี Google ของสถานี หรือบันทึกจากปุ่มด้านล่าง' : 'ไฟล์อยู่ในโฟลเดอร์ "LineBot ส่งออก" ใน Google Drive ของสถานี ผู้มีลิงก์เปิดดูได้' }));
+    var row = h('div', { class: 'chips', style: 'margin-top:8px' });
+    add(row, h('button', { class: 'btn sm', onclick: function () { openExternal(r.url); }, text: '🔗 เปิดไฟล์' }));
+    if (!r.restricted) {
+      add(row, h('button', { class: 'btn green sm', onclick: function () { postToChat('📎 ' + r.name + '\n' + r.url).then(function (x) { toast(x === 'copied' ? '📋 คัดลอกลิงก์แล้ว' : x === 'cancel' ? 'ยกเลิก' : '💬 ส่งแล้ว'); }); }, text: '💬 ส่งเข้าไลน์' }));
+      add(row, h('button', { class: 'btn ghost sm', onclick: function () { copyText(r.url).then(function () { toast('📋 คัดลอกลิงก์แล้ว'); }); }, text: '📋 คัดลอกลิงก์' }));
+    }
+    if (r.base64) add(row, h('button', { class: 'btn ghost sm', onclick: function () { downloadB64(r.base64, r.name, 'application/pdf'); }, text: '⬇️ บันทึกไฟล์' }));
+    add(c, row);
+    return c;
+  }
+  /** วาดหน้าสรุป (DOM) เป็น PNG ด้วย html2canvas (โหลดเมื่อใช้) */
+  function captureNode(node) {
+    function run() { return window.html2canvas(node, { backgroundColor: '#f1f4f8', scale: 2, useCORS: true, logging: false }).then(function (cv) { return cv.toDataURL('image/png').split(',')[1]; }); }
+    if (window.html2canvas) return run();
+    return new Promise(function (res, rej) { var sc = h('script', { src: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js' }); sc.onload = res; sc.onerror = function () { rej(new Error('โหลดตัวสร้างรูปไม่ได้ กรุณาตรวจสัญญาณ')); }; document.head.appendChild(sc); }).then(run);
+  }
   function downloadB64(b64, name, type) {
     var bin = atob(b64), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
     var url = URL.createObjectURL(new Blob([arr], { type: type })), a = h('a', { href: url, download: name });
@@ -1554,7 +1697,7 @@
   };
   var AUDIT_LABEL = { 'suspect.view': '🔒 เปิดดูข้อมูลผู้ต้องหา', 'suspect.search': '🔎 ค้นหาผู้ต้องหา', 'perm.set': '🔐 ปรับสิทธิ์รายคน', 'role.set': '🔐 แก้สิทธิ์บทบาท', 'backup.set': '👑 แต่งตั้งแอดมินสำรอง',
     'backup.remove': '👑 ถอดแอดมินสำรอง', 'settings.set': '⚙️ แก้ตั้งค่า', 'codes.save': '🧾 แก้รหัสความผิด', 'arrest.approved': '✅ อนุมัติคดี', 'arrest.returned': '↩️ ส่งคดีกลับแก้', 'arrest.edit': '✏️ แก้รายงานจับกุม',
-    'event.void': '🗑 ยกเลิกรายการ', 'register.auto': '🔗 ผูก LINE อัตโนมัติ', 'register.approved': '🔗 อนุมัติผูก LINE', 'register.rejected': '⛔ ปฏิเสธคำขอ', 'register.unlink': '🔗 ยกเลิกผูก LINE',
+    'event.void': '🗑 ยกเลิกรายการ', 'shift.void': '🗑 ยกเลิกรายงานผลัด', 'event.update': '✏️ แก้ไข ว.42/ช่วยเหลือ', 'register.auto': '🔗 ผูก LINE อัตโนมัติ', 'register.approved': '🔗 อนุมัติผูก LINE', 'register.rejected': '⛔ ปฏิเสธคำขอ', 'register.unlink': '🔗 ยกเลิกผูก LINE',
     'people.status': '👤 เปลี่ยนสถานะบัญชี', 'people.import': '📥 นำเข้ากำลังพล', 'people.update': '👤 แก้ข้อมูลกำลังพล', 'export.xlsx': '⬇️ ส่งออก Excel', 'roster.import': '🗓 นำเข้าตารางเวร' };
   VIEWS.audit = function () {
     setTitle('🧾 ประวัติการใช้งาน', '200 รายการล่าสุด');

@@ -181,3 +181,7 @@ body.has-tabs .bar { bottom: calc(62px + env(safe-area-inset-bottom)); }
 .share-bar { display: flex; height: 16px; border-radius: 8px; overflow: hidden; background: #e9eef5; } .share-bar span { display: block; height: 100%; }
 .share-list { margin-top: 8px; } .share-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; } .share-row i { width: 10px; height: 10px; border-radius: 3px; flex: none; } .share-row .lb { flex: 1; min-width: 0; } .share-row b { font-variant-numeric: tabular-nums; }
 .gauge { margin-top: 12px; } .gauge-track { height: 12px; border-radius: 6px; background: #e9eef5; overflow: hidden; } .gauge-fill { height: 100%; border-radius: 6px; transition: width .4s; } .gauge-label { font-size: 14px; color: var(--muted); margin-top: 6px; }
+
+.hist { display: block; } .hist-main { display: flex; gap: 10px; align-items: flex-start; } .hist-main .ic { font-size: 22px; flex: none; } .hist-main .tx { flex: 1; min-width: 0; } .hist-main .tx b { display: block; } .hist-main .tx small { color: var(--muted); display: block; font-size: 13px; }
+.hist-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; } .hist.off { opacity: .55; } .btn.ghost.red-ghost { color: var(--red); border-color: #f3c0c0; }
+.capture-head { font-size: 20px; margin-bottom: 10px; } .capture-head .muted { font-size: 15px; } .capture .card { box-shadow: none; }
