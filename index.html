@@ -23,6 +23,15 @@
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" charset="utf-8"></script>
 <script src="config.js"></script>
 <script src="pr.js?v=c3af6947"></script>
-<script src="app.js?v=b66c9953"></script>
+<script src="app.js?v=e0554d27"></script>
+<script>
+// กันค้าง: ถ้า 35 วินาทียังไม่เข้าระบบ แสดงขั้นที่ค้างและปุ่มลองใหม่ (ทำงานแม้ app.js โหลดไม่สำเร็จ)
+setTimeout(function () {
+  if (window.__booted) return;
+  var a = document.getElementById('app'); if (!a) return;
+  a.innerHTML = '<div class="err">⚠️ ยังเชื่อมต่อไม่สำเร็จ' + (window.__stage ? ' (ค้างที่: ' + window.__stage + ')' : ' (โหลดหน้าเว็บไม่ครบ)') + ' — ตรวจสัญญาณแล้วกดลองใหม่</div>';
+  var b = document.createElement('button'); b.className = 'btn block'; b.textContent = 'ลองใหม่'; b.onclick = function () { location.reload(); }; a.appendChild(b);
+}, (window.APP_CONFIG && window.APP_CONFIG.WATCHDOG_MS) || 35000);
+</script>
 </body>
 </html>

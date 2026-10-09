@@ -56,14 +56,22 @@
   var SHIFT = { D: { label: 'กลางวัน', icon: '☀️' }, N: { label: 'กลางคืน', icon: '🌙' } };
 
   // ---------- API ----------
+  // จำกัดเวลารอ — กันหน้าจอหมุนค้างไม่รู้จบเมื่อสัญญาณ/LINE/เซิร์ฟเวอร์ไม่ตอบ
+  function withTimeout(p, ms, msg) {
+    var t; return Promise.race([p, new Promise(function (_, rej) { t = setTimeout(function () { var e = new Error(msg); e.code = 'TIMEOUT'; rej(e); }, ms); })])
+      .then(function (v) { clearTimeout(t); return v; }, function (e) { clearTimeout(t); throw e; });
+  }
+  function stage(msg) { window.__stage = msg; var p = $app.querySelector('.loading p'); if (p) p.textContent = msg; }
   function api(action, data) {
-    return fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken }) })
-      .then(function (r) { return r.json(); })
+    var ctl = window.AbortController ? new AbortController() : null;
+    var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken }), signal: ctl ? ctl.signal : undefined });
+    return withTimeout(req, CFG.API_TIMEOUT_MS || 30000, 'ระบบตอบช้าเกินไป (เกิน 30 วินาที) กรุณากดลองใหม่').then(null, function (e) { if (ctl && e.code === 'TIMEOUT') ctl.abort(); throw e; })
+      .then(function (r) { return r.json().catch(function () { throw new Error('ระบบตอบกลับผิดรูปแบบ (HTTP ' + r.status + ') กรุณาลองใหม่'); }); }, function (e) { if (e.code === 'TIMEOUT') throw e; throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสัญญาณแล้วลองใหม่'); })
       .then(function (j) {
         if (j.ok) return j.data;
-        if (j.code === 'AUTH' && window.liff && liff.isLoggedIn()) { liff.logout(); liff.login({ redirectUri: location.href }); }
+        if (j.code === 'AUTH' && window.liff && liff.isLoggedIn()) { try { liff.logout(); if (!liff.isInClient()) liff.login({ redirectUri: location.href }); } catch (x) { } }
         var e = new Error(j.error || 'เกิดข้อผิดพลาด'); e.code = j.code; throw e;
-      }, function () { throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสัญญาณแล้วลองใหม่'); });
+      });
   }
   function can(cap) { return !!(S.boot && S.boot.perms && S.boot.perms.caps[cap]); }
   function person(pid) { var ps = S.boot.people; for (var i = 0; i < ps.length; i++) if (ps[i].pid === pid) return ps[i]; return { pid: pid, short: pid, name: pid }; }
@@ -165,7 +173,8 @@
   // ---------- เริ่มต้น ----------
   function start() {
     if (!CFG.LIFF_ID || /ใส่_/.test(CFG.LIFF_ID)) return fail(new Error('ยังไม่ได้ตั้งค่า LIFF_ID / API_URL ในไฟล์ config.js'));
-    liff.init({ liffId: CFG.LIFF_ID }).then(function () {
+    stage('กำลังยืนยันตัวตนกับ LINE…');
+    withTimeout(liff.init({ liffId: CFG.LIFF_ID }), CFG.INIT_TIMEOUT_MS || 20000, 'เชื่อมต่อ LINE ไม่สำเร็จ (ขั้นยืนยันตัวตน) — กรุณาปิดหน้านี้แล้วเปิดใหม่จากแชทบอท').then(function () {
       if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
       var dec = liff.getDecodedIDToken && liff.getDecodedIDToken();
       if (dec && dec.exp && dec.exp * 1000 < Date.now() + 60000) { liff.logout(); liff.login({ redirectUri: location.href }); return; }
@@ -174,12 +183,15 @@
       var params = {}; q.forEach(function (v, k) { params[k] = v; });
       // เปิดผ่าน https://liff.line.me/<id>?v=... ครั้งแรก พารามิเตอร์อยู่ใน liff.state
       if (params['liff.state']) { new URLSearchParams(String(params['liff.state']).replace(/^[^?]*\?/, '')).forEach(function (v, k) { params[k] = v; }); }
+      if (!S.idToken) throw new Error('LINE ไม่ส่งข้อมูลยืนยันตัวตน — กรุณาปิดหน้านี้แล้วเปิดใหม่จากแชทบอท');
+      stage('กำลังโหลดข้อมูลจากระบบ…');
       return boot().then(function () {
+        window.__booted = true;
         if (!S.boot.registered) return go('register', {}, true);
         var v = params.v === 'more' && !VIEWS.more ? 'home' : params.v;
         go(VIEWS[v] ? v : 'home', params, true);
       });
-    }).catch(function (e) { fail(e, start); });
+    }).catch(function (e) { window.__booted = true; fail(e, function () { location.reload(); }); });
   }
   function boot() { return api('bootstrap').then(function (b) { S.boot = b; S._bootAt = Date.now(); setTitle('รายงานผล ' + (b.station || '').split(' ')[0], b.me ? b.me.name + ' · ' + (b.perms.roleLabel || '') : ''); return b; }); }
   function refreshBoot() { return boot().then(function () { renderTabs(TOP[S.view]); }, function () { }); }
@@ -1470,5 +1482,11 @@
   };
 
 
-  if (window.liff) start(); else fail(new Error('โหลด LINE LIFF SDK ไม่สำเร็จ — กรุณาเปิดผ่านแอปไลน์'));
+  window.addEventListener('error', function (ev) {
+    if (!ev.message) return;
+    if (!window.__booted) { window.__booted = true; fail(new Error('หน้าเว็บขัดข้อง: ' + ev.message), function () { location.reload(); }); }
+    else toast('⚠️ ' + ev.message, 5000);
+  });
+  window.addEventListener('unhandledrejection', function (ev) { var m = ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason || ''); if (m) toast('⚠️ ' + m, 5000); });
+  if (window.liff) start(); else { window.__booted = true; fail(new Error('โหลด LINE LIFF SDK ไม่สำเร็จ — กรุณาเปิดผ่านแอปไลน์'), function () { location.reload(); }); }
 })();
