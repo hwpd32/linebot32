@@ -189,6 +189,7 @@
         window.__booted = true;
         if (!S.boot.registered) return go('register', {}, true);
         var v = params.v === 'more' && !VIEWS.more ? 'home' : params.v;
+        if (v === 'register') { v = 'home'; toast('✅ ท่านลงทะเบียนแล้ว — ใช้งานได้เลย', 3000); } // กดปุ่ม "ลงทะเบียน" ในแชทซ้ำหลังผูกแล้ว
         go(VIEWS[v] ? v : 'home', params, true);
       });
     }).catch(function (e) { window.__booted = true; fail(e, function () { location.reload(); }); });
