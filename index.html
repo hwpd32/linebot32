@@ -7,7 +7,12 @@
 <title>รายงานผล ส.ทล.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=57932f7f">
+<!-- โหลดไฟล์ตามเลขรุ่นใน version.js (ขอใหม่ทุกครั้ง) — แก้หน้าเว็บแล้วมือถือเห็นทันที แม้ index.html ยังค้างในแคช -->
+<script>document.write('<script src="version.js?t=' + Date.now() + '"><\/script>');</script>
+<script>
+window.__v = function (f) { var V = window.__V || {}; return f + '?v=' + (V[f] || Date.now()); };
+document.write('<link rel="stylesheet" href="' + __v('style.css') + '">');
+</script>
 </head>
 <body>
 <header id="top">
@@ -21,9 +26,7 @@
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="modal" hidden></div>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" charset="utf-8"></script>
-<script src="config.js"></script>
-<script src="pr.js?v=c3af6947"></script>
-<script src="app.js?v=c8758336"></script>
+<script>document.write('<script src="' + __v('config.js') + '"><\/script><script src="' + __v('pr.js') + '"><\/script><script src="' + __v('app.js') + '"><\/script>');</script>
 <script>
 // กันค้าง: ถ้า 35 วินาทียังไม่เข้าระบบ แสดงขั้นที่ค้างและปุ่มลองใหม่ (ทำงานแม้ app.js โหลดไม่สำเร็จ)
 setTimeout(function () {
