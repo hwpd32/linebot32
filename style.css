@@ -418,3 +418,26 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .mx-h { display: flex; align-items: baseline; gap: 4px; }
 .mx-bar { display: flex; gap: 1px; height: 14px; margin: 4px 0 3px; border-radius: 4px; overflow: hidden; background: #eef2f7; }
 .mx-bar i { display: block; height: 100%; }
+/* v1.7: ผลเป็น 0 = ตัวหนังสือสีแดง · เลขรถกว้างคงที่ (คำว่า "เขต x" ตรงกัน) · หน่วยหมาย/ราย · รถบรรทุกหนัก · หมายเหตุน้ำหนักคะแนน */
+.zero { color: #dc2626 !important; }
+.dsh .sb-lab b.cno { display: inline-block; width: 3.1em; }
+.dsh .sb-lab small { white-space: nowrap; }
+.sb-h b.cno, .mx-h b.cno { display: inline-block; min-width: 3.1em; }
+.sb-h b.cno + small, .mx-h b.cno + small { margin-left: 4px; }
+.dsh .d-leg .un, .dsh .d-flag .un { font-size: 22px; color: #64748b; margin-left: 8px; white-space: nowrap; align-self: flex-end; padding-bottom: 8px; }
+.dsh .d-leg .wd { max-width: 300px; }
+.dsh .ow-card { gap: 14px; }
+.dsh .ow-card .k1 b { font-size: 31px; white-space: nowrap; }
+.dsh .ow-card .k1 small { font-size: 19px; white-space: nowrap; }
+.dsh .ow-card .k2 b { font-size: 46px; margin: 0 6px; }
+.dsh .ow-card .k2 span { font-size: 24px; white-space: nowrap; }
+.dsh .ow-card .k2 .sep { height: 40px; margin: 0 12px; }
+.dsh .ev-card .ev { line-height: 1.25; }
+.dsh .sb-wn { font-size: 16px; line-height: 1.3; white-space: normal; color: #475569; }
+.hr-panel { padding: 12px; }
+.hr-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.hr-dates label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hr-dates input { width: 100%; min-width: 0; box-sizing: border-box; padding-left: 8px; padding-right: 6px; }
+.hr-dates .btn { grid-column: 1 / -1; }
+.dsh .sb-wn .nw { white-space: nowrap; }
+.dsh .ow-card .k1 b { font-size: 29px; }
