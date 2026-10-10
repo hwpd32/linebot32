@@ -412,6 +412,7 @@
       can('view.suspect') ? rowLink('🔎', 'ค้นหาผู้ต้องหา', 'ชื่อ / เลขบัตร / เบอร์ — ทุกการค้นหาถูกบันทึก', function () { go('suspects'); }) : null,
       can('pr.make') ? rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'prompt + เบลอรูป', function () { go('pr'); }) : null]);
     group('ตารางเวรและรายงาน', [
+      rowLink('📊', 'ภาพรายงานผู้บังคับบัญชา', 'Dashboard รายวัน/วงรอบ/เดือน · ส่งภาพ + ข้อความเข้าไลน์', function () { go('dash'); }),
       can('view.now') ? rowLink('🗓', 'ตารางเวร', 'ใครเข้าผลัดไหน · สลับเวร', function () { go('roster'); }) : null,
       can('export') ? rowLink('⬇️', 'ส่งออก', 'Excel สถิติ · ข้อความ บก.ทล.', function () { go('export'); }) : null]);
     var pm = can('people.manage'), ad = S.boot.perms.admin;
@@ -714,7 +715,7 @@
     var cur = null, kind = (S.boot.escortTypes || [])[0] || 'ขบวนทั่วไป';
     var name = h('input', { placeholder: 'เช่น นำส่งอวัยวะ / มศว. / รถอ่อนนุช' }), origin = h('input', { placeholder: 'ต้นทาง เช่น รพ.ชลบุรี' }), dest = h('input', { placeholder: 'ปลายทาง เช่น รพ.ศิริราช' }), from = h('input', { placeholder: 'รับช่วงจาก (ถ้ามี) เช่น ส.ทล.1 / 81' });
     var kinds = h('div', { class: 'chips' });
-    function rk() { clear(kinds); S.boot.escortTypes.forEach(function (k) { add(kinds, h('button', { class: 'chip' + (k === kind ? ' on' : ''), onclick: function () { kind = k; if (!name.value || S.boot.escortTypes.indexOf(name.value) >= 0) name.value = k; rk(); }, text: k })); }); }
+    function rk() { clear(kinds); S.boot.escortTypes.forEach(function (k) { add(kinds, h('button', { class: 'chip' + (k === kind ? ' on' : ''), onclick: function () { kind = k; if (!name.value || S.boot.escortTypes.indexOf(name.value) >= 0) name.value = k; rk(); }, text: k === 'ขบวนเสด็จ' ? 'ขบวนเสด็จ (ถปภ.)' : k })); }); }
     rk(); name.value = kind;
     var f = card('▶ เริ่มนำขบวนใหม่'); add(f, h('label', { class: 'f', text: 'ประเภทขบวน' }), kinds, h('label', { class: 'f', text: 'ชื่อขบวน (จะขึ้นในรายงาน)' }), name,
       h('div', { class: 'row2' }, origin, dest), h('label', { class: 'f', text: 'รับช่วง' }), from);
@@ -1727,6 +1728,332 @@
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 4000);
     if (window.liff && liff.isInClient && liff.isInClient()) toast('ถ้าไฟล์ไม่ดาวน์โหลด ให้เปิดหน้านี้ในเบราว์เซอร์ (เมนู ⋮ → เปิดในเบราว์เซอร์)', 6000);
   }
+
+  // ======================= ภาพ Dashboard รายงานผู้บังคับบัญชา =======================
+  // วาดเป็นหน้า HTML ขนาดคงที่ 1920×1080 → ถ่ายเป็น PNG ในเครื่อง → เก็บใน Drive ของสถานี → ส่งภาพ + ข้อความเข้าไลน์
+  var TH_MF = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  var DASH_BK = { 'ไม่ชิดขอบทางด้านซ้าย': 'ไม่ชิดซ้าย', 'ดัดแปลงสภาพรถ': 'ดัดแปลงรถ', 'อุปกรณ์ส่วนควบไม่ครบ': 'ส่วนควบไม่ครบ', 'ฝ่าฝืนเครื่องหมายจราจร': 'ฝ่าป้าย',
+    'ฝ่าฝืนเครื่องสัญญาณไฟจราจร': 'ฝ่าไฟแดง', 'ขับรถเร็วเกินกำหนด': 'ขับเร็ว', 'ไม่ติดแผ่นป้ายทะเบียน': 'ไม่ติดป้ายทะเบียน', 'ขาดต่อภาษี/พ.ร.บ.ฯ': 'ขาดภาษี/พ.ร.บ.' };
+  var DASH_CAT = { 'พ.ร.บ.ยาเสพติด': 'ยาเสพติด', 'พ.ร.บ.อาวุธปืน': 'อาวุธปืน', 'พ.ร.บ.คนเข้าเมือง': 'คนเข้าเมือง', 'รถบรรทุกน้ำหนักเกินฯ': 'รถหนัก', 'ขับรถขณะเมาสุรา': 'เมาแล้วขับ' };
+  var DASH_PAL = ['#0f2744', '#2563eb', '#f59e0b', '#0d9488', '#60a5fa', '#b45309', '#1e40af', '#fcd34d', '#94a3b8', '#cbd5e1'];
+  function fmtN(n) { return (Math.round((+n || 0) * 100) / 100).toLocaleString('en-US'); }
+  function thD(iso, full) { var p = iso.split('-'); return +p[2] + ' ' + (full ? TH_MF : TH_M)[+p[1] - 1]; }
+  function thY(iso) { return +iso.slice(0, 4) + 543; }
+  function lastDay(iso) { return addDays(addDays(iso.slice(0, 8) + '01', 32).slice(0, 8) + '01', -1); }
+  function dashTitle(f, t, full, kind) {
+    var M = full ? TH_MF : TH_M, y = thY(t), sameM = f.slice(0, 7) === t.slice(0, 7), df = +f.slice(8), dt = +t.slice(8), mn = M[+f.slice(5, 7) - 1];
+    if (f === t) return 'ผลการปฏิบัติงานประจำวันที่ ' + thD(f, full) + ' ' + y;
+    if (sameM && df === 1 && t === lastDay(t)) return 'ผลการปฏิบัติงานประจำเดือน ' + mn + ' ' + y;
+    if (kind === 'month' && sameM && df === 1) return 'ผลการปฏิบัติงานประจำเดือน ' + mn + ' ' + y + (t === lastDay(t) ? '' : ' (1 - ' + dt + ' ' + mn + ')');
+    if (sameM && /^c[123]$/.test(kind || 'c') && ((df === 1 && dt <= 10) || (df === 11 && dt <= 20) || (df === 21 && dt <= +lastDay(t).slice(8)))) return 'ผลการปฏิบัติงานประจำวงรอบ ' + df + ' - ' + dt + ' ' + mn + ' ' + y;
+    if (sameM && df === 1) return 'ผลการปฏิบัติงานประจำเดือน ' + mn + ' ' + y + ' (1 - ' + dt + ' ' + mn + ')';
+    if (sameM) return 'ผลการปฏิบัติงานระหว่างวันที่ ' + df + ' - ' + dt + ' ' + mn + ' ' + y;
+    return 'ผลการปฏิบัติงานระหว่างวันที่ ' + thD(f, full) + (f.slice(0, 4) !== t.slice(0, 4) ? ' ' + thY(f) : '') + ' - ' + thD(t, full) + ' ' + y;
+  }
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function sv(tag, attrs) { var e = document.createElementNS(SVGNS, tag); Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); }); for (var i = 2; i < arguments.length; i++) if (arguments[i]) e.appendChild(arguments[i]); return e; }
+  /** วงแหวน: parts = [{v, c}] */
+  function donut(size, thick, parts) {
+    var r = (size - thick) / 2, C = 2 * Math.PI * r, tot = parts.reduce(function (s, p) { return s + (+p.v || 0); }, 0), off = 0;
+    var s = sv('svg', { width: size, height: size, viewBox: '0 0 ' + size + ' ' + size });
+    s.appendChild(sv('circle', { cx: size / 2, cy: size / 2, r: r, fill: 'none', stroke: '#e2e8f0', 'stroke-width': thick }));
+    if (tot) parts.forEach(function (p) {
+      var len = (+p.v || 0) / tot * C; if (!len) return;
+      s.appendChild(sv('circle', { cx: size / 2, cy: size / 2, r: r, fill: 'none', stroke: p.c, 'stroke-width': thick, 'stroke-dasharray': len + ' ' + (C - len), 'stroke-dashoffset': -off, transform: 'rotate(-90 ' + size / 2 + ' ' + size / 2 + ')' }));
+      off += len;
+    });
+    return s;
+  }
+  function ab(cls, x, y, w, hh, style) { return h('div', { class: 'ab ' + cls, style: 'left:' + x + 'px;top:' + y + 'px;' + (w ? 'width:' + w + 'px;' : '') + (hh ? 'height:' + hh + 'px;' : '') + (style || '') }); }
+  function bigNum(n) { var s = fmtN(n).length; return s >= 6 ? 50 : s >= 4 ? 62 : s === 3 ? 76 : 92; }
+  function evidenceItems(list, max) {
+    var out = h('div', { class: 'ev' });
+    if (!list.length) { add(out, h('span', { class: 'muted', text: 'ไม่มีการตรวจยึดของกลางในช่วงนี้' })); return out; }
+    list.slice(0, max).forEach(function (x) { add(out, h('span', { class: 'evi' }, (x.item === 'อื่นๆ' ? 'อื่นๆ ' : x.item + ' '), h('b', { text: fmtN(x.qty) }), ' ' + x.unit)); });
+    if (list.length > max) add(out, h('span', { class: 'evi muted', text: '+' + (list.length - max) + ' รายการ' }));
+    return out;
+  }
+  // โทนสีของระบบ (เหมือนหน้าแอป): กรมท่า · ฟ้า · อำพัน
+  var DK = { navy: '#0f2744', navy2: '#16365e', blue: '#2563eb', amber: '#f59e0b', amberD: '#b45309', teal: '#0d9488', prev: '#b8c4d6', muted: '#64748b', band: '#e6edf7', band2: '#f3f6fb', hl: '#dbeafe' };
+  function header(d) {
+    var band = ab('d-band', 0, 0, 1920, 126), org = ab('d-org', 46, 16, 1400, null);
+    add(org, h('b', { text: 'สถานีตำรวจทางหลวง 2 กองกำกับการ 3 กองบังคับการตำรวจทางหลวง' }), h('span', { text: 'ตำรวจทางหลวงชลบุรี · Highway Police' }));
+    add(band, ab('d-slash', 1500, 0, 520, 64), org);
+    return [band, h('img', { class: 'd-logo', src: 'logo.png', alt: '' })];
+  }
+  function sumBy(list, k) { return list.reduce(function (s, x) { return s + (+x[k] || 0); }, 0); }
+  /** แบบสรุป (ตามภาพตัวอย่าง 2026-10-09) — ถ้าเลือกวันเดียวจะเทียบกับค่าเฉลี่ยของเดือน */
+  function dashCompact(d) {
+    var t = d.total, daily = d.from === d.to, st = ab('dsh', 0, 0), x;
+    add(st, header(d), ab('d-title', 46, 142, 1830, null, '')); st.querySelector('.d-title').textContent = dashTitle(d.from, d.to, false, d._kind);
+    function note(cur, avg) {
+      if (!daily) return 'เฉลี่ย ' + fmtN(Math.round(cur / d.days * 10) / 10) + ' ราย/วัน';
+      return (cur > avg ? 'สูงกว่า' : cur < avg ? 'ต่ำกว่า' : 'เท่ากับ') + 'เฉลี่ยเดือนนี้ (' + fmtN(avg) + ' ราย/วัน)';
+    }
+    function head(card, title, nt) { var a = ab('d-h2', 24, 18), b = ab('d-note', 0, 30, 0, null, 'right:26px;left:auto'); a.textContent = title; b.textContent = nt || ''; add(card, a, b); }
+    // จับกุมคดีอาญา
+    var A = ab('d-card', 46, 236, 997, 380); add(st, A); head(A, 'จับกุมคดีอาญา', note(t.arrest, d.monthAvg.arrest));
+    var dn = ab('d-donut', 30, 104, 240, 240); add(dn, donut(240, 34, [{ v: t.arrestWarrant, c: DK.navy }, { v: t.arrestFlag, c: DK.amber }]), h('div', { class: 'd-center' }, h('b', { style: 'font-size:' + bigNum(t.arrest) + 'px', text: fmtN(t.arrest) }), h('span', { text: 'ราย' })));
+    add(A, dn);
+    x = ab('d-leg', 318, 82, 652, 60); add(x, h('i', { class: 'sq', style: 'background:' + DK.navy }), h('span', { class: 'lb', text: 'หมายจับ' }), h('b', { class: 'v', text: fmtN(t.arrestWarrant) })); add(A, x);
+    var box = ab('d-flag', 306, 148, 664, 212); add(A, box);
+    add(box, h('div', { class: 'fh' }, h('i', { class: 'sq', style: 'background:' + DK.amber }), h('span', { class: 'lb', text: 'ซึ่งหน้า' }), h('small', { text: 'แยกตามฐานความผิด' }), h('b', { class: 'v', text: fmtN(t.arrestFlag) })));
+    var cats = Object.keys(d.flagCat).filter(function (k) { return d.flagCat[k]; }).sort(function (a, b) { return d.flagCat[b] - d.flagCat[a]; });
+    var grid = h('div', { class: 'fg' }); add(box, grid);
+    if (!cats.length) add(grid, h('div', { class: 'muted', style: 'font-size:26px;padding:12px 6px', text: 'ไม่มีการจับกุมความผิดซึ่งหน้าในช่วงนี้' }));
+    cats.slice(0, 6).forEach(function (k) { add(grid, h('div', { class: 'chipv' }, h('span', { text: DASH_CAT[k] || k }), h('b', { text: fmtN(d.flagCat[k]) }))); });
+    // จับกุมคดีจราจร
+    var B = ab('d-card', 1073, 236, 802, 380); add(st, B); head(B, 'จับกุมคดีจราจร', note(t.ticket, d.monthAvg.ticket));
+    var bk = Object.keys(d.byBk).filter(function (k) { return d.byBk[k]; }).sort(function (a, b) { return d.byBk[b] - d.byBk[a]; });
+    var dn2 = ab('d-donut', 30, 96, 240, 240); add(dn2, donut(240, 34, bk.map(function (k, i) { return { v: d.byBk[k], c: DASH_PAL[i % 10] }; })), h('div', { class: 'd-center' }, h('b', { style: 'font-size:' + bigNum(t.ticket) + 'px', text: fmtN(t.ticket) }), h('span', { text: 'ราย' })));
+    add(B, dn2, ab('d-act', 10, 342, 280, null)); B.lastChild.textContent = 'ขนส่ง ' + fmtN(t.T) + ' · รถยนต์ ' + fmtN(t.C) + (t.R ? ' · จราจร ' + fmtN(t.R) : '');
+    var lg = ab('d-list', 318, 76, 456, 292); add(B, lg);
+    if (!bk.length) add(lg, h('div', { class: 'muted', style: 'font-size:26px', text: 'ไม่มีการจับกุมคดีจราจรในช่วงนี้' }));
+    bk.slice(0, 10).forEach(function (k, i) { add(lg, h('div', { class: 'li' }, h('i', { class: 'dot', style: 'background:' + DASH_PAL[i % 10] }), h('span', { text: DASH_BK[k] || k }), h('b', { text: fmtN(d.byBk[k]) }))); });
+    // แถบกลาง: นำขบวน · บริการประชาชน · ของกลาง
+    var E = ab('d-card sm', 46, 630, 596, 88); add(st, E);
+    add(E, h('div', { class: 'k1' }, h('b', { text: 'นำขบวน' }), h('small', { text: 'รวม ' + fmtN(t.escort) + ' ขบวน' })),
+      h('div', { class: 'k2' }, h('span', { text: 'ทั่วไป' }), h('b', { text: fmtN(t.escort - t.escortRoyal) }), h('i', { class: 'sep' }), h('span', { text: 'ถปภ.' }), h('b', { text: fmtN(t.escortRoyal) })));
+    var S2 = ab('d-card sm', 658, 630, 596, 88); add(st, S2);
+    add(S2, h('div', { class: 'k1' }, h('b', { text: 'บริการประชาชน' }), h('small', { text: 'ช่วยเหลือ/อำนวยความสะดวก' })), h('div', { class: 'k2' }, h('b', { text: fmtN(t.assist) }), h('span', { text: 'ครั้ง' })));
+    var G = ab('d-card sm ev-card', 1270, 630, 605, 88); add(st, G);
+    add(G, h('b', { class: 'evh', text: 'ของกลาง' }), evidenceItems(d.evidence, 3));
+    // แยกรถ (จัดกลุ่มตามเขตตรวจ)
+    var Cc = ab('d-card', 46, 732, 1208, 328); add(st, Cc); head(Cc, 'อาญา / รถน้ำหนักเกิน แยกรถตามเขตตรวจ');
+    add(Cc, ab('d-legr', 0, 26, 0, null, 'right:24px;left:auto'));
+    add(Cc.lastChild, h('i', { class: 'sq', style: 'background:' + DK.navy }), h('span', { text: 'อาญา' }), h('i', { class: 'sq', style: 'background:' + DK.amber + ';margin-left:20px' }), h('span', { text: 'รถหนัก' }));
+    add(Cc, zoneBars(d, [['arrest', DK.navy], ['overweight', DK.amber]], 1160, 250, 24, 70, false));
+    // แยกเขตตรวจ
+    var Z = ab('d-card', 1270, 732, 605, 328); add(st, Z); head(Z, 'แยกเขตตรวจ');
+    add(Z, ab('d-legr', 0, 26, 0, null, 'right:22px;left:auto;font-size:24px'));
+    add(Z.lastChild, h('i', { class: 'sq', style: 'width:22px;height:22px;background:' + DK.navy }), h('span', { text: 'อาญา' }), h('i', { class: 'sq', style: 'width:22px;height:22px;background:' + DK.blue + ';margin-left:14px' }), h('span', { text: 'จราจร' }));
+    add(Z, zoneRows(d.zones, [['arrest', DK.navy], ['ticket', DK.blue]], 24, 76, 557, 236));
+    return st;
+  }
+  /** แถวแยกเขต: ชื่อเขต | คอลัมน์ละชุด (แท่ง + ตัวเลข) — สเกลแยกแต่ละชุด */
+  function zoneRows(zones, series, x0, y0, w, hh, compact2) {
+    var box = ab('z-rows', x0, y0, w, hh), rh = hh / zones.length, mx = {}, nameW = compact2 ? 158 : 200, valW = compact2 ? 52 : 60, gap = 14;
+    var colW = (w - nameW - 10) / series.length, barW = colW - valW - gap;
+    series.forEach(function (s) { mx[s[0]] = Math.max(1, Math.max.apply(null, zones.map(function (z) { return z[s[0]] || 0; }))); });
+    zones.forEach(function (z, i) {
+      var row = ab('z-row', 0, i * rh, w, rh - 4, i % 2 ? '' : 'background:' + DK.band2);
+      var nm = ab('z-name', 10, 0, nameW, rh - 4); add(nm, h('b', { text: 'เขต ' + z.zone }), h('span', { text: ' ' + String(z.name).replace(/^เขต\s*\d+\s*/, '') })); add(row, nm);
+      var bh = Math.min(16, rh - 18), y = (rh - 4 - bh) / 2;
+      series.forEach(function (s, j) {
+        var v = z[s[0]] || 0, bx = nameW + 10 + j * colW;
+        add(row, ab('z-track', bx, y, barW, bh), ab('z-bar', bx, y, Math.max(v ? 5 : 0, v / mx[s[0]] * barW), bh, 'background:' + s[1]));
+        var lab = ab('z-v', bx + barW + 8, 0, valW, rh - 4, 'color:' + (v ? s[1] : '#a3adbd') + (compact2 ? ';font-size:18px' : '')); lab.textContent = fmtN(v); add(row, lab);
+      });
+      add(box, row);
+    });
+    return box;
+  }
+  /** แท่งแยกรถ จัดกลุ่มตามเขต: แถบพื้นสลับสี + ชื่อเขต + เลขรถสลับสี — series = [[key, color]], key 'prev.x' = ค่าช่วงก่อน */
+  function zoneBars(d, series, w, hh, x0, y0, mini) {
+    var groups = [], byZ = {};
+    d.cars.forEach(function (c) { var z = +c.zone || 0; if (!byZ[z]) { byZ[z] = { zone: z, cars: [] }; groups.push(byZ[z]); } byZ[z].cars.push(c); });
+    var n = d.cars.length || 1, gap = mini ? 8 : 14, slot = (w - gap * (groups.length - 1)) / n;
+    var box = ab('d-bars', x0, y0, w, hh), max = 1;
+    function val(c, k) { return k.indexOf('prev.') === 0 ? c.prev[k.slice(5)] || 0 : c[k] || 0; }
+    d.cars.forEach(function (c) { series.forEach(function (s) { max = Math.max(max, val(c, s[0])); }); });
+    var zh = mini ? 0 : 54, lh = mini ? 42 : 36, base = hh - lh, top = zh + (mini ? 22 : 40), avail = base - top - 4, bw = Math.min(mini ? 18 : 38, (slot - 10) / series.length - 4), gx = 0;
+    groups.forEach(function (g, gi) {
+      var gw = slot * g.cars.length, zs = (d.zones || []).filter(function (z) { return z.zone === g.zone; })[0];
+      add(box, ab('d-zband', gx, 0, gw, hh, 'background:' + (gi % 2 ? DK.band2 : DK.band)));
+      if (!mini) {
+        var zl = ab('d-zl', gx, 6, gw, null); add(zl, h('b', { text: g.zone ? 'เขต ' + g.zone : 'อื่นๆ' }), h('span', { text: zs ? String(zs.name).replace(/^เขต\s*\d+\s*/, '') : '' })); add(box, zl);
+      } else { var zm = ab('d-zm', gx, hh - 20, gw, null); zm.textContent = g.zone ? 'เขต ' + g.zone : 'อื่น'; add(box, zm); }
+      g.cars.forEach(function (c, ci) {
+        var cx = gx + ci * slot, used = bw * series.length + 4 * (series.length - 1);
+        series.forEach(function (s, j) {
+          var v = val(c, s[0]), isPrev = s[0].indexOf('prev.') === 0, bh = v ? Math.max(5, v / max * avail) : 3, bx = cx + (slot - used) / 2 + j * (bw + 4);
+          add(box, ab('d-bar', bx, base - bh, bw, bh, 'background:' + (v ? s[1] : '#cfd6e2')));
+          if (v || !mini) {
+            var lab = ab('d-bv', bx - 18, base - bh - (mini ? (isPrev ? 18 : 22) : 42), bw + 36, null, mini ? (isPrev ? 'font-size:14px;color:#7b879b;font-weight:600' : 'font-size:17px;color:' + DK.navy) : (v ? 'color:' + s[1] : 'color:#a3adbd'));
+            lab.textContent = fmtN(v); add(box, lab);
+          }
+        });
+        var cl = ab('d-bl', cx, base + (mini ? 2 : 4), slot, null, 'color:' + (ci % 2 ? DK.blue : DK.navy) + (mini ? ';font-size:' + (slot < 44 ? 14 : 16) + 'px' : ';font-size:' + (slot < 84 ? 22 : 26) + 'px'));
+        cl.textContent = c.car; add(box, cl);
+      });
+      gx += gw + gap;
+    });
+    add(box, ab('d-axis', 0, base, w, 2));
+    return box;
+  }
+  var DASH_ICON = {
+    siren: '<path d="M12 22h24v8H12z"/><path d="M15 22a9 9 0 0118 0z"/><path d="M24 6v6M10 12l4 4M38 12l-4 4" stroke="#0f2744" stroke-width="3" fill="none"/>',
+    doc: '<path d="M13 6h16l8 8v28H13z"/><path d="M18 22h14M18 28h14M18 34h9" stroke="#f59e0b" stroke-width="3"/>',
+    hand: '<circle cx="24" cy="24" r="16"/><path d="M24 14v13" stroke="#f59e0b" stroke-width="4"/><circle cx="24" cy="33" r="2.6" fill="#f59e0b"/>',
+    cone: '<path d="M20 8h8l9 30H11z"/><path d="M8 38h32v4H8z"/><path d="M16 22h16M14 30h20" stroke="#f59e0b" stroke-width="3"/>',
+    truck: '<path d="M6 14h22v18H6zM28 20h8l6 7v5H28z"/><circle cx="14" cy="35" r="4"/><circle cx="35" cy="35" r="4"/>',
+    flag: '<path d="M12 6v36" stroke="#0f2744" stroke-width="4"/><path d="M14 8h22l-5 7 5 7H14z"/>'
+  };
+  function icon(k, size) { var s = sv('svg', { width: size, height: size, viewBox: '0 0 48 48', fill: '#0f2744' }); s.innerHTML = DASH_ICON[k]; return s; }
+  /** แบบละเอียด (ตามภาพตัวอย่าง mtd-full) */
+  function dashFull(d) {
+    var t = d.total, st = ab('dsh full', 0, 0), pv = d.prev, pl, cl;
+    if (pv.month) { pl = TH_M[+pv.from.slice(5, 7) - 1]; cl = TH_M[+d.from.slice(5, 7) - 1]; } else { pl = 'ช่วงก่อน'; cl = 'ช่วงนี้'; }
+    var band = ab('f-band', 0, 0, 1920, 96); add(st, band);
+    add(band, ab('f-left', -40, 0, 900, 96), h('img', { class: 'f-logo', src: 'logo.png', alt: '' }), ab('f-org', 112, 14, 760, null), ab('f-ttl', 0, 10, 0, null, 'right:40px;left:auto'));
+    band.querySelector('.f-org').appendChild(h('b', { text: 'สถานีตำรวจทางหลวง 2 กก.3 บก.ทล.' })); band.querySelector('.f-org').appendChild(h('span', { text: 'ตำรวจทางหลวงชลบุรี' }));
+    band.querySelector('.f-ttl').appendChild(h('b', { text: dashTitle(d.from, d.to, true, d._kind) }));
+    band.querySelector('.f-ttl').appendChild(h('span', { text: 'เทียบ' + (pv.month ? 'เดือน ' + pl : 'ช่วงก่อนหน้า ' + thD(pv.from) + ' - ' + thD(pv.to)) }));
+    var K = [['siren', t.arrest, 'จับกุมทั้งหมด'], ['doc', t.arrestWarrant, 'หมายจับ'], ['hand', t.arrestFlag, 'ความผิดซึ่งหน้า'], ['cone', t.ticket, 'คดีจราจร'], ['truck', t.overweight, 'รถน้ำหนักเกิน'], ['flag', t.escort, 'นำขบวน']];
+    K.forEach(function (k, i) { var c = ab('f-kpi', 12 + i * 318, 108, 306, 118); add(c, h('div', { class: 'ic' }, icon(k[0], 52)), h('b', { text: fmtN(k[1]) }), h('span', { text: k[2] })); add(st, c); });
+    function listCard(x, w, title, top, rows, color) {
+      var c = ab('f-card', x, 240, w, 572, 'border-top:7px solid ' + top); add(c, h('div', { class: 'fh2', text: title })); add(st, c);
+      var max = rows.reduce(function (m, r) { return Math.max(m, r[1]); }, 1);
+      if (!rows.length) add(c, h('div', { class: 'muted', style: 'font-size:24px;padding:20px 26px', text: 'ไม่มีข้อมูลในช่วงนี้' }));
+      var rh = Math.min(62, Math.floor(480 / Math.max(rows.length, 7)));
+      rows.slice(0, 10).forEach(function (r) { add(c, h('div', { class: 'fr', style: 'height:' + rh + 'px' }, h('span', { class: 'fl', text: r[0] }), h('div', { class: 'ft' }, h('i', { style: 'width:' + Math.max(1.2, r[1] / max * 100) + '%;background:' + color })), h('b', { text: fmtN(r[1]) }))); });
+      return c;
+    }
+    var cats = Object.keys(d.byArrestCat).filter(function (k) { return d.byArrestCat[k]; }).sort(function (a, b) { return d.byArrestCat[b] - d.byArrestCat[a]; });
+    listCard(12, 640, 'ฐานความผิด (อาญา)', DK.navy, cats.map(function (k) { return [DASH_CAT[k] || k, d.byArrestCat[k]]; }), DK.navy);
+    var bk = Object.keys(d.byBk).filter(function (k) { return d.byBk[k]; }).sort(function (a, b) { return d.byBk[b] - d.byBk[a]; });
+    listCard(664, 606, 'คดีจราจร', DK.blue, bk.map(function (k) { return [DASH_BK[k] || k, d.byBk[k]]; }), DK.blue);
+    // หมายจับ / ขบวน / ของกลาง
+    var w = d.warrant, W = ab('f-card', 12, 826, 314, 246, 'border-top:7px solid ' + DK.navy); add(st, W);
+    add(W, h('div', { class: 'fh2', text: 'หมายจับ' }));
+    var dw = ab('f-donut', 18, 66, 160, 160); add(dw, donut(160, 26, [{ v: w.bwc, c: DK.navy }, { v: w.joint, c: DK.amber }, { v: w.total - w.bwc - w.joint, c: DK.prev }]), h('div', { class: 'd-center' }, h('b', { style: 'font-size:46px', text: fmtN(w.total) }))); add(W, dw);
+    add(W, ab('f-mini', 190, 60, 118, null)); [['Body Worn', w.bwc], ['จับร่วม', w.joint], ['ทั่วไป', w.total - w.bwc - w.joint]].forEach(function (r) { add(W.lastChild, h('div', null, h('b', { text: fmtN(r[1]) }), h('span', { text: r[0] }))); });
+    var Es = ab('f-card', 338, 826, 314, 246, 'border-top:7px solid ' + DK.amber); add(st, Es);
+    add(Es, h('div', { class: 'fh2', text: 'นำขบวน' }));
+    var de = ab('f-donut', 18, 66, 160, 160); add(de, donut(160, 26, [{ v: t.escortRoyal, c: DK.amber }, { v: t.escort - t.escortRoyal, c: DK.navy }]), h('div', { class: 'd-center' }, h('b', { style: 'font-size:46px', text: fmtN(t.escort) }))); add(Es, de);
+    add(Es, ab('f-mini', 190, 84, 118, null)); [['ถปภ.', t.escortRoyal], ['ทั่วไป', t.escort - t.escortRoyal]].forEach(function (r) { add(Es.lastChild, h('div', null, h('b', { text: fmtN(r[1]) }), h('span', { text: r[0] }))); });
+    var G = ab('f-card', 664, 826, 606, 246, 'border-top:7px solid ' + DK.teal); add(st, G);
+    add(G, h('div', { class: 'fh2', text: 'ของกลาง · บริการประชาชน' }));
+    var gg = ab('f-ev', 22, 70, 566, 160); add(G, gg);
+    var items = d.evidence.slice(0, 5).map(function (x) { return [x.item, x.qty, x.unit]; });
+    items.push(['บริการประชาชน', t.assist, 'ครั้ง']);
+    if (d.evidence.length > 5) items.push(['อื่นๆ', d.evidence.length - 5, 'รายการ']);
+    items.slice(0, 6).forEach(function (r) { add(gg, h('div', { class: 'evb' }, h('span', { text: r[0] }), h('div', null, h('b', { text: fmtN(r[1]) }), ' ' + r[2]))); });
+    // แยกรถตามเขต: ช่วงก่อน (เทา) เทียบช่วงนี้ · แยกเขตตรวจ
+    [['อาญา แยกรถตามเขต', 'arrest', DK.navy], ['จราจร แยกรถตามเขต', 'ticket', DK.blue]].forEach(function (r, i) {
+      var c = ab('f-card', 1284, 240 + i * 278, 624, 268, 'border-top:7px solid ' + r[2]); add(st, c);
+      add(c, h('div', { class: 'fh2', text: r[0] }), ab('f-lg', 0, 22, 0, null, 'right:18px;left:auto'));
+      add(c.lastChild, h('i', { class: 'sq', style: 'background:' + DK.prev }), h('span', { text: pl }), h('i', { class: 'sq', style: 'background:' + r[2] + ';margin-left:14px' }), h('span', { text: cl }));
+      add(c, zoneBars(d, [['prev.' + r[1], DK.prev], [r[1], r[2]]], 600, 196, 12, 64, true));
+    });
+    var Zc = ab('f-card', 1284, 796, 624, 268, 'border-top:7px solid ' + DK.teal); add(st, Zc);
+    add(Zc, h('div', { class: 'fh2', text: 'แยกเขตตรวจ (' + cl + ')' }), ab('f-lg', 0, 22, 0, null, 'right:18px;left:auto'));
+    add(Zc.lastChild, h('i', { class: 'sq', style: 'background:' + DK.navy }), h('span', { text: 'อาญา' }), h('i', { class: 'sq', style: 'background:' + DK.blue + ';margin-left:14px' }), h('span', { text: 'จราจร' }));
+    add(Zc, zoneRows(d.zones, [['arrest', DK.navy], ['ticket', DK.blue]], 14, 64, 596, 194, true));
+    add(st, ab('f-foot', 0, 1072, 1920, 8));
+    return st;
+  }
+  function dashFont() {
+    if (!document.getElementById('font-prompt')) document.head.appendChild(h('link', { id: 'font-prompt', rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap' }));
+    if (!document.fonts || !document.fonts.load) return Promise.resolve();
+    var p = Promise.all(['400 30px Prompt', '600 30px Prompt', '700 60px Prompt'].map(function (f) { return document.fonts.load(f, 'กขค 0123'); }));
+    return Promise.race([p, new Promise(function (r) { setTimeout(r, 5000); })]);
+  }
+  function loadImg(img) { return img.complete && img.naturalWidth ? Promise.resolve() : new Promise(function (r) { img.onload = img.onerror = function () { r(); }; setTimeout(r, 4000); }); }
+  function captureDash(node) {
+    function run() {
+      return Promise.all([].slice.call(node.querySelectorAll('img')).map(loadImg)).then(function () {
+        return window.html2canvas(node, { backgroundColor: '#eef2f7', scale: 1, width: 1920, height: 1080, windowWidth: 1920, useCORS: true, logging: false,
+          // เอกสารสำเนาที่ใช้วาดต้องโหลดฟอนต์ให้เสร็จก่อน ไม่เช่นนั้นตำแหน่งตัวอักษรไทยจะเพี้ยน (มีช่องว่างแทรก)
+          onclone: function (doc) {
+            if (!doc.fonts || !doc.fonts.load) return;
+            var ps = ['400 30px Prompt', '500 30px Prompt', '600 30px Prompt', '700 60px Prompt'].map(function (f) { return doc.fonts.load(f, 'กขคงจ ปฏิบัติ 0123'); });
+            return Promise.race([Promise.all(ps).then(function () { return doc.fonts.ready; }), new Promise(function (r) { setTimeout(r, 5000); })]).then(function () { return new Promise(function (r) { setTimeout(r, 120); }); });
+          } });
+      }).then(function (cv) { return cv.toDataURL('image/png').split(',')[1]; });
+    }
+    if (window.html2canvas) return run();
+    return new Promise(function (res, rej) { var sc = h('script', { src: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js' }); sc.onload = res; sc.onerror = function () { rej(new Error('โหลดตัวสร้างรูปไม่ได้ กรุณาตรวจสัญญาณ')); }; document.head.appendChild(sc); }).then(run);
+  }
+  /** ส่งหลายข้อความ (ภาพ + ข้อความ) เข้าห้องแชท: ในกลุ่มส่งตรง · นอกกลุ่มให้เลือกห้อง */
+  function sendToChat(msgs, fallbackText) {
+    var ctx = window.liff && liff.getContext ? liff.getContext() : null, inGroup = ctx && (ctx.type === 'group' || ctx.type === 'room');
+    var p = inGroup && liff.isInClient && liff.isInClient() ? liff.sendMessages(msgs).then(function () { return 'sent'; }, function () { return null; }) : Promise.resolve(null);
+    return p.then(function (r) {
+      if (r) return r;
+      if (window.liff && liff.isApiAvailable && liff.isApiAvailable('shareTargetPicker')) return liff.shareTargetPicker(msgs).then(function (x) { return x ? 'shared' : 'cancel'; }, function () { return copyText(fallbackText).then(function () { return 'copied'; }); });
+      return copyText(fallbackText).then(function () { return 'copied'; });
+    });
+  }
+  function dashPicker(onChange) {
+    var t = today(), sel = 'month', ym = t.slice(0, 7), months = [];
+    for (var i = 0, y0 = +t.slice(0, 4), m0 = +t.slice(5, 7); i < 12; i++) { months.push(y0 + '-' + pad(m0)); if (--m0 < 1) { m0 = 12; y0--; } }
+    var row1 = h('div', { class: 'chips' }), row2 = h('div', { class: 'chips', style: 'margin-top:8px' });
+    var msel = h('select', { style: 'margin-top:8px', onchange: function () { ym = msel.value; pick(sel === 'day' || sel === 'yday' || sel === 'custom' ? 'month' : sel); } });
+    months.forEach(function (m) { add(msel, h('option', { value: m, text: TH_MF[+m.slice(5) - 1] + ' ' + (+m.slice(0, 4) + 543) })); });
+    var f = h('input', { type: 'date' }), to = h('input', { type: 'date' }), custom = h('div', { class: 'row', hidden: true, style: 'margin-top:8px' }, f, to);
+    function clamp(x) { return x > t ? t : x; }
+    function range(k) {
+      var a = ym + '-01', e = lastDay(a);
+      if (k === 'day') return [t, t];
+      if (k === 'yday') return [addDays(t, -1), addDays(t, -1)];
+      if (k === 'month') return [a, clamp(e)];
+      if (k === 'c1') return [a, clamp(ym + '-10')];
+      if (k === 'c2') return [ym + '-11', clamp(ym + '-20')];
+      if (k === 'c3') return [ym + '-21', clamp(e)];
+      return null;
+    }
+    function pick(k) {
+      sel = k; custom.hidden = k !== 'custom'; render();
+      if (k === 'custom') { if (f.value && to.value) onChange(f.value, to.value, 'custom'); return; }
+      var r = range(k); if (r[0] > t) { toast('ช่วงนี้ยังไม่ถึง'); return; } onChange(r[0], r[1], k);
+    }
+    function chip(row, k, label) { add(row, h('button', { class: 'chip' + (sel === k ? ' on' : ''), onclick: function () { pick(k); }, text: label })); }
+    function render() {
+      clear(row1); clear(row2);
+      chip(row1, 'yday', 'เมื่อวาน'); chip(row1, 'day', 'วันนี้'); chip(row1, 'custom', 'กำหนดเอง');
+      chip(row2, 'month', 'ทั้งเดือน'); chip(row2, 'c1', 'วงรอบ 1–10'); chip(row2, 'c2', '11–20'); chip(row2, 'c3', '21–สิ้นเดือน');
+    }
+    f.onchange = to.onchange = function () { if (f.value && to.value) onChange(f.value <= to.value ? f.value : to.value, f.value <= to.value ? to.value : f.value, 'custom'); };
+    render(); setTimeout(function () { pick('month'); }, 0);
+    return h('div', { class: 'card' }, row1, custom, h('div', { class: 'section-label', style: 'margin:10px 0 0', text: 'รายเดือน / รายวงรอบ' }), msel, row2);
+  }
+  VIEWS.dash = function () {
+    setTitle('📊 ภาพรายงานผู้บังคับบัญชา', 'เลือกช่วง → ดูตัวอย่าง → ส่งภาพ + ข้อความเข้าไลน์');
+    clear($app); dashFont();
+    var data = null, layout = 'compact', out = h('div'), seq = 0;
+    var lchips = h('div', { class: 'chips' });
+    function lr() { clear(lchips); [['compact', 'แบบสรุป'], ['full', 'แบบละเอียด']].forEach(function (x) { add(lchips, h('button', { class: 'chip' + (layout === x[0] ? ' on' : ''), onclick: function () { layout = x[0]; lr(); draw(); }, text: x[1] })); }); }
+    lr();
+    add($app, dashPicker(load), h('div', { class: 'card' }, h('div', { class: 'section-label', style: 'margin:0 0 6px', text: 'รูปแบบภาพ' }), lchips, h('p', { class: 'muted small', style: 'margin:6px 0 0', text: 'แบบสรุป: ถ้าเลือกวันเดียวจะเทียบกับค่าเฉลี่ยของเดือน · แบบละเอียด: เทียบรายรถกับเดือน/ช่วงก่อนหน้า' })), out);
+    function build() { return layout === 'full' ? dashFull(data) : dashCompact(data); }
+    function load(a, b, kind) {
+      var my = ++seq; clear(out); add(out, h('div', { class: 'loading' }, spinner(), h('p', { text: 'กำลังรวมผล ' + th(a) + (a !== b ? ' – ' + th(b) : '') + '…' })));
+      api('dash', { from: a, to: b }).then(function (d) { if (my !== seq) return; d._kind = kind; data = d; draw(); }, function (e) { if (my === seq) { clear(out); add(out, errorBox(e.message)); } });
+    }
+    function draw() {
+      if (!data) return;
+      clear(out);
+      var wrap = h('div', { class: 'dsh-wrap' }), stage = build(); add(wrap, stage); add(out, wrap);
+      function fit() { var s = wrap.clientWidth / 1920; stage.style.transform = 'scale(' + s + ')'; wrap.style.height = Math.ceil(1080 * s) + 'px'; }
+      fit(); setTimeout(fit, 50); window.onresize = fit;
+      var name = 'Dashboard ' + data.from + (data.to !== data.from ? '_' + data.to : '') + (layout === 'full' ? ' ละเอียด' : '') + '.png';
+      var res = h('div');
+      add(out, h('div', { class: 'card' },
+        submitBtn('📤 ส่งภาพ + ข้อความรายงานเข้าไลน์', 'green block', function () { return make().then(function (r) {
+          return sendToChat([{ type: 'image', originalContentUrl: r.direct, previewImageUrl: r.direct }, { type: 'text', text: data.text.slice(0, 4900) }], data.text).then(function (x) {
+            toast(x === 'sent' ? '✅ ส่งเข้ากลุ่มแล้ว' : x === 'shared' ? '✅ ส่งแล้ว' : x === 'cancel' ? 'ยกเลิก' : '📋 คัดลอกข้อความแล้ว — เปิดลิงก์รูปเพื่อบันทึก');
+            showFile(r);
+          });
+        }); }),
+        h('div', { class: 'row', style: 'margin-top:8px' },
+          submitBtn('🖼 บันทึกรูป', 'ghost grow', function () { return make().then(function (r) { showFile(r); if (r.b64) downloadB64(r.b64, name, 'image/png'); }); }),
+          h('button', { class: 'btn ghost grow', onclick: function () { copyText(data.text).then(function () { toast('📋 คัดลอกข้อความแล้ว'); }); }, text: '📋 คัดลอกข้อความ' })),
+        res));
+      add(out, card('ข้อความรายงาน (ส่งคู่กับภาพ)'), h('div', { class: 'msg-preview', text: data.text }));
+      var made = null;
+      function make() {
+        if (made && made.layout === layout && made.key === data.from + data.to) return Promise.resolve(made);
+        toast('กำลังสร้างภาพ…', 6000);
+        var off = h('div', { style: 'position:fixed;left:-30000px;top:0;width:1920px;height:1080px;overflow:hidden' }), st2 = build(); add(off, st2); document.body.appendChild(off);
+        return dashFont().then(function () { return captureDash(st2); }).then(function (b64) {
+          off.remove(); toast('กำลังบันทึกภาพไว้ใน Drive ของสถานี…', 6000);
+          return api('dash.image', { base64: b64, name: name }).then(function (r) { r.b64 = b64; r.layout = layout; r.key = data.from + data.to; made = r; return r; });
+        }, function (e) { off.remove(); throw e; });
+      }
+      function showFile(r) { clear(res); add(res, h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn ghost sm grow', onclick: function () { openExternal(r.url); }, text: '🔗 เปิดรูปใน Drive' }), h('button', { class: 'btn ghost sm grow', onclick: function () { copyText(r.url).then(function () { toast('📋 คัดลอกลิงก์แล้ว'); }); }, text: '📋 ลิงก์รูป' }))); }
+    }
+  };
 
   // ======================= บุคลากรและสิทธิ์ =======================
   VIEWS.admin = function () {

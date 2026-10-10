@@ -202,3 +202,104 @@ body.has-tabs .bar { bottom: calc(62px + env(safe-area-inset-bottom)); }
 /* แถบจำลองมุมมอง */
 #viewas { position: sticky; top: 0; z-index: 60; display: flex; gap: 8px; align-items: center; background: #f97316; color: #fff; padding: 8px 12px; font-size: 13px; font-weight: 600; }
 #viewas[hidden] { display: none; } #viewas button { background: #fff; color: #c2410c; border: 0; border-radius: 8px; padding: 6px 12px; font-weight: 700; }
+
+/* ภาพ Dashboard (1920×1080 คงที่ — ย่อด้วย transform เพื่อดูตัวอย่าง) · โทนสีเดียวกับแอป: กรมท่า #0f2744 · ฟ้า #2563eb · อำพัน #f59e0b */
+.dsh-wrap { position: relative; width: 100%; overflow: hidden; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.15); margin-bottom: 12px; background: #eef2f7; }
+.dsh { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; background: #eef2f7; overflow: hidden;
+  font-family: 'Prompt', 'Sarabun', Tahoma, sans-serif; color: #0f172a; line-height: 1.2; letter-spacing: 0; }
+.dsh div, .dsh span, .dsh b, .dsh i, .dsh small { box-sizing: border-box; }
+.dsh .ab { position: absolute; }
+.dsh .muted { color: #64748b; }
+.dsh .sq { display: inline-block; width: 30px; height: 30px; border-radius: 7px; vertical-align: middle; }
+.dsh .d-band { background: linear-gradient(90deg, #16365e 0%, #0f2744 60%, #0b1d33 100%); overflow: hidden; }
+.dsh .d-slash { background: #f59e0b; transform: skewX(-38deg); transform-origin: 0 0; }
+.dsh .d-logo { position: absolute; right: 50px; top: 6px; height: 152px; }
+.dsh .d-org b { display: block; color: #fff; font-size: 40px; font-weight: 700; white-space: nowrap; }
+.dsh .d-org span { display: block; color: #c7d4e6; font-size: 30px; font-weight: 500; margin-top: 6px; }
+.dsh .d-title { font-size: 60px; font-weight: 700; white-space: nowrap; color: #0f2744; }
+.dsh .d-card { background: #fff; border: 2px solid #c9d5e6; border-radius: 26px; }
+.dsh .d-h2 { font-size: 40px; font-weight: 700; white-space: nowrap; color: #0f2744; }
+.dsh .d-note { font-size: 27px; color: #64748b; white-space: nowrap; }
+.dsh .d-center { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.dsh .d-center b { font-weight: 700; line-height: 1; color: #0f2744; }
+.dsh .d-center span { font-size: 30px; color: #64748b; margin-top: 6px; }
+.dsh .d-leg { display: flex; align-items: center; }
+.dsh .d-leg .lb { font-size: 34px; font-weight: 600; margin-left: 14px; }
+.dsh .d-leg .v, .dsh .d-flag .v { margin-left: auto; font-size: 54px; font-weight: 700; color: #0f2744; }
+.dsh .d-flag { background: #fffbeb; border: 2px solid #fcd34d; border-radius: 22px; padding: 8px 18px; }
+.dsh .d-flag .fh { display: flex; align-items: center; height: 60px; }
+.dsh .d-flag .fh .lb { font-size: 34px; font-weight: 700; margin-left: 14px; }
+.dsh .d-flag .fh small { font-size: 23px; color: #64748b; margin-left: 12px; margin-top: 8px; }
+.dsh .d-flag .fg { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-top: 6px; }
+.dsh .d-flag .chipv { width: 200px; height: 52px; background: #fff; border: 1px solid #fde68a; border-radius: 12px; display: flex; align-items: center; padding: 0 14px; }
+.dsh .d-flag .chipv span { font-size: 25px; white-space: nowrap; overflow: hidden; }
+.dsh .d-flag .chipv b { margin-left: auto; font-size: 32px; font-weight: 700; color: #b45309; }
+.dsh .d-act { font-size: 22px; color: #64748b; text-align: center; white-space: nowrap; }
+.dsh .d-list .li { display: flex; align-items: center; height: 29px; }
+.dsh .d-list .dot { width: 20px; height: 20px; border-radius: 50%; display: inline-block; }
+.dsh .d-list span { font-size: 23px; margin-left: 14px; white-space: nowrap; }
+.dsh .d-list b { margin-left: auto; font-size: 26px; font-weight: 700; color: #0f2744; }
+.dsh .d-legr { display: flex; align-items: center; font-size: 28px; }
+.dsh .d-legr span { margin-left: 8px; }
+.dsh .d-axis { background: #9fb0c8; }
+.dsh .d-zband { border-radius: 14px; }
+.dsh .d-zl { text-align: center; line-height: 1.15; }
+.dsh .d-zl b { display: block; font-size: 22px; font-weight: 700; color: #0f2744; }
+.dsh .d-zl span { display: block; font-size: 18px; color: #475569; white-space: nowrap; }
+.dsh .d-zm { text-align: center; font-size: 14px; font-weight: 600; color: #475569; white-space: nowrap; }
+.dsh .d-bar { border-radius: 5px 5px 0 0; }
+.dsh .d-bv { text-align: center; font-size: 32px; font-weight: 700; white-space: nowrap; }
+.dsh .d-bl { text-align: center; font-size: 26px; font-weight: 700; white-space: nowrap; }
+.dsh .z-row { border-radius: 10px; }
+.dsh .z-name { display: flex; align-items: center; white-space: nowrap; overflow: hidden; }
+.dsh .z-name b { font-size: 22px; font-weight: 700; color: #0f2744; }
+.dsh .z-name span { font-size: 19px; color: #475569; margin-left: 6px; }
+.dsh .z-track { background: #e8edf4; border-radius: 6px; }
+.dsh .z-bar { border-radius: 6px; }
+.dsh .z-v { font-size: 22px; font-weight: 700; white-space: nowrap; display: flex; align-items: center; }
+.dsh .d-card.sm { border-radius: 22px; display: flex; align-items: center; padding: 0 24px; }
+.dsh .d-card.sm .k1 { display: flex; flex-direction: column; }
+.dsh .d-card.sm .k1 b { font-size: 33px; font-weight: 700; color: #0f2744; }
+.dsh .d-card.sm .k1 small { font-size: 21px; color: #64748b; }
+.dsh .d-card.sm .k2 { margin-left: auto; display: flex; align-items: baseline; }
+.dsh .d-card.sm .k2 b { font-size: 58px; font-weight: 700; margin: 0 6px; line-height: 1; color: #0f2744; }
+.dsh .d-card.sm .k2 span { font-size: 28px; color: #334155; }
+.dsh .d-card.sm .k2 .sep { display: inline-block; width: 2px; height: 44px; background: #c9d5e6; margin: 0 14px; align-self: center; }
+.dsh .d-card.sm.ev-card { gap: 18px; }
+.dsh .ev-card .evh { font-size: 33px; font-weight: 700; color: #0f2744; white-space: nowrap; }
+.dsh .ev { display: flex; flex-wrap: wrap; gap: 2px 20px; font-size: 22px; color: #334155; }
+.dsh .ev .muted { font-size: 22px; }
+.dsh .ev b { font-size: 28px; color: #0f2744; font-weight: 700; }
+/* แบบละเอียด */
+.dsh.full { background: #eef2f7; }
+.dsh .f-band { background: #0f2744; overflow: hidden; }
+.dsh .f-left { background: #16365e; transform: skewX(-20deg); transform-origin: 0 0; }
+.dsh .f-logo { position: absolute; left: 20px; top: 4px; height: 88px; }
+.dsh .f-org b { display: block; font-size: 36px; font-weight: 600; color: #fff; white-space: nowrap; }
+.dsh .f-org span { display: block; font-size: 22px; color: #c7d4e6; }
+.dsh .f-ttl { text-align: right; }
+.dsh .f-ttl b { display: block; font-size: 42px; font-weight: 700; color: #fff; white-space: nowrap; }
+.dsh .f-ttl span { display: block; font-size: 22px; color: #fbbf24; }
+.dsh .f-kpi { background: #16365e; border-radius: 16px; color: #fff; }
+.dsh .f-kpi .ic { position: absolute; left: 18px; top: 17px; width: 84px; height: 84px; border-radius: 50%; background: #f59e0b; display: flex; align-items: center; justify-content: center; }
+.dsh .f-kpi b { position: absolute; left: 118px; top: 8px; font-size: 60px; font-weight: 700; white-space: nowrap; }
+.dsh .f-kpi span { position: absolute; left: 118px; top: 76px; font-size: 25px; white-space: nowrap; max-width: 178px; overflow: hidden; color: #dbe5f2; }
+.dsh .f-card { background: #fff; border-radius: 16px; border: 1px solid #d5deea; }
+.dsh .f-card .fh2 { font-size: 30px; font-weight: 700; color: #0f2744; padding: 16px 22px 8px; white-space: nowrap; }
+.dsh .f-card .fr { display: flex; align-items: center; height: 47px; padding: 0 22px; }
+.dsh .f-card .fl { width: 210px; font-size: 25px; white-space: nowrap; overflow: hidden; }
+.dsh .f-card .ft { flex: 1; height: 26px; margin: 0 16px; background: #eef2f7; border-radius: 4px; }
+.dsh .f-card .ft i { display: block; height: 26px; border-radius: 4px; }
+.dsh .f-card .fr b { width: 110px; text-align: right; font-size: 28px; font-weight: 700; color: #0f2744; }
+.dsh .f-mini div { margin-bottom: 6px; }
+.dsh .f-mini b { display: block; font-size: 30px; font-weight: 700; line-height: 1; color: #0f2744; }
+.dsh .f-mini span { display: block; font-size: 17px; color: #475569; white-space: nowrap; }
+.dsh .f-ev { display: flex; flex-wrap: wrap; gap: 10px; }
+.dsh .f-ev .evb { width: 278px; height: 72px; background: #f1f5f9; border-radius: 12px; padding: 6px 14px; }
+.dsh .f-ev .evb span { display: block; font-size: 20px; color: #475569; white-space: nowrap; }
+.dsh .f-ev .evb b { font-size: 30px; font-weight: 700; color: #0f2744; }
+.dsh .f-ev .evb div { font-size: 20px; color: #475569; }
+.dsh .f-lg { display: flex; align-items: center; font-size: 22px; }
+.dsh .f-lg .sq { width: 22px; height: 22px; border-radius: 5px; }
+.dsh .f-lg span { margin-left: 6px; }
+.dsh .f-foot { background: #f59e0b; }
