@@ -604,6 +604,7 @@
     var ppl = d.officers || [];
     add(c, ppl.length ? fineTable(['ชื่อ', 'รายงาน', 'ชำระ', '%', 'บาท', '📷'], ppl.map(function (p) { return [p.name, fmtN(p.reported), fmtN(p.paid), rateChip(p.rate), baht(p.paidAmt), p.cam ? fmtN(p.cam) : '']; }))
       : h('p', { class: 'muted small', text: 'ยังไม่มีข้อมูลในช่วงนี้' }));
+    if (!d.issuerKnown && (d.cars || []).some(function (x) { return x.reported; })) add(c, h('div', { class: 'fn-notes', text: 'ℹ️ ช่วงนี้มีข้อมูลที่นำเข้าจาก Excel ซึ่งไม่ระบุผู้ออกใบสั่งรายคน — ช่อง "รายงาน" รายคนจึงว่าง ดูการเทียบได้ที่ตารางรายรถและแท็บอัตราชำระ' }));
     add(c, h('p', { class: 'small muted', style: 'margin:6px 0 0', text: 'นับตามวันที่ออกใบสั่ง · "ชำระแล้ว" ไม่รวมใบสั่งกล้อง (พ.ร.บ.ทางหลวง) ซึ่งไม่ได้รายงานผ่านระบบ · ใบสั่งส่วนใหญ่ชำระภายใน 8–30 วัน ช่วงล่าสุดจึงยังต่ำ' }));
     add(out, c);
     if (d.cars && d.cars.length) {
