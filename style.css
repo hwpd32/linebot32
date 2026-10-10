@@ -441,3 +441,16 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .hr-dates .btn { grid-column: 1 / -1; }
 .dsh .sb-wn .nw { white-space: nowrap; }
 .dsh .ow-card .k1 b { font-size: 29px; }
+/* v1.7.1: แถบกลาง = จับรถน้ำหนักเกิน | ถปภ. */
+.dsh .ow-card { justify-content: space-around; }
+.dsh .ow-card .owb { display: flex; align-items: baseline; white-space: nowrap; }
+.dsh .ow-card .owb .ol { font-size: 29px; font-weight: 700; color: #0f2744; margin-right: 12px; }
+.dsh .ow-card .owb b { font-size: 50px; font-weight: 700; color: #0f2744; line-height: 1; margin-right: 8px; }
+.dsh .ow-card .owb span:last-child { font-size: 25px; color: #334155; }
+.dsh .ow-card .sep { display: inline-block; width: 2px; height: 44px; background: #c9d5e6; margin: 0 6px; }
+/* ตัวเลขหมายจับ/ซึ่งหน้าเริ่มตรงแนวเดียวกัน */
+.dsh .vu { margin-left: auto; flex: none; display: flex; align-items: baseline; white-space: nowrap; }
+.dsh .vu .v { margin-left: 0; }
+.dsh .vu .un { align-self: auto; padding-bottom: 0; margin-left: 10px; }
+.dsh .d-leg .lb, .dsh .d-leg .sq, .dsh .d-flag .fh .lb, .dsh .d-flag .fh .sq { flex: none; white-space: nowrap; }
+.dsh .d-leg .wd { flex: 1 1 auto; min-width: 0; }

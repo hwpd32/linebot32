@@ -1145,7 +1145,7 @@
       clear($app);
       setTitle('📍 ตอนนี้', SHIFT[n.shift].icon + ' ' + SHIFT[n.shift].label + ' ' + th(n.dutyDate) + ' · ' + hm(n.at) + ' น.');
       var k = card('ผลวันนี้', 'เทียบเมื่อวาน'), kp = h('div', { class: 'kpis' });
-      [['🧾', 'ใบสั่ง', 'ticket'], ['🚔', 'ว.42', 'escort'], ['🤝', 'ช่วยเหลือ', 'assist'], ['🚨', 'จับกุม', 'arrest'], ['🗣️', 'ตักเตือน', 'warning'], ['🚛', 'ตรวจรถบรรทุก', 'truck_check']].forEach(function (x) {
+      [['🧾', 'ใบสั่ง', 'ticket'], ['🚔', 'ว.42', 'escort'], ['🤝', 'ช่วยเหลือ', 'assist'], ['🚨', 'จับกุม', 'arrest'], ['🗣️', 'ตักเตือน', 'warning'], ['🛡️', 'ถปภ.', 'escortRoyal']].forEach(function (x) {
         var a = n.today[x[2]] || 0, b = n.yesterday[x[2]] || 0;
         add(kp, h('div', { class: 'kpi' }, h('div', { class: 'n', text: a }), h('div', { class: 't', text: x[0] + ' ' + x[1] }), h('div', { class: 'd ' + (a > b ? 'up' : a < b ? 'down' : ''), text: a > b ? '▲' + (a - b) : a < b ? '▼' + (b - a) : '＝' })));
       });
@@ -1221,7 +1221,7 @@
     if (!cars.length) return h('p', { class: 'muted small', text: 'ยังไม่มีข้อมูลรายรถในช่วงนี้' });
     var cols = opts.compact
       ? [['รถ', 'car'], ['อาญา', 'arrest', 1], ['จราจร', 'ticket', 1], ['ว.42', 'escort', 1], ['ช่วยเหลือ', 'assist', 1], ['คะแนน', 'score', 1]]
-      : [['รถ', 'car'], ['ผลัด', 'shifts'], ['อาญา', 'arrest', 1], ['ฐานความผิด', 'crimes'], ['จราจร', 'ticket', 1], ['ว.42', 'escort', 1], ['ช่วยเหลือ', 'assist', 1], ['ตรวจรถ', 'checks'], ['คะแนน', 'score', 1], ['ต่อผลัด', 'perShift', 1], ['ลูกเรือ', 'crew']];
+      : [['รถ', 'car'], ['ผลัด', 'shifts'], ['อาญา', 'arrest', 1], ['ฐานความผิด', 'crimes'], ['จราจร', 'ticket', 1], ['ว.42', 'escort', 1], ['ช่วยเหลือ', 'assist', 1], ['คะแนน', 'score', 1], ['ต่อผลัด', 'perShift', 1], ['ลูกเรือ', 'crew']];
     var max = {}; cols.forEach(function (k) { if (k[2]) max[k[1]] = Math.max.apply(null, cars.map(function (c) { return +c[k[1]] || 0; }).concat([1])); });
     var t = h('table', { class: 't bt' }), hr = h('tr'); cols.forEach(function (k) { add(hr, h('th', { text: k[0] })); }); add(t, h('thead', null, hr));
     var tb = h('tbody'), z = null, zn = S.boot.zones || {};
@@ -1318,12 +1318,12 @@
       add(body, h('div', { class: 'small muted', style: 'margin:2px 4px 8px' }, rangeText(d.from, d.to) + ' · ▲▼ เทียบ ' + rangeText(d.prev.from, d.prev.to) + ' · อัปเดต ' + hm(d.at) + ' น. ',
         h('button', { class: 'linkbtn', onclick: function () { load(true); }, text: '↻ รีเฟรช' })));
       // 1) ตัวเลขหลัก
-      function tile(ic, label, v, pv, sub, color) { return h('div', { class: 'kpi hk', style: 'border-top:3px solid ' + color }, h('div', { class: 't', text: ic + ' ' + label }), h('div', { class: 'n' }, fmtN(v), dlt(v, pv)), sub ? h('div', { class: 'd muted', text: sub }) : null); }
+      function tile(ic, label, v, pv, sub, color, cls) { return h('div', { class: 'kpi hk' + (cls ? ' ' + cls : ''), style: 'border-top:3px solid ' + color }, h('div', { class: 't', text: ic + ' ' + label }), h('div', { class: 'n' }, fmtN(v), dlt(v, pv)), sub ? h('div', { class: 'd muted', text: sub }) : null); }
       var kp = h('div', { class: 'kpis' });
-      add(kp, tile('🚨', 'จับกุมอาญา', t.arrest, p.arrest, 'หมายจับ ' + t.arrestWarrant + ' หมาย' + (t.arrestWarrant ? ' (' + (t.warrantPersons || 0) + ' ราย)' : '') + ' · ซึ่งหน้า ' + t.arrestFlag + ' ราย' + (t.arrestPending ? ' · รอตรวจ ' + t.arrestPending : ''), CL.arrest || DK.navy),
+      add(kp, tile('🚨', 'จับกุมอาญา', t.arrest, p.arrest, 'หมายจับ ' + t.arrestWarrant + ' หมาย' + (t.arrestWarrant ? ' (' + (t.warrantPersons || 0) + ' ราย)' : '') + ' · ซึ่งหน้า ' + t.arrestFlag + ' ราย · รถหนัก ' + (t.overweight || 0) + ' ราย' + (t.arrestPending ? ' · รอตรวจ ' + t.arrestPending : ''), CL.arrest || DK.navy),
         tile('🧾', 'คดีจราจร', t.ticket, p.ticket, 'ขส ' + t.T + ' · รย ' + t.C + (t.R ? ' · จร ' + t.R : ''), CL.ticket || DK.blue),
         tile('🚔', 'นำขบวน ว.42', t.escort, p.escort, '', CL.escort || DK.amber), tile('🤝', 'ช่วยเหลือ', t.assist, p.assist, '', CL.assist || DK.teal),
-        tile('🚛', 'ตรวจรถ', t.truck_check + t.suspect_check, p.truck_check + p.suspect_check, 'บรรทุก ' + t.truck_check + ' · ต้องสงสัย ' + t.suspect_check + ' · จับน้ำหนักเกิน ' + (t.overweight || 0) + ' ราย', '#94a3b8'),
+        tile('🛡️', 'ถปภ.', t.escortRoyal || 0, p.escortRoyal || 0, 'ถวายความปลอดภัย (ขบวน)', '#b45309', 'nz'),
         tile('📦', 'ของกลาง', t.evidence.length, null, t.evidence.slice(0, 3).map(function (x) { return x.item + ' ' + fmtN(x.qty) + ' ' + x.unit; }).join(' · ') || 'ไม่มี', DK.teal));
       var k = card('📊 ผลการปฏิบัติ' + (custom ? ' ' + rangeText(d.from, d.to) : d.kind === 'day' ? 'วันนี้' : d.kind === 'month' ? 'เดือนนี้' : 'วงรอบนี้')); add(k, kp);
       var crimes = Object.keys(t.byCrime || {}).filter(function (x) { return t.byCrime[x]; }).sort(function (a, b) { return t.byCrime[b] - t.byCrime[a]; });
@@ -1391,8 +1391,8 @@
     // 1) ตัวเลขหลัก
     var k = card('รวม ' + (multiDay ? th(s.from) + ' – ' + th(s.to) : th(s.from))), kp = h('div', { class: 'kpis' });
     [['🧾 ใบสั่ง', t.ticket, 'ticket'], ['🚚 พ.ร.บ.ขนส่ง', t.T, 'T'], ['🚗 พ.ร.บ.รถยนต์', t.C, 'C'], ['🚨 จับกุม (ราย/หมาย)', t.arrest + (t.arrestPending ? ' (+' + t.arrestPending + '⏳)' : ''), 'arrest'],
-      ['🚔 ว.42', t.escort, 'escort'], ['🤝 ช่วยเหลือ', t.assist, 'assist'], ['🗣️ ตักเตือน', t.warning, 'warning'], ['🚛 ตรวจรถบรรทุก', t.truck_check, 'muted']].forEach(function (x) {
-      add(kp, h('div', { class: 'kpi', style: 'border-top:3px solid ' + (CL[x[2]] || CL.muted) }, h('div', { class: 'n', text: x[1] }), h('div', { class: 't', text: x[0] })));
+      ['🚔 ว.42', t.escort, 'escort'], ['🤝 ช่วยเหลือ', t.assist, 'assist'], ['🗣️ ตักเตือน', t.warning, 'warning'], ['🛡️ ถปภ.', t.escortRoyal || 0, 'escort', 'nz']].forEach(function (x) {
+      add(kp, h('div', { class: 'kpi' + (x[3] ? ' ' + x[3] : ''), style: 'border-top:3px solid ' + (CL[x[2]] || CL.muted) }, h('div', { class: 'n', text: x[1] }), h('div', { class: 't', text: x[0] })));
     });
     add(k, kp);
     // 2) วินัยการรายงาน
@@ -1979,10 +1979,10 @@
     // รวม = ซึ่งหน้า (ราย) + หมายจับ (หมาย) · ผู้ต้องหา 1 ราย 3 หมาย นับ 3
     var dn = ab('d-donut', 30, 90, 236, 236); add(dn, donut(236, 34, [{ v: t.arrestWarrant, c: DK.navy }, { v: t.arrestFlag, c: DK.amber }]), h('div', { class: 'd-center' }, h('b', { style: 'font-size:' + bigNum(t.arrest) + 'px', text: fmtN(t.arrest) }), h('span', { style: t.arrestWarrant ? 'font-size:23px' : '', text: t.arrestWarrant ? 'ราย/หมาย' : 'ราย' })));
     add(A, dn);
-    x = ab('d-leg', 318, 82, 652, 60); add(x, h('i', { class: 'sq', style: 'background:' + DK.navy }), h('span', { class: 'lb', text: 'หมายจับ' }), h('span', { class: 'wd', text: crimeText(d.warrantCat) }), h('b', { class: 'v', text: fmtN(t.arrestWarrant) }),
-      h('span', { class: 'un', text: 'หมาย' + (t.arrestWarrant ? ' (' + fmtN(t.warrantPersons || 0) + ' ราย)' : '') })); add(A, x);
+    x = ab('d-leg', 318, 82, 652, 60); add(x, h('i', { class: 'sq', style: 'background:' + DK.navy }), h('span', { class: 'lb', text: 'หมายจับ' }), h('span', { class: 'wd', text: crimeText(d.warrantCat) }),
+      h('div', { class: 'vu', style: 'width:252px' }, h('b', { class: 'v', text: fmtN(t.arrestWarrant) }), h('span', { class: 'un', text: 'หมาย' + (t.arrestWarrant ? ' (' + fmtN(t.warrantPersons || 0) + ' ราย)' : '') }))); add(A, x);
     var box = ab('d-flag', 306, 142, 664, 186); add(A, box);
-    add(box, h('div', { class: 'fh' }, h('i', { class: 'sq', style: 'background:' + DK.amber }), h('span', { class: 'lb', text: 'ซึ่งหน้า' }), h('small', { text: 'แยกตามฐานความผิด' }), h('b', { class: 'v', text: fmtN(t.arrestFlag) }), h('span', { class: 'un', text: 'ราย' })));
+    add(box, h('div', { class: 'fh' }, h('i', { class: 'sq', style: 'background:' + DK.amber }), h('span', { class: 'lb', text: 'ซึ่งหน้า' }), h('small', { text: 'แยกตามฐานความผิด' }), h('div', { class: 'vu', style: 'width:232px' }, h('b', { class: 'v', text: fmtN(t.arrestFlag) }), h('span', { class: 'un', text: 'ราย' }))));
     var cats = crimeRows(d.flagCat);
     var grid = h('div', { class: 'fg' }); add(box, grid);
     if (!cats.length) add(grid, h('div', { class: 'muted', style: 'font-size:26px;padding:12px 6px', text: 'ไม่มีการจับกุมความผิดซึ่งหน้าในช่วงนี้' }));
@@ -1995,10 +1995,10 @@
     var lg = ab('d-list', 318, 70, 456, 272); add(B, lg);
     if (!bk.length) add(lg, h('div', { class: 'muted', style: 'font-size:26px', text: 'ไม่มีการจับกุมคดีจราจรในช่วงนี้' }));
     bk.slice(0, 10).forEach(function (r, i) { add(lg, h('div', { class: 'li' }, h('i', { class: 'dot', style: 'background:' + DASH_PAL[i % 10] }), h('span', { text: r[0] }), h('b', { text: fmtN(r[1]) }))); });
-    // แถบกลาง: รถบรรทุกหนัก (จับกุมน้ำหนักเกิน + ตรวจสอบ) คู่กับของกลาง — แสดงแม้เป็น 0
+    // แถบกลาง: จับรถน้ำหนักเกิน | ถปภ. (แสดงแม้เป็น 0 · ถปภ. เป็นภารกิจพิเศษ ไม่ทำ 0 เป็นตัวแดง) คู่กับของกลาง
     var O = ab('d-card sm ow-card', 46, 592, 640, 80); add(st, O);
-    add(O, h('div', { class: 'k1' }, h('b', { text: 'รถบรรทุกหนัก' }), h('small', { text: 'น้ำหนักเกิน' })),
-      h('div', { class: 'k2' }, h('span', { text: 'จับกุม' }), h('b', { text: fmtN(t.overweight || 0) }), h('span', { text: 'ราย' }), h('i', { class: 'sep' }), h('span', { text: 'ตรวจสอบ' }), h('b', { text: fmtN(t.truck_check || 0) }), h('span', { text: 'คัน' })));
+    add(O, h('div', { class: 'owb' }, h('span', { class: 'ol', text: 'จับรถน้ำหนักเกิน' }), h('b', { text: fmtN(t.overweight || 0) }), h('span', { text: 'ราย' })), h('i', { class: 'sep' }),
+      h('div', { class: 'owb nz' }, h('span', { class: 'ol', text: 'ถปภ.' }), h('b', { text: fmtN(t.escortRoyal || 0) }), h('span', { text: 'ขบวน' })));
     var G = ab('d-card sm ev-card', 698, 592, 556, 80); add(st, G);
     add(G, h('b', { class: 'evh', text: 'ของกลาง' }), evidenceItems(d.evidence, 4));
     // ผลงานแยกรายรถ (จัดกลุ่มตามเขตตรวจ) — รายละเอียดเต็มอยู่ในภาพรายรถที่ส่งคู่กัน · หมายเหตุน้ำหนักคะแนนท้ายการ์ด
@@ -2175,11 +2175,11 @@
     return box;
   }
   // ---------- แท่งคะแนนรายคัน (เรียงมาก→น้อย แบ่งสีตามงาน) — ภาพรวมที่อ่านง่ายกว่าตาราง ----------
-  var SCORE_PARTS = [['arrest', 'อาญา', DK.navy], ['ticket', 'จราจร', DK.blue], ['service', 'ว.42/ช่วยเหลือ/ตรวจ', DK.amber], ['mission', 'ภารกิจ/จิตอาสา', DK.teal]];
+  var SCORE_PARTS = [['arrest', 'อาญา', DK.navy], ['ticket', 'จราจร', DK.blue], ['service', 'ว.42/ช่วยเหลือ', DK.amber], ['mission', 'ภารกิจ/จิตอาสา', DK.teal]];
   function posScore(c) { var p = c.parts || {}; return SCORE_PARTS.reduce(function (s2, k) { return s2 + Math.max(0, +p[k[0]] || 0); }, 0); }
   function countsText(c) {
     var a = [];
-    a.push('อาญา ' + (c.arrest || 0)); if (c.ticket) a.push('จราจร ' + c.ticket); if (c.escort) a.push('ว.42 ' + c.escort); if (c.assist) a.push('ช่วยเหลือ ' + c.assist); if (c.checks) a.push('ตรวจรถ ' + c.checks); if (c.mission) a.push('ภารกิจ ' + c.mission);
+    a.push('อาญา ' + (c.arrest || 0)); if (c.ticket) a.push('จราจร ' + c.ticket); if (c.escort) a.push('ว.42 ' + c.escort); if (c.assist) a.push('ช่วยเหลือ ' + c.assist); if (c.mission) a.push('ภารกิจ ' + c.mission);
     return a.join(' · '); // อาญาแสดงเสมอ (0 = ตัวแดง ผ่าน markZeros)
   }
   function byScore(cars) { return activeCars(cars).slice().sort(function (a, b) { return b.score - a.score || b.ticket - a.ticket || String(a.car).localeCompare(String(b.car)); }); }
@@ -2206,12 +2206,17 @@
   function weightNote(cr) { var L = weightItems(cr); return L.length ? L.join(' · ') + ' · ทุกคนในรถได้เท่าส่วนของรถ' : ''; }
   function weightItems(cr) {
     if (!cr || !cr.weights) return [];
+    // คะแนนที่เป็น 0 ไม่แสดง (ผู้ใช้กำหนด 10 ต.ค. 69) · ตรวจรถไม่คิดคะแนน
     var w = cr.weights, a = w.act || {}, f = fmtN, L = [];
-    var cats = Object.keys(w.cat || {}).filter(function (k) { return +w.cat[k] !== +w.flag; }).map(function (k) { return (DASH_CAT[k] || k) + ' ' + f(w.cat[k]); });
-    L.push('ซึ่งหน้า ' + f(w.flag) + '/ราย' + (cats.length ? ' (' + cats.join(' · ') + ')' : ''), 'หมายจับ ' + f(w.warrant) + '/หมาย');
-    var tk = +a.T === +a.C && +a.C === +a.R ? 'ใบสั่ง ' + f(a.T) + '/ราย' : 'ใบสั่ง ขส ' + f(a.T) + ' · รย ' + f(a.C) + ' · จร ' + f(a.R) + ' /ราย', nc = Object.keys(w.code || {}).length;
-    L.push(tk + (nc ? ' (ข้อหาเน้นย้ำ ' + nc + ' รายการ)' : ''), 'ว.42 ' + f(w.escort) + '/ขบวน', 'ช่วยเหลือ ' + f(w.assist) + '/ครั้ง', 'ตรวจรถ ' + f(w.truck_check) + '/คัน', 'ตักเตือน ' + f(w.warning) + '/ราย', 'ภารกิจ/จิตอาสา ' + f(w.mission) + '/ครั้ง');
+    var cats = Object.keys(w.cat || {}).filter(function (k) { return +w.cat[k] && +w.cat[k] !== +w.flag; }).map(function (k) { return (DASH_CAT[k] || k) + ' ' + f(w.cat[k]); });
+    if (+w.flag || cats.length) L.push('ซึ่งหน้า' + (+w.flag ? ' ' + f(w.flag) + '/ราย' : '') + (cats.length ? ' (' + cats.join(' · ') + ')' : ''));
+    if (+w.warrant) L.push('หมายจับ ' + f(w.warrant) + '/หมาย');
+    var acts = [['ขส', a.T], ['รย', a.C], ['จร', a.R]].filter(function (x) { return +x[1]; }), nc = Object.keys(w.code || {}).filter(function (k) { return +w.code[k]; }).length;
+    var tk = acts.length === 3 && +a.T === +a.C && +a.C === +a.R ? 'ใบสั่ง ' + f(a.T) + '/ราย' : acts.length ? 'ใบสั่ง ' + acts.map(function (x) { return x[0] + ' ' + f(x[1]); }).join(' · ') + ' /ราย' : '';
+    if (tk || nc) L.push((tk || 'ใบสั่ง') + (nc ? ' (ข้อหาเน้นย้ำ ' + nc + ' รายการ)' : ''));
+    [['ว.42', w.escort, 'ขบวน'], ['ช่วยเหลือ', w.assist, 'ครั้ง'], ['ตักเตือน', w.warning, 'ราย'], ['ภารกิจ/จิตอาสา', w.mission, 'ครั้ง']].forEach(function (x) { if (+x[1]) L.push(x[0] + ' ' + f(x[1]) + '/' + x[2]); });
     if (+w.missed) L.push('ไม่ส่งเวรหัก ' + f(Math.abs(w.missed)) + '/ผลัด');
+    if (!L.length) L.push('-');
     var pp = w.primaryPct == null ? 60 : +w.primaryPct;
     L.push('คดีร่วมหลายคัน: รถผู้จับหลัก ' + f(pp) + '% รถร่วมแบ่ง ' + f(100 - pp) + '% (ระบุไม่ได้หารเท่ากัน)');
     L[0] = 'น้ำหนักคะแนน' + (cr.n > 1 ? ' (เกณฑ์ล่าสุด "' + cr.name + '" · ช่วงนี้ใช้ ' + cr.n + ' เกณฑ์)' : cr.name && cr.name !== 'เกณฑ์มาตรฐาน' ? ' ("' + cr.name + '")' : '') + ': ' + L[0];
@@ -2262,7 +2267,6 @@
     ['warning', 'ว่ากล่าวตักเตือน', 'ตักเตือน', 'ราย', '#93c5fd'],
     ['assist', 'ช่วยเหลือประชาชน', 'ช่วยเหลือ', 'ครั้ง', '#0d9488'],
     ['accident', 'ช่วยเหลืออุบัติเหตุ ว.40', 'อุบัติเหตุ', 'ครั้ง', '#5eead4'],
-    ['check', 'ตรวจรถบรรทุก/ต้องสงสัย', 'ตรวจรถ', 'คัน', '#94a3b8'],
     ['volunteer', 'ภารกิจจิตอาสา', 'จิตอาสา', 'ครั้ง', '#7c3aed'],
     ['mission', 'ภารกิจอื่น', 'ภารกิจอื่น', 'ครั้ง', '#c4b5fd']];
   var MIX_OTHER = '#d4dbe6';
@@ -2389,11 +2393,10 @@
       ['ผลัดที่ออก', 120, function (c) { return num(c.shifts, null, 'วัน ' + c.D + ' · คืน ' + c.N); }],
       ['ลูกเรือ', 300, function (c) { var top = c.crew.length ? c.crew[0].n : 0; return [h('div', { class: 't', style: 'font-size:' + (sm + 2) + 'px;max-height:' + (rh - 6) + 'px', text: c.crew.map(function (m) { return m.name + (m.n < top ? '(' + m.n + ')' : ''); }).join(' · ') || '-' })]; }, 'l'],
       ['อาญา', 180, function (c) { return num(c.arrest, c.prev.arrest, 'หมายจับ ' + c.warrant + ' · ซึ่งหน้า ' + c.flag); }, '', 'arrest'],
-      ['ฐานความผิด', 350, function (c) { var m = {}; c.crimes.forEach(function (x) { m[x.label] = x.n; }); return [h('div', { class: 't', style: 'font-size:' + (sm + 2) + 'px;max-height:' + (rh - 6) + 'px' }, c.crimes.length ? crimeText(m) : h('span', { class: 'muted', text: '-' }), c.joint ? h('span', { class: 'jt', text: ' (จับร่วม ' + c.joint + ')' }) : null)]; }, 'l'],
+      ['ฐานความผิด', 440, function (c) { var m = {}; c.crimes.forEach(function (x) { m[x.label] = x.n; }); return [h('div', { class: 't', style: 'font-size:' + (sm + 2) + 'px;max-height:' + (rh - 6) + 'px' }, c.crimes.length ? crimeText(m) : h('span', { class: 'muted', text: '-' }), c.joint ? h('span', { class: 'jt', text: ' (จับร่วม ' + c.joint + ')' }) : null)]; }, 'l'],
       ['จราจร', 150, function (c) { return num(c.ticket, c.prev.ticket, 'ขส ' + c.T + ' · รย ' + c.C + (c.R ? ' · จร ' + c.R : '')); }, '', 'ticket'],
       ['ว.42', 100, function (c) { return num(c.escort, c.prev.escort); }, '', 'escort'],
       ['ช่วยเหลือ', 110, function (c) { return num(c.assist, c.prev.assist); }, '', 'assist'],
-      ['ตรวจรถ', 90, function (c) { return num(c.checks); }],
       ['คะแนน', 130, function (c) { return num(Math.round((+c.score || 0) * 10) / 10, c.prev.score, c.rank ? 'อันดับ ' + c.rank + '/' + b.ranked : ''); }, '', 'score'],
       ['ต่อผลัด', 104, function (c) { return num(c.perShift); }, '', 'perShift']];
     var hr = ab('ct-row ct-head', 0, 0, 1828, headH); COLS.forEach(function (k) { add(hr, h('div', { class: 'ct-c', style: 'width:' + k[1] + 'px', text: k[0] })); }); add(T, hr);
@@ -2412,7 +2415,7 @@
     var t = d.total, sc = cars.reduce(function (s, c) { return s + (+c.score || 0); }, 0), shs = cars.reduce(function (s, c) { return s + c.shifts; }, 0);
     var tr = ab('ct-row ct-tot', 0, headH + cars.length * rh, 1828, totH), TOT = [[h('b', { text: 'รวมทั้งสถานี' })], null, [h('b', { text: fmtN(shs) })], [h('small', { text: cars.length + ' คัน' })],
       [h('b', { text: fmtN(t.arrest) }), h('small', { text: 'หมายจับ ' + t.arrestWarrant + ' · ซึ่งหน้า ' + t.arrestFlag })], [h('div', { class: 't', style: 'font-size:17px;max-height:' + (totH - 6) + 'px', text: crimeText(d.byCrime) || '-' })],
-      [h('b', { text: fmtN(t.ticket) })], [h('b', { text: fmtN(t.escort) })], [h('b', { text: fmtN(t.assist) })], [h('b', { text: fmtN(t.truck_check + t.suspect_check) })],
+      [h('b', { text: fmtN(t.ticket) })], [h('b', { text: fmtN(t.escort) })], [h('b', { text: fmtN(t.assist) })],
       [h('b', { text: fmtN(Math.round(sc * 10) / 10) })], [h('b', { text: shs ? fmtN(Math.round(sc / shs * 10) / 10) : '0' })]];
     COLS.forEach(function (k, j) { if (j === 1) return; var w = j === 0 ? k[1] + COLS[1][1] : k[1], cell = h('div', { class: 'ct-c' + (COLS[j][3] === 'l' || j === 0 ? ' l' : ''), style: 'width:' + w + 'px' }); (TOT[j] || []).forEach(function (x) { add(cell, x); }); add(tr, cell); });
     add(T, tr);
