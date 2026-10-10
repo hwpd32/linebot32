@@ -499,6 +499,9 @@
     group('รายงาน', [rowLink('📝', 'รายการที่ส่งแล้ว', 'ดู · แก้ไข · ยกเลิก', function () { go('history'); }),
       rowLink('🏅', 'คะแนนผลการปฏิบัติ', 'เกณฑ์ · คะแนนและอันดับ', function () { go('score'); }),
       can('score.manage') ? rowLink('⚙️', 'ตั้งเกณฑ์คะแนน', 'ช่วงคะแนน · เกณฑ์มาตรฐาน · ประกาศเข้ากลุ่ม', function () { go('scoreAdmin'); }) : null]);
+    group('💰 ธุรการค่าปรับ', [rowLink('💰', 'ภาพรวมค่าปรับ', fineAll() ? 'ยอดรับชำระ · รายคน/รายรถ · อัตราชำระ · สถานะทะเบียน' : 'ใบสั่งของฉันที่ชำระแล้ว', function () { go('fines'); }),
+      can('fine.manage') ? rowLink('🧮', 'โปรแกรมทะเบียนค่าปรับ', 'กระทบยอด PTM ↔ KTB · ลงทะเบียน Excel (ใช้บนคอมพิวเตอร์)', openFines) : null,
+      can('fine.manage') || S.boot.perms.admin ? rowLink('🎫', 'รหัสหมวก ↔ เจ้าหน้าที่', 'จับคู่อัตโนมัติ · แอดมินยืนยัน', function () { go('fineBadges'); }) : null]);
     group('งานคดี', [
       rowLink('📁', 'คดีจับกุม', can('case.approve') ? 'ตรวจ/อนุมัติ/แก้ไข' : 'ติดตามคดี', function () { go('cases'); }, can('case.approve') && pend.arrest ? String(pend.arrest) : ''),
       can('view.suspect') ? rowLink('🔎', 'ค้นหาผู้ต้องหา', 'ชื่อ / เลขบัตร / เบอร์ — ทุกการค้นหาถูกบันทึก', function () { go('suspects'); }) : null,
@@ -519,6 +522,171 @@
       rowLink('🧾', 'รหัสความผิด', 'เพิ่ม/แก้/ปิดรายการความผิด', function () { go('codes'); }),
       rowLink('⚙️', 'ตั้งค่าระบบ', 'โควตาข้อความ · การแจ้งเตือน · ข้อความมาตรฐาน', function () { go('settings'); })]);
     add($app, h('p', { class: 'muted small center', text: 'v' + S.boot.version + ' · ' + (S.boot.station || '') }));
+  };
+
+  // ======================= ธุรการค่าปรับ (v1.9) =======================
+  function fineAll() { var p = S.boot.perms; return !!(p.admin || can('fine.manage') || (can('view.people') && p.scope === 'station')); }
+  function finesUrl() { return location.href.replace(/[?#].*$/, '').replace(/[^\/]*$/, '') + 'fines.html'; }
+  function openFines() {
+    var u = finesUrl();
+    if (window.liff && liff.isInClient && liff.isInClient()) openExternal(u); else window.open(u, '_blank', 'noopener');
+    toast('เปิดโปรแกรมทะเบียนค่าปรับ — ใช้บนคอมพิวเตอร์ด้วย Google Chrome หรือ Microsoft Edge', 5000);
+  }
+  function baht(n) { n = +n || 0; return n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); }
+  function pctTxt(v) { return v == null ? '–' : v + '%'; }
+  function finePicker(onChange) {
+    var t = today(), c = cycleOf(t), pc = cycleOf(addDays(c.from, -1)), m0 = t.slice(0, 8) + '01', pm = addDays(m0, -1);
+    var a0 = +t.slice(8) >= 24 ? t.slice(0, 8) + '24' : addDays(m0, -1).slice(0, 8) + '24', a1 = addDays(a0.slice(0, 8) + '01', 40).slice(0, 8) + '23';
+    var presets = [['วันนี้', t, t], ['เมื่อวาน', addDays(t, -1), addDays(t, -1)], ['วงรอบนี้', c.from, c.to], ['วงรอบก่อน', pc.from, pc.to], ['เดือนนี้', m0, t], ['เดือนก่อน', pm.slice(0, 8) + '01', pm], ['รอบบัญชี 24–23', a0, a1]];
+    var sel = 4, chips = h('div', { class: 'chips' }), f = h('input', { type: 'date' }), to = h('input', { type: 'date' }), custom = h('div', { class: 'row', hidden: true, style: 'margin-top:8px' }, f, to);
+    function r() {
+      clear(chips);
+      presets.forEach(function (p, i) { add(chips, h('button', { class: 'chip' + (i === sel ? ' on' : ''), onclick: function () { sel = i; custom.hidden = true; r(); onChange(p[1], p[2]); }, text: p[0] })); });
+      add(chips, h('button', { class: 'chip' + (sel === -1 ? ' on' : ''), onclick: function () { sel = -1; custom.hidden = false; r(); }, text: 'กำหนดเอง' }));
+    }
+    f.onchange = to.onchange = function () { if (f.value && to.value) onChange(f.value, to.value); };
+    r(); setTimeout(function () { onChange(presets[sel][1], presets[sel][2]); }, 0);
+    return h('div', { class: 'card' }, chips, custom);
+  }
+  VIEWS.fines = function (params) {
+    var all = fineAll();
+    setTitle('💰 ธุรการค่าปรับ', all ? 'ภาพรวมค่าปรับทั้งสถานี' : 'ใบสั่งของฉันที่ชำระแล้ว');
+    clear($app);
+    if (can('fine.manage') || S.boot.perms.admin) {
+      var tools = h('div', { class: 'list' });
+      if (can('fine.manage')) add(tools, rowLink('🧮', 'โปรแกรมทะเบียนค่าปรับ', 'กระทบยอด PTM ↔ KTB · ลงทะเบียน Excel (ใช้บนคอมพิวเตอร์ ขั้นตอนเหมือนเดิม)', openFines));
+      add(tools, rowLink('🎫', 'รหัสหมวก ↔ เจ้าหน้าที่', 'จับคู่อัตโนมัติจากชื่อ · แอดมินยืนยัน', function () { go('fineBadges'); }));
+      add($app, tools);
+    }
+    var tab = params.tab || (all ? 'recv' : 'mine'), data = null, out = h('div'), segWrap = h('div', { class: 'card', style: 'padding:6px' });
+    var TABS_ = all ? [['recv', '💵 ยอดรับชำระ'], ['people', '👮 รายคน/รถ'], ['rate', '📈 อัตราชำระ'], ['ledger', '📒 ทะเบียน']] : [];
+    function seg() {
+      clear(segWrap); if (!TABS_.length) { segWrap.hidden = true; return; }
+      var s = h('div', { class: 'seg fn-seg' }); TABS_.forEach(function (x) { add(s, h('button', { class: x[0] === tab ? 'on' : '', onclick: function () { tab = x[0]; seg(); paint(); }, text: x[1] })); }); add(segWrap, s);
+    }
+    add($app, finePicker(load), segWrap, out); seg();
+    function load(a, b) {
+      clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
+      api('fine.dash', { from: a, to: b }).then(function (d) { data = d; paint(); }, function (e) { clear(out); add(out, errorBox(e.message)); });
+    }
+    function paint() {
+      if (!data) return; clear(out);
+      var rg = data.from === data.to ? th(data.from) : th(data.from) + ' – ' + th(data.to);
+      if (data.scope !== 'all') return fineMine(out, data, rg);
+      if (tab === 'recv') fineRecv(out, data, rg);
+      else if (tab === 'people') finePeople(out, data, rg);
+      else if (tab === 'rate') fineRate(out, data, rg);
+      else fineLedger(out, data);
+    }
+  };
+  function kpiBox(items) { var k = h('div', { class: 'kpis' }); items.forEach(function (x) { add(k, h('div', { class: 'kpi', style: 'border-top:3px solid ' + (x[2] || '#94a3b8') }, h('div', { class: 'n', text: x[0] }), h('div', { class: 't', text: x[1] }))); }); return k; }
+  function fineTable(head, rows) {
+    var t = h('table', { class: 't' }), hr = h('tr'); head.forEach(function (x) { add(hr, h('th', { text: x })); }); add(t, h('thead', null, hr));
+    var tb = h('tbody'); rows.forEach(function (r) { var tr = h('tr'); r.forEach(function (c) { add(tr, c && c.nodeType ? h('td', null, c) : h('td', { text: c == null ? '' : String(c) })); }); add(tb, tr); }); add(t, tb);
+    return h('div', { class: 'tscroll' }, t);
+  }
+  function rateChip(v) { return h('span', { class: 'fn-rate ' + (v == null ? 'na' : v >= 70 ? 'hi' : v >= 40 ? 'mid' : 'lo'), text: pctTxt(v) }); }
+  function fineRecv(out, d, rg) {
+    var r = d.received; if (!r) return;
+    var c = card('💵 ยอดรับชำระค่าปรับ', rg);
+    add(c, kpiBox([[baht(r.amt), 'ยอดรับชำระ (บาท)', '#0f7a5c'], [fmtN(r.n), 'ใบสั่งที่ชำระ', '#1f5fbf'], [baht(r.ktb), 'เงินเข้า KTB (บาท)', '#8b5cf6'], [baht(r.booked), 'ลงทะเบียน (บาท)', '#e8812b'], [r.daysSaved, 'วันที่บันทึกทะเบียน', '#64748b']]));
+    if (r.byDay.length > 1) add(c, h('div', { class: 'small muted', style: 'margin:10px 0 2px', text: 'ยอดรับชำระรายวัน (พันบาท)' }), Charts.bar(r.byDay.slice(-31).map(function (x) { return { label: String(+x.date.slice(8)), values: { a: Math.round(x.amt / 100) / 10, k: Math.round(x.ktb / 100) / 10 } }; }), [{ key: 'a', label: 'รับชำระ (PTM)', color: '#0f7a5c' }, { key: 'k', label: 'เงินเข้า KTB', color: '#8b5cf6' }]));
+    add(out, c);
+    var acts = Object.keys(r.byAct).sort(function (a, b) { return r.byAct[b].amt - r.byAct[a].amt; });
+    var ca = card('⚖️ แยกตาม พ.ร.บ.'); add(ca, fineTable(['พ.ร.บ.', 'ใบสั่ง', 'บาท', 'สัดส่วน'], acts.map(function (a) { var x = r.byAct[a]; return [a + (a === d.camAct ? ' 📷' : ''), fmtN(x.n), baht(x.amt), r.amt ? Math.round(x.amt * 100 / r.amt) + '%' : '']; })));
+    add(ca, h('p', { class: 'small muted', style: 'margin:6px 0 0', text: '📷 พ.ร.บ.ทางหลวง ส่วนใหญ่เป็นใบสั่งจากกล้อง (ความเร็ว/ไฟแดง)' }));
+    var gs = Object.keys(r.byGroup).sort(function (a, b) { return r.byGroup[b].amt - r.byGroup[a].amt; });
+    var cg = card('🏦 แยกตามช่องทางชำระ'); add(cg, Charts.share(gs.map(function (g) { return { label: (d.groups[g] || g) + ' · ' + baht(r.byGroup[g].amt) + ' บ.', value: r.byGroup[g].n }; })));
+    add(out, ca, cg, h('p', { class: 'small muted center', text: 'ยอดรับชำระตามวันที่ชำระ (รายงาน PTM) · เงินเข้า KTB/ลงทะเบียน จากโปรแกรมทะเบียนค่าปรับ' }));
+  }
+  function finePeople(out, d, rg) {
+    var c = card('👮 รายคน: รายงาน vs ชำระแล้ว', rg);
+    var ppl = d.officers || [];
+    add(c, ppl.length ? fineTable(['ชื่อ', 'รายงาน', 'ชำระ', '%', 'บาท', '📷'], ppl.map(function (p) { return [p.name, fmtN(p.reported), fmtN(p.paid), rateChip(p.rate), baht(p.paidAmt), p.cam ? fmtN(p.cam) : '']; }))
+      : h('p', { class: 'muted small', text: 'ยังไม่มีข้อมูลในช่วงนี้' }));
+    add(c, h('p', { class: 'small muted', style: 'margin:6px 0 0', text: 'นับตามวันที่ออกใบสั่ง · "ชำระแล้ว" ไม่รวมใบสั่งกล้อง (พ.ร.บ.ทางหลวง) ซึ่งไม่ได้รายงานผ่านระบบ · ใบสั่งส่วนใหญ่ชำระภายใน 8–30 วัน ช่วงล่าสุดจึงยังต่ำ' }));
+    add(out, c);
+    if (d.cars && d.cars.length) {
+      var cc = card('🚓 รายรถ', 'ตามรถที่ผู้ออกใบสั่งขึ้นในวันนั้น');
+      add(cc, fineTable(['รถ', 'รายงาน', 'ชำระ', '%', 'บาท'], d.cars.map(function (x) { return [x.car, fmtN(x.reported), fmtN(x.paid), rateChip(x.rate), baht(x.paidAmt)]; })));
+      add(out, cc);
+    }
+    if (d.unmatched && d.unmatched.length) {
+      var cu = card('❔ ยังไม่ทราบผู้ออกใบสั่ง', d.unmatched.reduce(function (a, u) { return a + u.n; }, 0) + ' ใบ');
+      add(cu, fineTable(['รหัสหมวก / ชื่อใน PTM', 'ใบ', 'บาท'], d.unmatched.map(function (u) { return [(u.badge ? u.badge + ' · ' : '') + (u.name || '(ไม่มีชื่อ)'), fmtN(u.n) + (u.cam ? ' (📷' + u.cam + ')' : ''), baht(u.amt)]; })));
+      if (can('fine.manage') || S.boot.perms.admin) add(cu, h('button', { class: 'btn gray block', style: 'margin-top:8px', onclick: function () { go('fineBadges'); }, text: '🎫 จับคู่รหัสหมวก ↔ เจ้าหน้าที่' }));
+      add(out, cu);
+    }
+  }
+  function lagBars(lag, labels) { return Charts.hbar(labels.map(function (l, i) { return { label: l, values: { n: lag[i] || 0 } }; }).filter(function (x) { return x.values.n; }), [{ key: 'n', label: 'ใบสั่ง', color: '#1f5fbf' }], { labelW: 96 }); }
+  function fineRate(out, d, rg) {
+    var r = d.rate, c = card('📈 อัตราการชำระค่าปรับ', rg);
+    add(c, kpiBox([[pctTxt(r.rate), 'อัตราการชำระ', '#0f7a5c'], [fmtN(r.reported), 'ใบสั่งที่รายงานในระบบ', '#1f5fbf'], [fmtN(r.paid), 'ชำระแล้ว', '#8b5cf6'], [fmtN(Math.max(0, r.reported - r.paid)), 'ยังไม่ชำระ (โดยประมาณ)', '#d64545']]));
+    if (r.rate != null) add(c, Charts.gauge(Math.min(100, r.rate), 'ชำระแล้ว ' + r.paid + ' จาก ' + r.reported + ' ใบที่รายงาน (' + r.rate + '%)'));
+    add(out, c);
+    var ca = card('⚖️ แยกตาม พ.ร.บ.'); add(ca, fineTable(['พ.ร.บ.', 'รายงาน', 'ชำระแล้ว', '%'], r.byAct.map(function (x) { return [x.act, fmtN(x.reported), fmtN(x.paid), rateChip(x.rate)]; })));
+    var cl = card('⏱ ระยะเวลาจากวันออกใบสั่งถึงวันชำระ'); add(cl, lagBars(r.lag, d.lagLabels));
+    add(out, ca, cl, card('📷 ใบสั่งจากกล้อง (พ.ร.บ.ทางหลวง)', fmtN(r.cam.n) + ' ใบ · ' + baht(r.cam.amt) + ' บาท'),
+      h('p', { class: 'small muted center', text: 'อัตราการชำระ = ใบสั่งที่ออกในช่วงนี้และชำระแล้ว ÷ ใบสั่งที่รายงานผ่านระบบ (โดยประมาณ) — ไม่รวมใบสั่งกล้อง' }));
+  }
+  function fineLedger(out, d) {
+    var L = d.ledger || {};
+    if (L.empty) { add(out, card('📒 สถานะทะเบียนค่าปรับ'), h('p', { class: 'muted center', text: 'ยังไม่มีข้อมูลจากโปรแกรมทะเบียนค่าปรับ — เจ้าหน้าที่การเงินเปิดโปรแกรมจากเมนูนี้บนคอมพิวเตอร์แล้วบันทึกวันตามปกติ ระบบจะได้รับข้อมูลอัตโนมัติ' })); return; }
+    var c = card('📒 รอบบัญชี ' + th(L.cycleStart) + ' – ' + th(L.cycleEnd), L.file || '');
+    var st = L.missing.length > 1 ? 'late' : L.missing.length ? 'due' : 'done';
+    add(c, h('div', { class: 'fn-status f-' + st }, h('b', { text: (st === 'done' ? '✅ บันทึกครบถึงเมื่อวาน' : st === 'due' ? '🟡 ค้างบันทึก 1 วัน' : '🔴 ค้างบันทึก ' + L.missing.length + ' วัน') }),
+      h('span', { text: ' · บันทึกแล้ว ' + L.saved + '/' + L.days + ' วัน · ล่าสุดวันที่ ' + th(L.lastDate) })));
+    add(c, kpiBox([[baht(L.ptm), 'ยอด PTM ในรอบ', '#0f7a5c'], [baht(L.ktb), 'เงินเข้า KTB', '#8b5cf6'], [baht(L.booked), 'ลงทะเบียน', '#e8812b'], [baht(L.pending), 'ค้างรับ (' + L.pendingCount + ' รายการ)', '#d64545'], [L.offbookOpen, 'นอกทะเบียนค้างจัดการ', L.offbookOpen ? '#d64545' : '#94a3b8']]));
+    var notes = [];
+    if (L.missing.length) notes.push('📅 ยังไม่บันทึก: ' + L.missing.slice(0, 12).map(th).join(', ') + (L.missing.length > 12 ? ' …' : ''));
+    if (L.undone.length) notes.push('↩️ ยกเลิกวันแล้วยังไม่บันทึกใหม่: ' + L.undone.map(th).join(', '));
+    L.flags.forEach(function (f) { notes.push('⚠️ ' + th(f.date) + ': ' + [f.manual ? 'กรอกยอดเอง' : '', f.check1 === '✗' ? 'ตรวจ 1 ไม่ผ่าน' : '', f.check2 === '✗' ? 'ตรวจ 2 ไม่ผ่าน' : ''].filter(String).join(' · ')); });
+    var pb = Object.keys(L.pendingBy || {}); if (pb.length) notes.push('⏳ ค้างรับแยกช่องทาง: ' + pb.map(function (g) { return (d.groups[g] || g) + ' ' + baht(L.pendingBy[g]); }).join(' · '));
+    if (notes.length) add(c, h('div', { class: 'fn-notes' }, notes.map(function (n) { return h('div', { text: n }); })));
+    add(c, h('p', { class: 'small muted', style: 'margin:8px 0 0', text: 'ส่งข้อมูลล่าสุด ' + (L.sentAt ? th(L.sentAt.slice(0, 10)) + ' ' + hm(L.sentAt) + ' น.' : '-') + (L.sentBy ? ' โดย ' + L.sentBy : '') }));
+    add(out, c, h('details', { class: 'card small' }, h('summary', { text: 'ℹ️ ความหมายของสถานะ' }), h('div', { class: 'muted', style: 'margin-top:6px', text: '✅ บันทึกครบถึงเมื่อวาน · 🟡 ค้าง 1 วัน (ปกติ เพราะไฟล์ PTM/KTB ของเมื่อวานออกวันนี้) · 🔴 ค้างตั้งแต่ 2 วัน ควรติดตาม · ค้างรับ = เงินไปรษณีย์/ต่างสถานีที่ยังไม่เข้าบัญชี · นอกทะเบียน = เงินเข้าบัญชีแล้วแต่ไม่มีช่องในทะเบียน ต้องจัดการตามระเบียบ' })));
+  }
+  function fineMine(out, d, rg) {
+    var me = (d.officers || [])[0] || { reported: 0, paid: 0, paidAmt: 0, rate: null, cam: 0, lag: [] };
+    var c = card('🧾 ใบสั่งของฉัน', rg);
+    add(c, kpiBox([[fmtN(me.reported), 'รายงานในระบบ', '#1f5fbf'], [fmtN(me.paid), 'ชำระแล้ว', '#0f7a5c'], [pctTxt(me.rate), 'อัตราการชำระ', '#8b5cf6'], [baht(me.paidAmt), 'ยอดชำระ (บาท)', '#e8812b']]));
+    if (me.lag && me.lag.some(Boolean)) add(c, h('div', { class: 'small muted', style: 'margin-top:8px', text: 'ระยะเวลาถึงวันชำระ' }), lagBars(me.lag, d.lagLabels));
+    add(out, c);
+    var list = card('✅ ใบสั่งที่ชำระแล้ว', (d.mine || []).length + ' ใบ');
+    add(list, (d.mine || []).length ? fineTable(['ชำระ', 'เลขใบสั่ง', 'พ.ร.บ.', 'บาท'], d.mine.map(function (t) { return [th(t.payDate), t.ticket, String(t.act).replace('พ.ร.บ.', ''), baht(t.amount)]; })) : h('p', { class: 'muted small', text: 'ยังไม่มีใบสั่งที่ชำระในช่วงนี้' }));
+    add(out, list, h('p', { class: 'small muted center', text: 'ข้อมูลจากรายงานการรับชำระ PTM ที่เจ้าหน้าที่การเงินบันทึก · ไม่รวมใบสั่งกล้อง · ไม่แสดงข้อมูลผู้ชำระ' }));
+  }
+  VIEWS.fineBadges = function () {
+    setTitle('🎫 รหัสหมวก ↔ เจ้าหน้าที่', 'จากรายงาน PTM');
+    loading();
+    api('fine.badges').then(function (d) {
+      clear($app);
+      var ST = { none: ['🔴', 'ยังไม่พบเจ้าหน้าที่'], auto: ['🟡', 'จับคู่อัตโนมัติ (รอยืนยัน)'], confirmed: ['✅', 'ยืนยันแล้ว'] };
+      var cnt = { none: 0, auto: 0, confirmed: 0 }; d.rows.forEach(function (r) { cnt[r.status] = (cnt[r.status] || 0) + 1; });
+      var head = card('สรุป', d.rows.length + ' รหัส/ชื่อ');
+      add(head, h('div', { class: 'small', text: Object.keys(ST).map(function (k) { return ST[k][0] + ' ' + ST[k][1] + ' ' + cnt[k]; }).join(' · ') }));
+      if (d.canConfirm && cnt.auto) add(head, h('button', { class: 'btn block', style: 'margin-top:8px', onclick: function (e) {
+        e.currentTarget.disabled = true; api('fine.badge.confirmAll').then(function (r) { toast('ยืนยันแล้ว ' + r.confirmed + ' รายการ'); apiInvalidate(); VIEWS.fineBadges(); }, function (er) { toast(er.message, 4000); });
+      }, text: '✅ ยืนยันทั้งหมดที่จับคู่อัตโนมัติ (' + cnt.auto + ')' }));
+      if (!d.canConfirm) add(head, h('p', { class: 'small muted', style: 'margin:6px 0 0', text: 'แก้/ยืนยันการจับคู่ได้เฉพาะแอดมิน' }));
+      add($app, head);
+      if (!d.rows.length) add($app, h('p', { class: 'muted center', text: 'ยังไม่มีข้อมูล — จะขึ้นเมื่อโปรแกรมทะเบียนค่าปรับส่งข้อมูลใบสั่งเข้าระบบ' }));
+      var list = h('div');
+      d.rows.forEach(function (r) {
+        var sel = h('select', { disabled: !d.canConfirm }, h('option', { value: '', text: '— ไม่ใช่เจ้าหน้าที่ในระบบ / กล้อง —' }));
+        S.boot.people.slice().sort(function (a, b) { return a.first.localeCompare(b.first, 'th'); }).forEach(function (p) { add(sel, h('option', { value: p.pid, text: p.name, selected: p.pid === r.pid })); });
+        var row = h('div', { class: 'card fn-badge f-' + (r.status === 'confirmed' ? 'done' : r.status === 'auto' ? 'due' : 'late') },
+          h('div', { class: 'row' }, h('b', { class: 'grow', text: ST[r.status][0] + ' ' + (r.badge ? 'รหัส ' + r.badge : 'ไม่มีรหัสหมวก') }), h('small', { class: 'muted', text: r.n ? r.n + ' ใบ (120 วัน)' + (r.cam ? ' · 📷' + r.cam : '') : '' })),
+          h('div', { class: 'small', text: 'ชื่อใน PTM: ' + ((r.names && r.names.length ? r.names : [r.ptmName]).filter(String).join(' / ') || '-') }),
+          h('div', { class: 'small', text: 'ในระบบ: ' + (r.person || (r.status === 'confirmed' ? 'ไม่ใช่เจ้าหน้าที่ในระบบ' : 'ยังไม่พบ')) + (r.by ? ' · ยืนยันโดย ' + r.by : '') }),
+          d.canConfirm ? h('div', { class: 'row', style: 'margin-top:6px' }, sel, h('button', { class: 'btn', onclick: function (e) {
+            var b = e.currentTarget; b.disabled = true;
+            api('fine.badge.set', { key: r.key, pid: sel.value }).then(function () { toast('บันทึกแล้ว'); apiInvalidate(); VIEWS.fineBadges(); }, function (er) { b.disabled = false; toast(er.message, 4000); });
+          }, text: r.status === 'confirmed' ? 'แก้' : 'ยืนยัน' })) : null);
+        add(list, row);
+      });
+      add($app, list);
+    }, function (e) { clear($app); add($app, errorBox(e.message)); });
   };
 
   // ======================= ส่วนประกอบ: เลือกผลัด/รถ =======================
