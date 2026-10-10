@@ -231,11 +231,12 @@ body.has-tabs .bar { bottom: calc(62px + env(safe-area-inset-bottom)); }
 .dsh .d-flag .fh .lb { font-size: 34px; font-weight: 700; margin-left: 14px; }
 .dsh .d-flag .fh small { font-size: 23px; color: #64748b; margin-left: 12px; margin-top: 8px; }
 .dsh .d-flag .fg { display: flex; flex-wrap: wrap; gap: 10px 12px; margin-top: 6px; }
-.dsh .d-flag .chipv { width: 200px; height: 52px; background: #fff; border: 1px solid #fde68a; border-radius: 12px; display: flex; align-items: center; padding: 0 14px; }
-.dsh .d-flag .chipv span { font-size: 25px; white-space: nowrap; overflow: hidden; }
-.dsh .d-flag .chipv b { margin-left: auto; font-size: 32px; font-weight: 700; color: #b45309; }
+.dsh .d-flag .chipv { min-width: 200px; max-width: 628px; height: 48px; background: #fff; border: 1px solid #fde68a; border-radius: 12px; display: flex; align-items: center; padding: 0 14px; }
+.dsh .d-flag .chipv span { font-size: 25px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dsh .d-flag .chipv b { margin-left: auto; padding-left: 14px; font-size: 32px; font-weight: 700; color: #b45309; }
+.dsh .d-leg .wd { font-size: 22px; color: #64748b; margin-left: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
 .dsh .d-act { font-size: 22px; color: #64748b; text-align: center; white-space: nowrap; }
-.dsh .d-list .li { display: flex; align-items: center; height: 29px; }
+.dsh .d-list .li { display: flex; align-items: center; height: 27px; }
 .dsh .d-list .dot { width: 20px; height: 20px; border-radius: 50%; display: inline-block; }
 .dsh .d-list span { font-size: 23px; margin-left: 14px; white-space: nowrap; }
 .dsh .d-list b { margin-left: auto; font-size: 26px; font-weight: 700; color: #0f2744; }
@@ -287,7 +288,7 @@ body.has-tabs .bar { bottom: calc(62px + env(safe-area-inset-bottom)); }
 .dsh .f-card { background: #fff; border-radius: 16px; border: 1px solid #d5deea; }
 .dsh .f-card .fh2 { font-size: 30px; font-weight: 700; color: #0f2744; padding: 16px 22px 8px; white-space: nowrap; }
 .dsh .f-card .fr { display: flex; align-items: center; height: 47px; padding: 0 22px; }
-.dsh .f-card .fl { width: 210px; font-size: 25px; white-space: nowrap; overflow: hidden; }
+.dsh .f-card .fl { width: 300px; font-size: 25px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dsh .f-card .ft { flex: 1; height: 26px; margin: 0 16px; background: #eef2f7; border-radius: 4px; }
 .dsh .f-card .ft i { display: block; height: 26px; border-radius: 4px; }
 .dsh .f-card .fr b { width: 110px; text-align: right; font-size: 28px; font-weight: 700; color: #0f2744; }
@@ -303,3 +304,82 @@ body.has-tabs .bar { bottom: calc(62px + env(safe-area-inset-bottom)); }
 .dsh .f-lg .sq { width: 22px; height: 22px; border-radius: 5px; }
 .dsh .f-lg span { margin-left: 6px; }
 .dsh .f-foot { background: #f59e0b; }
+/* ตารางย่อรายคัน (ภาพแบบสรุป) */
+.dsh .cg-band { border-radius: 12px; }
+.dsh .cg-z { text-align: center; font-size: 20px; font-weight: 700; color: #0f2744; white-space: nowrap; }
+.dsh .cg-car { text-align: center; font-size: 22px; font-weight: 700; white-space: nowrap; }
+.dsh .cg-lab { display: flex; align-items: center; font-size: 22px; font-weight: 600; color: #334155; white-space: nowrap; }
+.dsh .cg-cell { display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 24px; font-weight: 700; color: #0f2744; }
+/* ภาพตารางรายรถ / รายการคดี */
+.dsh .ct { overflow: hidden; }
+.dsh .ct-row { position: absolute; display: flex; align-items: stretch; }
+.dsh .ct-c { display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 10px; overflow: hidden; text-align: center; border-left: 1px solid #e2e8f0; flex: none; }
+.dsh .ct-c:first-child { border-left: 0; }
+.dsh .ct-c.l { align-items: flex-start; text-align: left; }
+.dsh .ct-c b { font-weight: 700; color: #0f2744; line-height: 1.1; white-space: nowrap; }
+.dsh .ct-c small { color: #64748b; font-size: 16px; white-space: nowrap; line-height: 1.25; margin-top: 2px; }
+.dsh .ct-c .t { line-height: 1.3; color: #1e293b; overflow: hidden; }
+.dsh .ct-c .jt { color: #b45309; font-weight: 600; }
+.dsh .ct-c .nv { display: flex; align-items: baseline; }
+.dsh .ct-c .nv i { font-style: normal; font-size: 16px; font-weight: 700; margin-left: 6px; }
+.dsh .dl-up { color: #0d9488; } .dsh .dl-dn { color: #b45309; } .dsh .dl-eq { color: #a3adbd; }
+.dsh .ct-head .ct-c { background: #0f2744; color: #fff; font-size: 21px; font-weight: 600; border-left-color: #24466f; }
+.dsh .ct-tot { background: #e6edf7; border-top: 2px solid #9fb0c8; }
+.dsh .ct-tot .ct-c b { font-size: 26px; }
+.dsh .ct-zone { position: absolute; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #e6edf7; text-align: center; }
+.dsh .ct-zone b { font-size: 22px; font-weight: 700; color: #0f2744; }
+.dsh .ct-zone span { font-size: 16px; color: #475569; margin-top: 2px; }
+.dsh .pill { display: inline-block; padding: 4px 16px; border-radius: 999px; font-size: 20px; font-weight: 600; white-space: nowrap; }
+/* ภาพรวมหน้าแรก / ตารางรายรถ / รายการคดี */
+.linkbtn { background: none; border: 0; color: var(--blue); font: inherit; font-size: 13px; cursor: pointer; padding: 4px 2px; min-height: 0; }
+.kpi.hk { text-align: left; }
+.kpi.hk .n { display: flex; align-items: baseline; gap: 4px; margin-top: 2px; }
+.kpi.hk .d { font-size: 12px; line-height: 1.3; margin-top: 2px; }
+.dl { font-size: 11px; font-weight: 700; margin-left: 3px; white-space: nowrap; }
+.dl.up { color: var(--teal); } .dl.dn { color: #b45309; }
+table.bt td { vertical-align: middle; }
+table.bt td.wrap { white-space: normal; min-width: 150px; text-align: left; font-size: 13px; }
+table.bt td.small { font-size: 12px; min-width: 170px; }
+table.bt tr.zr td { background: #eef3fa; color: var(--navy); font-weight: 700; text-align: left; font-size: 13px; padding: 5px 6px; }
+table.bt th:first-child, table.bt td:first-child { position: sticky; left: 0; background: #fff; }
+table.bt tr.zr td:first-child { background: #eef3fa; }
+.jt { color: #b45309; font-weight: 600; }
+.cl-i { padding: 9px 0; border-bottom: 1px solid #edf1f6; }
+.cl-i:last-child { border-bottom: 0; }
+.cl-i .row { gap: 6px; align-items: center; }
+.cl-i .lb { font-weight: 700; color: var(--navy); margin: 3px 0 1px; font-size: 14px; }
+.cl-i .cars { font-size: 13px; font-weight: 600; color: var(--navy2); }
+.kp { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.kp.navy { background: var(--navy); color: #fff; } .kp.amber { background: #f59e0b; color: var(--navy); } .kp.teal { background: var(--teal); color: #fff; }
+.nowst { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.ns { border-radius: 10px; padding: 8px; background: var(--soft); border: 1px solid #e3eaf3; }
+.ns b { display: block; font-size: 22px; line-height: 1.1; } .ns span { font-size: 12px; color: var(--muted); }
+.ns.red b { color: var(--red); } .ns.green b { color: var(--green); } .ns.amber b { color: var(--amber); } .ns.blue b { color: var(--blue); } .ns.gray b { color: #64748b; }
+.spk { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.spk-i { background: var(--soft); border-radius: 10px; padding: 8px 8px 2px; border: 1px solid #e3eaf3; }
+.zrows { display: grid; gap: 4px; font-size: 13px; }
+.zrows .zh, .zrows .zl { display: grid; grid-template-columns: minmax(92px, 1.3fr) 1fr 1fr 1fr; gap: 8px; align-items: center; }
+.zrows .zh span { color: var(--muted); font-size: 12px; font-weight: 600; }
+.zrows .zl small { color: var(--muted); }
+.zb { display: flex; align-items: center; gap: 4px; }
+.zb i { display: block; height: 10px; border-radius: 5px; flex: none; max-width: calc(100% - 30px); }
+.zb b { font-size: 13px; }
+/* แท่งคะแนนรายคัน */
+.dsh .sb-band { background: #f3f6fb; border-radius: 8px; }
+.dsh .sb-lab { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.dsh .sb-lab i { font-style: normal; width: 26px; text-align: right; font-size: 17px; color: #94a3b8; font-weight: 600; }
+.dsh .sb-lab b { color: #0f2744; font-weight: 700; }
+.dsh .sb-lab small { font-size: 15px; color: #64748b; }
+.dsh .sb-seg { border-radius: 4px; }
+.dsh .sb-v { display: flex; align-items: center; font-weight: 700; color: #0f2744; white-space: nowrap; }
+.dsh .sb-t { display: flex; align-items: center; color: #334155; white-space: nowrap; overflow: hidden; }
+.sbl .sb-lg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.sbl .sb-lg i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.sb-r { padding: 7px 0; border-bottom: 1px solid #edf1f6; }
+.sb-r:last-child { border-bottom: 0; }
+.sb-h { display: flex; align-items: baseline; gap: 4px; }
+.sb-rank { width: 20px; color: #94a3b8; font-size: 13px; font-weight: 600; }
+.sb-score { font-size: 16px; color: var(--navy); }
+.sb-bar { display: flex; gap: 2px; height: 12px; margin: 4px 0 3px 24px; }
+.sb-bar i { display: block; height: 100%; border-radius: 3px; }
+.sb-r .small.muted { margin-left: 24px; }
