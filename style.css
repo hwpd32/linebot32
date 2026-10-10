@@ -454,3 +454,20 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .dsh .vu .un { align-self: auto; padding-bottom: 0; margin-left: 10px; }
 .dsh .d-leg .lb, .dsh .d-leg .sq, .dsh .d-flag .fh .lb, .dsh .d-flag .fh .sq { flex: none; white-space: nowrap; }
 .dsh .d-leg .wd { flex: 1 1 auto; min-width: 0; }
+
+/* ---------- v1.8 แท็กทักษะ / ประวัติผู้ดำเนินการ ---------- */
+.tag-sel { min-height: 30px; padding: 4px 0; }
+.tag-cat { margin-top: 4px; }
+.tag-grp { margin-top: 6px; }
+.tag-grp .chips { margin-top: 2px; }
+.linklike { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; min-width: 0; }
+.hist .tx small { display: block; }
+.hist-who { color: #475569; }
+.hist-edit { color: #b45309; }
+.tl { margin-top: 8px; }
+.tl-item { display: flex; gap: 10px; position: relative; padding-bottom: 12px; }
+.tl-item:not(:last-child)::before { content: ''; position: absolute; left: 5px; top: 14px; bottom: 0; width: 2px; background: #e2e8f0; }
+.tl-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--navy, #13294b); margin-top: 4px; }
+.tl-body { min-width: 0; flex: 1; }
+.tl-lines { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.tl-lines li { margin: 2px 0; overflow-wrap: anywhere; }
