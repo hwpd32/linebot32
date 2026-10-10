@@ -2203,21 +2203,26 @@
   }
   function fmt1(v) { return fmtN(Math.round((+v || 0) * 10) / 10); }
   /** หมายเหตุน้ำหนักคะแนนตามเกณฑ์ที่ใช้ในช่วงนั้น (เกณฑ์ล่าสุดถ้าช่วงคร่อมหลายเกณฑ์) */
-  function weightNote(cr) { var L = weightItems(cr); return L.length ? L.join(' · ') + ' · ทุกคนในรถได้เท่าส่วนของรถ' : ''; }
+  function weightNote(cr) { return weightItems(cr).join(' · '); }
+  // หมายเหตุแสดงเฉพาะ (ผู้ใช้กำหนด 10 ต.ค. 69): ซึ่งหน้า · ยาเสพติด · อาวุธปืน · สวมทะเบียน/เอกสารปลอม · หมายจับ · ใบสั่ง · ว.42 · ช่วยเหลือ · ภารกิจ/จิตอาสา · คดีร่วมหลายคัน
+  var NOTE_CATS = ['พ.ร.บ.ยาเสพติด', 'พ.ร.บ.อาวุธปืน', 'ปลอม/ใช้เอกสารราชการปลอม (สวมทะเบียน)'];
   function weightItems(cr) {
     if (!cr || !cr.weights) return [];
-    // คะแนนที่เป็น 0 ไม่แสดง (ผู้ใช้กำหนด 10 ต.ค. 69) · ตรวจรถไม่คิดคะแนน
-    var w = cr.weights, a = w.act || {}, f = fmtN, L = [];
-    var cats = Object.keys(w.cat || {}).filter(function (k) { return +w.cat[k] && +w.cat[k] !== +w.flag; }).map(function (k) { return (DASH_CAT[k] || k) + ' ' + f(w.cat[k]); });
-    if (+w.flag || cats.length) L.push('ซึ่งหน้า' + (+w.flag ? ' ' + f(w.flag) + '/ราย' : '') + (cats.length ? ' (' + cats.join(' · ') + ')' : ''));
-    if (+w.warrant) L.push('หมายจับ ' + f(w.warrant) + '/หมาย');
-    var acts = [['ขส', a.T], ['รย', a.C], ['จร', a.R]].filter(function (x) { return +x[1]; }), nc = Object.keys(w.code || {}).filter(function (k) { return +w.code[k]; }).length;
-    var tk = acts.length === 3 && +a.T === +a.C && +a.C === +a.R ? 'ใบสั่ง ' + f(a.T) + '/ราย' : acts.length ? 'ใบสั่ง ' + acts.map(function (x) { return x[0] + ' ' + f(x[1]); }).join(' · ') + ' /ราย' : '';
-    if (tk || nc) L.push((tk || 'ใบสั่ง') + (nc ? ' (ข้อหาเน้นย้ำ ' + nc + ' รายการ)' : ''));
-    [['ว.42', w.escort, 'ขบวน'], ['ช่วยเหลือ', w.assist, 'ครั้ง'], ['ตักเตือน', w.warning, 'ราย'], ['ภารกิจ/จิตอาสา', w.mission, 'ครั้ง']].forEach(function (x) { if (+x[1]) L.push(x[0] + ' ' + f(x[1]) + '/' + x[2]); });
-    if (+w.missed) L.push('ไม่ส่งเวรหัก ' + f(Math.abs(w.missed)) + '/ผลัด');
-    if (!L.length) L.push('-');
-    var pp = w.primaryPct == null ? 60 : +w.primaryPct;
+    // คะแนนที่เป็น 0 ไม่แสดง · เรียงน้ำหนักมาก → น้อย (ผู้ใช้กำหนด 10 ต.ค. 69) · คดีร่วมหลายคันไว้ท้าย
+    var w = cr.weights, a = w.act || {}, f = fmtN, X = [];
+    // หมวดที่กำหนดให้แสดงเสมอ (ไม่ได้ตั้งแยก = ใช้ค่าซึ่งหน้าทั่วไป)
+    function cw(k) { return w.cat && w.cat[k] != null && w.cat[k] !== '' ? +w.cat[k] : +w.flag; }
+    var cats = NOTE_CATS.filter(function (k) { return cw(k); });
+    cats.forEach(function (k) { X.push([(DASH_CAT[k] || k) + ' ' + f(cw(k)) + '/ราย', cw(k)]); });
+    if (+w.flag) X.push(['ซึ่งหน้า' + (cats.length ? ' (ทั่วไป)' : '') + ' ' + f(w.flag) + '/ราย', +w.flag]);
+    if (+w.warrant) X.push(['หมายจับ ' + f(w.warrant) + '/หมาย', +w.warrant]);
+    var acts = [['ขส', a.T], ['รย', a.C], ['จร', a.R]].filter(function (x) { return +x[1]; });
+    if (acts.length) X.push([acts.length === 3 && +a.T === +a.C && +a.C === +a.R ? 'ใบสั่ง ' + f(a.T) + '/ราย' : 'ใบสั่ง ' + acts.map(function (x) { return x[0] + ' ' + f(x[1]); }).join(' · ') + ' /ราย',
+      Math.max.apply(null, acts.map(function (x) { return +x[1]; }))]);
+    [['ว.42', w.escort, 'ขบวน'], ['ช่วยเหลือ', w.assist, 'ครั้ง'], ['ภารกิจ/จิตอาสา', w.mission, 'ครั้ง']].forEach(function (x) { if (+x[1]) X.push([x[0] + ' ' + f(x[1]) + '/' + x[2], +x[1]]); });
+    X.forEach(function (x, i) { x.push(i); });
+    X.sort(function (p, q) { return q[1] - p[1] || p[2] - q[2]; });
+    var L = X.map(function (x) { return x[0]; }), pp = w.primaryPct == null ? 60 : +w.primaryPct;
     L.push('คดีร่วมหลายคัน: รถผู้จับหลัก ' + f(pp) + '% รถร่วมแบ่ง ' + f(100 - pp) + '% (ระบุไม่ได้หารเท่ากัน)');
     L[0] = 'น้ำหนักคะแนน' + (cr.n > 1 ? ' (เกณฑ์ล่าสุด "' + cr.name + '" · ช่วงนี้ใช้ ' + cr.n + ' เกณฑ์)' : cr.name && cr.name !== 'เกณฑ์มาตรฐาน' ? ' ("' + cr.name + '")' : '') + ': ' + L[0];
     return L;
