@@ -71,7 +71,7 @@
   }
   function stage(msg) { window.__stage = msg; var p = $app.querySelector('.loading p'); if (p) p.textContent = msg; }
   // แคชคำตอบระยะสั้นสำหรับคำขออ่านอย่างเดียว (เปิดหน้าเดิมซ้ำไม่ต้องรอเซิร์ฟเวอร์) + รวมคำขอซ้ำที่กำลังรอ
-  var READ_TTL = { 'shift.get': 45000, now: 30000, summary: 60000, 'shift.list': 60000, 'arrest.list': 30000, 'admin.meta': 60000 };
+  var READ_TTL = { 'shift.get': 45000, now: 30000, summary: 60000, 'shift.list': 60000, 'arrest.list': 30000, 'admin.meta': 60000, 'score.get': 60000, 'score.text': 60000 };
   var apiCache = {}, inflight = {};
   function apiKey(action, data) { return action + ':' + JSON.stringify(data || {}); }
   function apiFresh(action, data) { var k = apiKey(action, data), c = apiCache[k]; return c && Date.now() - c.at < (READ_TTL[action] || 0) ? c.v : null; }
@@ -152,7 +152,7 @@
   // ---------- เส้นทางหน้า + แถบเมนูล่าง ----------
   var VIEWS = {};
   // หน้าระดับบนสุด → แท็บที่สว่าง (แถบเมนูล่างแสดงเฉพาะหน้าเหล่านี้ หน้าฟอร์มจะซ่อนเพื่อให้ปุ่มบันทึกเด่น)
-  var TOP = { home: 'home', report: 'report', now: 'results', summary: 'results', me: 'results', more: 'more' };
+  var TOP = { home: 'home', report: 'report', now: 'results', summary: 'results', me: 'results', score: 'results', more: 'more' };
   var TABS = [['home', '🏠', 'หน้าแรก'], ['report', '📝', 'รายงาน'], ['results', '📊', 'ผลงาน'], ['more', '☰', 'เพิ่มเติม']];
   function go(view, params, replace) {
     if (view === 'menu') view = 'home';
@@ -182,7 +182,7 @@
   }
   function renderSubnav(view) {
     var nav = document.getElementById('subnav'); clear(nav);
-    var items = [['now', 'ตอนนี้', 'view.now'], ['summary', 'สรุปผล', 'view.now'], ['me', 'ผลของฉัน', null]].filter(function (x) { return !x[2] || can(x[2]); });
+    var items = [['now', 'ตอนนี้', 'view.now'], ['summary', 'สรุปผล', 'view.now'], ['me', 'ผลของฉัน', null], ['score', 'คะแนน', null]].filter(function (x) { return !x[2] || can(x[2]); });
     nav.hidden = TOP[view] !== 'results' || items.length < 2;
     if (nav.hidden) return;
     var seg = h('div', { class: 'seg' });
@@ -356,6 +356,7 @@
     if (can('view.now')) add(list, rowLink('📍', 'ตอนนี้', 'รถแต่ละคันอยู่สถานะไหน ใครยังไม่รายงาน', function () { go('now'); }));
     add(list, rowLink('📝', 'รายการที่ส่งแล้ว', 'ดู · แก้ไข · ยกเลิก (เข้าเวร ส่งเวร ว.42 ช่วยเหลือ คดี)', function () { go('history'); }));
     add(list, rowLink('👤', 'ผลของฉัน', 'ผลงานรายวงรอบ', function () { go('me'); }));
+    add(list, rowLink('🏅', 'คะแนนผลการปฏิบัติ', 'เกณฑ์ที่ผู้บังคับบัญชาเน้นย้ำ · คะแนนและอันดับของท่าน', function () { go('score'); }));
     if (can('pr.make')) add(list, rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'prompt สำหรับ ChatGPT + เบลอรูปบนเครื่อง', function () { go('pr'); }));
     add($app, h('div', { class: 'section-label', text: 'ทางลัด' }), list);
     add($app, h('p', { class: 'muted small center', text: 'v' + S.boot.version + ' · ติดปัญหา แจ้งแอดมินหรือพิมพ์ "ช่วย" ในกลุ่ม' }));
@@ -389,7 +390,9 @@
     clear($app);
     var pend = S.boot.pending || {};
     function group(label, rows) { rows = rows.filter(Boolean); if (rows.length) add($app, h('div', { class: 'section-label', text: label }), h('div', { class: 'list' }, rows)); }
-    group('รายงาน', [rowLink('📝', 'รายการที่ส่งแล้ว', 'ดู · แก้ไข · ยกเลิก', function () { go('history'); })]);
+    group('รายงาน', [rowLink('📝', 'รายการที่ส่งแล้ว', 'ดู · แก้ไข · ยกเลิก', function () { go('history'); }),
+      rowLink('🏅', 'คะแนนผลการปฏิบัติ', 'เกณฑ์ · คะแนนและอันดับ', function () { go('score'); }),
+      can('score.manage') ? rowLink('⚙️', 'ตั้งเกณฑ์คะแนน', 'ช่วงคะแนน · เกณฑ์มาตรฐาน · ประกาศเข้ากลุ่ม', function () { go('scoreAdmin'); }) : null]);
     group('งานคดี', [
       rowLink('📁', 'คดีจับกุม', can('case.approve') ? 'ตรวจ/อนุมัติ/แก้ไข' : 'ติดตามคดี', function () { go('cases'); }, can('case.approve') && pend.arrest ? String(pend.arrest) : ''),
       can('view.suspect') ? rowLink('🔎', 'ค้นหาผู้ต้องหา', 'ชื่อ / เลขบัตร / เบอร์ — ทุกการค้นหาถูกบันทึก', function () { go('suspects'); }) : null,
@@ -1231,12 +1234,12 @@
       [{ key: 'D', label: 'กลางวัน', color: '#f2b544' }, { key: 'N', label: 'กลางคืน', color: '#3b4a6b' }], { height: 150 }));
     add(out, ds);
     // 7) รายบุคคล
-    var ppl = Object.keys(s.people).map(function (k) { return s.people[k]; }).sort(function (a, b) { return b.issued - a.issued || b.nShifts - a.nShifts; });
+    var ppl = Object.keys(s.people).map(function (k) { var p = s.people[k]; if (p.tickets == null) p.tickets = (p.issued || 0) + (p.ticketJoint || 0); return p; }).sort(function (a, b) { return b.tickets - a.tickets || b.nShifts - a.nShifts; });
     if (ppl.length) {
-      var pc = card('👮 ผลงานรายบุคคล', 'ออกใบสั่ง (หลัก) · ต่อผลัด');
-      add(pc, Charts.hbar(ppl.slice(0, 15).map(function (p) { return { label: p.short || p.pid, values: { issued: p.issued } }; }), [{ key: 'issued', label: 'ออกใบสั่ง', color: CL.ticket }], { labelW: 88 }));
+      var pc = card('👮 ผลงานรายบุคคล', 'ใบสั่งของรถที่ขึ้นปฏิบัติ (ทุกคนในรถได้เท่ากัน) · ออกเอง = เทียบ PTM');
+      add(pc, Charts.hbar(ppl.slice(0, 15).map(function (p) { return { label: p.short || p.pid, values: { tickets: p.tickets } }; }), [{ key: 'tickets', label: 'ใบสั่ง', color: CL.ticket }], { labelW: 88 }));
       add(pc, h('details', null, h('summary', { class: 'small', text: 'ตารางละเอียด' }),
-        table(['ชื่อ', 'ผลัด', 'ออกใบสั่ง', 'ร่วม', 'ต่อผลัด', 'จับ(หลัก/ร่วม)', 'ว.42', 'ช่วย'], ppl.map(function (p) { return [p.short || p.pid, p.nShifts + ' (☀️' + p.nDay + '/🌙' + p.nNight + ')', p.issued, p.ticketJoint, p.ratePerShift, p.arrestPrimary + '/' + p.arrestJoint, p.escort, p.assist]; }))));
+        table(['ชื่อ', 'ผลัด', 'ใบสั่ง', 'ออกเอง', 'ต่อผลัด', 'จับ(หลัก/ร่วม)', 'ว.42', 'ช่วย'], ppl.map(function (p) { return [p.short || p.pid, p.nShifts + ' (☀️' + p.nDay + '/🌙' + p.nNight + ')', p.tickets, p.issued, p.ratePerShift, p.arrestPrimary + '/' + p.arrestJoint, p.escort, p.assist]; }))));
       add(out, pc);
     }
   }
@@ -1344,15 +1347,209 @@
       clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
       api('summary', { from: a, to: b }).then(function (s) {
         clear(out);
-        var p = s.people[S.boot.me.pid] || { issued: 0, ticketJoint: 0, arrestPrimary: 0, arrestJoint: 0, escort: 0, assist: 0, mission: 0, warning: 0, checks: 0, nShifts: 0, nDay: 0, nNight: 0, ratePerShift: 0 };
+        var p = s.people[S.boot.me.pid] || { tickets: 0, issued: 0, ticketJoint: 0, arrestPrimary: 0, arrestJoint: 0, escort: 0, assist: 0, mission: 0, warning: 0, checks: 0, nShifts: 0, nDay: 0, nNight: 0, ratePerShift: 0 };
         var c = card('ผลงาน ' + th(a) + ' – ' + th(b)), kp = h('div', { class: 'kpis' });
-        [['🗓 ผลัด', p.nShifts], ['☀️ กลางวัน', p.nDay], ['🌙 กลางคืน', p.nNight], ['🧾 ออกใบสั่ง', p.issued], ['🤝 ใบสั่งร่วม', p.ticketJoint], ['📈 ใบ/ผลัด', p.ratePerShift],
+        [['🗓 ผลัด', p.nShifts], ['☀️ กลางวัน', p.nDay], ['🌙 กลางคืน', p.nNight], ['🧾 ใบสั่ง (ทั้งรถ)', p.tickets != null ? p.tickets : (p.issued || 0) + (p.ticketJoint || 0)], ['✍️ ออกเอง (PTM)', p.issued], ['📈 ใบ/ผลัด', p.ratePerShift],
           ['🚨 จับ (หลัก)', p.arrestPrimary], ['🚨 จับ (ร่วม)', p.arrestJoint], ['🚔 ว.42', p.escort], ['🤝 ช่วยเหลือ', p.assist], ['🎖️ ภารกิจ', p.mission], ['🗣️ ตักเตือน', p.warning]].forEach(function (x) {
           add(kp, h('div', { class: 'kpi' }, h('div', { class: 'n', text: x[1] }), h('div', { class: 't', text: x[0] })));
         });
         add(c, kp); add(out, c);
       }, function (e) { clear(out); add(out, errorBox(e.message)); });
     }), out);
+  };
+
+  // ======================= คะแนนผลการปฏิบัติ =======================
+  function fmtPts(n) { n = Math.round((+n || 0) * 100) / 100; return (n > 0 ? '' : '') + n.toLocaleString('th-TH'); }
+  /** แถบคะแนน (รองรับค่าติดลบ — แสดงเป็นแถบสีแดง) */
+  function scoreBars(rows) {
+    var max = 0; rows.forEach(function (r) { max = Math.max(max, Math.abs(r.value)); });
+    var box = h('div', { class: 'sbars' });
+    rows.forEach(function (r) {
+      var w = max ? Math.max(2, Math.round(Math.abs(r.value) * 100 / max)) : 0;
+      add(box, h('div', { class: 'sbar' }, h('span', { class: 'lb', text: r.label }), h('span', { class: 'tr' }, h('i', { class: r.value < 0 ? 'neg' : '', style: 'width:' + w + '%' })), h('b', { class: r.value < 0 ? 'neg' : '', text: fmtPts(r.value) })));
+    });
+    return box;
+  }
+  function announceScore(id) {
+    return api('score.text', { id: id }).then(function (t) { return postToChat(t); }).then(function (r) {
+      toast(r === 'sent' ? 'ส่งประกาศเข้ากลุ่มแล้ว' : r === 'shared' ? 'แชร์ประกาศแล้ว' : r === 'copied' ? '📋 คัดลอกประกาศแล้ว — วางในกลุ่มรายงานได้เลย' : 'ยกเลิก', 3500);
+    });
+  }
+  /** การ์ดเกณฑ์คะแนน 1 ชุด */
+  function criteriaCard(w, L, canManage) {
+    var x = w.weights, c = card('📋 ' + w.name, w.id === 'default' ? 'เกณฑ์มาตรฐาน' : th(w.from) + ' – ' + th(w.to));
+    var items = [];
+    ['T', 'C', 'R'].forEach(function (k) { items.push(['🧾 ' + L.act[k], x.act[k], 'ใบ']); });
+    var cmap = {}; (L.codes || S.boot.violations || []).forEach(function (v) { cmap[v.code] = v; });
+    var emph = Object.keys(x.code || {});
+    items.push(['🚨 จับกุมตามหมายจับ', x.warrant, 'ราย'], ['🚨 จับกุมซึ่งหน้า', x.flag, 'ราย']);
+    Object.keys(x.cat || {}).forEach(function (k) { if (x.cat[k] !== x.flag) items.push(['🚨 ซึ่งหน้า ' + k, x.cat[k], 'ราย']); });
+    L.items.forEach(function (i) { if (x[i[0]]) items.push([i[1], x[i[0]], i[2]]); });
+    if (x.missed) items.push(['🔴 ไม่ส่งเวรตามกำหนด', x.missed, 'ผลัด']);
+    if (emph.length) add(c, h('div', { class: 'emph' }, h('b', { text: '⭐ เน้นย้ำช่วงนี้' }), emph.map(function (k) { return h('div', { text: (cmap[k] ? cmap[k].label : k) + ' — ' + fmtPts(x.code[k]) + ' คะแนน/ใบ' }); })));
+    var tbl = h('div', { class: 'crit' });
+    items.forEach(function (i) { add(tbl, h('div', { class: 'ci' }, h('span', { text: i[0] }), h('b', { class: i[1] < 0 ? 'neg' : '', text: fmtPts(i[1]) + ' / ' + i[2] }))); });
+    add(c, tbl, h('p', { class: 'muted small', text: 'ใบสั่ง: ลูกเรือทุกคนในรถได้คะแนนเท่ากัน · ผู้ร่วมจับได้ ' + fmtPts(x.jointPct) + '% ของคะแนนจับกุม' }));
+    if (w.note) add(c, h('p', { class: 'small', text: 'หมายเหตุ: ' + w.note }));
+    if (canManage) add(c, h('div', { class: 'row', style: 'margin-top:8px' }, submitBtn('📣 ประกาศเกณฑ์นี้เข้ากลุ่ม', 'ghost sm grow', function () { return announceScore(w.id); })));
+    return c;
+  }
+  VIEWS.score = function () {
+    setTitle('🏅 คะแนนผลการปฏิบัติ', S.boot.me.name);
+    clear($app);
+    var t = today(), cy = cycleOf(t), sel = null, out = h('div'), chips = h('div', { class: 'chips' }), info = null;
+    add($app, h('div', { class: 'card' }, chips), out);
+    function presets() {
+      var ps = [];
+      if (info && info.current) ps.push(['cur', '⭐ ' + info.current.name, info.current.from, info.current.to]);
+      ((info && info.periods) || []).filter(function (p) { return !info.current || p.id !== info.current.id; }).slice(0, 3).forEach(function (p) { ps.push(['p' + p.id, p.name, p.from, p.to]); });
+      ps.push(['cycle', 'วงรอบนี้', cy.from, cy.to], ['month', 'เดือนนี้', t.slice(0, 8) + '01', t]);
+      return ps;
+    }
+    function drawChips() {
+      clear(chips);
+      presets().forEach(function (p) { add(chips, h('button', { class: 'chip' + (p[0] === sel ? ' on' : ''), onclick: function () { load(p); }, text: p[0] === 'cur' || p[0] === 'cycle' || p[0] === 'month' ? p[1] : p[1] + ' (' + th(p[2]) + '–' + th(p[3]) + ')' })); });
+    }
+    function load(p) {
+      sel = p[0]; drawChips(); clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(3));
+      api('score.get', { from: p[2], to: p[3] }).then(function (d) {
+        var first = !info; info = d;
+        if (first && d.current && sel === 'cycle') return load(presets()[0]); // มีช่วงคะแนนปัจจุบัน → เปิดช่วงนั้นก่อน
+        drawChips(); render(d);
+      }, function (e) { clear(out); add(out, errorBox(e.message)); });
+    }
+    function render(d) {
+      clear(out);
+      var L = d.labels;
+      // คะแนนของฉัน
+      var mc = card('👤 คะแนนของฉัน', th(d.from < d.start ? d.start : d.from) + ' – ' + th(d.to));
+      if (d.from < d.start) add(out, h('p', { class: 'muted small', text: 'เริ่มคิดคะแนนตั้งแต่ ' + th(d.start) + ' — วันที่ก่อนหน้านั้นไม่คิดคะแนนและไม่หัก' }));
+      if (d.group === 'ไม่คิดคะแนน') add(mc, h('p', { class: 'muted', text: 'ท่านอยู่หมวด "ไม่คิดคะแนน" — ดูเกณฑ์ด้านล่างได้' }));
+      else if (!d.me) add(mc, h('p', { class: 'muted', text: d.group === 'ธุรการ' ? 'หมวดธุรการ: ได้คะแนนเฉพาะผลัดที่ขึ้นรถตรวจ — ช่วงนี้ยังไม่มี' : 'ยังไม่มีคะแนนในช่วงนี้' }));
+      else {
+        var m = d.me;
+        add(mc, h('div', { class: 'score-hero' }, h('div', { class: 'n' + (m.score < 0 ? ' neg' : ''), text: fmtPts(m.score) }), h('div', null,
+          h('b', { text: 'อันดับ ' + m.rank + ' จาก ' + m.of }), h('div', { class: 'small muted', text: (m.group === 'ธุรการ' ? 'ธุรการที่ออกตรวจ' : 'สายตรวจ') + ' · ' + m.shifts + ' ผลัด · เฉลี่ย ' + fmtPts(m.avg) + '/ผลัด' }),
+          m.missed ? h('div', { class: 'small', style: 'color:var(--red)', text: '🔴 ไม่ส่งเวรตามกำหนด ' + m.missed + ' ผลัด' }) : null)));
+        add(mc, scoreBars(L.parts.filter(function (p) { return m.parts[p[0]]; }).map(function (p) { return { label: p[1], value: m.parts[p[0]] }; })));
+      }
+      add(out, mc);
+      // เกณฑ์ที่ใช้ในช่วงนี้
+      if (d.criteria.length > 1) add(out, h('p', { class: 'muted small', text: 'ช่วงที่เลือกใช้เกณฑ์ ' + d.criteria.length + ' ชุด — คิดคะแนนแต่ละวันตามเกณฑ์ของวันนั้น' }));
+      d.criteria.forEach(function (w) { add(out, criteriaCard(w, L, d.canManage)); });
+      // ตารางอันดับ (ผู้บังคับบัญชา)
+      if (d.canViewAll) {
+        function rankTable(list, title, sub) {
+          var c = card(title, sub);
+          if (!list.length) { add(c, h('p', { class: 'muted', text: 'ยังไม่มีข้อมูลในช่วงนี้' })); return c; }
+          add(c, scoreBars(list.slice(0, 15).map(function (p) { return { label: p.rank + '. ' + (p.short || p.name), value: p.score }; })));
+          add(c, h('details', null, h('summary', { class: 'small', text: 'ตารางทั้งหมด ' + list.length + ' นาย' }),
+            table(['#', 'ชื่อ', 'คะแนน', 'เฉลี่ย/ผลัด', 'ผลัด', 'ใบสั่ง', 'จับกุม', 'บริการ', 'หัก'], list.map(function (p) {
+              return [p.rank, p.short || p.name, fmtPts(p.score), fmtPts(p.avg), p.shifts, fmtPts(p.parts.ticket), fmtPts(p.parts.arrest), fmtPts(p.parts.service + p.parts.mission), fmtPts(p.parts.penalty)]; }))));
+          return c;
+        }
+        add(out, rankTable(d.patrol, '🏆 อันดับสายตรวจ', 'เรียงตามคะแนนรวม'));
+        if (d.office.length) add(out, rankTable(d.office, '🗂 ธุรการที่ออกตรวจ', 'นับเฉพาะผลัดที่ขึ้นรถ · ไม่จัดอันดับรวมกับสายตรวจ'));
+        var cc = card('🚓 คะแนนรายรถ', 'ผลของรถนับครั้งเดียว');
+        if (d.cars.length) add(cc, scoreBars(d.cars.slice(0, 20).map(function (c) { return { label: c.car + ' · เขต ' + c.zone, value: c.score }; }))); else add(cc, h('p', { class: 'muted', text: 'ยังไม่มีข้อมูล' }));
+        add(out, cc);
+        var zc = card('🗺 คะแนนรายเขต');
+        add(zc, scoreBars(Object.keys(d.zones).map(function (z) { return { label: S.boot.zones[z] || ('เขต ' + z), value: d.zones[z] }; })));
+        add(out, zc);
+      }
+      if (d.canManage) add(out, h('div', { class: 'list' }, rowLink('⚙️', 'ตั้งเกณฑ์คะแนน', 'สร้าง/แก้ช่วงคะแนน · เกณฑ์มาตรฐาน · ประกาศเข้ากลุ่ม', function () { go('scoreAdmin'); })));
+      add(out, h('p', { class: 'muted small center', text: 'คะแนนคำนวณจากรายงานในระบบ (คดีนับเมื่ออนุมัติแล้ว) · ใบสั่งรายบุคคลไม่ใช่ยอดตาม PTM' }));
+    }
+    load(['cycle', 'วงรอบนี้', cy.from, cy.to]);
+  };
+
+  // ตั้งเกณฑ์คะแนน (หัวหน้าสถานี/แอดมิน)
+  VIEWS.scoreAdmin = function (params) {
+    setTitle('⚙️ ตั้งเกณฑ์คะแนน', 'แต่ละช่วงแก้ได้โดยไม่กระทบช่วงอื่น');
+    loading();
+    api('score.get', { from: today(), to: today() }, { fresh: true }).then(function (d) {
+      if (!d.canManage) { clear($app); add($app, errorBox('ไม่มีสิทธิ์ตั้งเกณฑ์คะแนน')); return; }
+      clear($app);
+      var t = today(), L = d.labels;
+      if (params && params.saved) add($app, h('div', { class: 'card success' }, h('b', { text: '✅ บันทึก "' + params.savedName + '" แล้ว' }), h('p', { class: 'small', text: 'ประกาศให้เจ้าหน้าที่ทราบเกณฑ์ใหม่' }),
+        submitBtn('📣 ประกาศเข้ากลุ่มรายงาน', 'green block', function () { return announceScore(params.saved); })));
+      add($app, h('div', { class: 'note', text: 'วันที่ไม่อยู่ในช่วงใด ใช้เกณฑ์มาตรฐาน · ช่วงห้ามทับกัน · แก้เกณฑ์แล้วคะแนนในช่วงนั้นคำนวณใหม่ทันที' }));
+      var stIn = h('input', { type: 'date', value: d.start });
+      add($app, h('div', { class: 'card' }, field('เริ่มคิดคะแนนตั้งแต่วันที่', stIn, 'ก่อนวันนี้ไม่คิดคะแนนและไม่หักคะแนนไม่ส่งเวร (เช่น ช่วงก่อนเปิดใช้ระบบ)'),
+        submitBtn('บันทึกวันเริ่ม', 'ghost sm', function () { return api('score.start', { date: stIn.value }).then(function () { apiInvalidate(); toast('บันทึกวันเริ่มคิดคะแนนแล้ว'); }); })));
+      add($app, h('button', { class: 'btn block', style: 'margin:8px 0', onclick: function () { editor(null, d.standard); }, text: '+ สร้างช่วงคะแนนใหม่' }));
+      function row(w, isStd) {
+        var now = !isStd && w.from <= t && t <= w.to, past = !isStd && w.to < t;
+        var c = card(w.name, isStd ? 'เกณฑ์มาตรฐาน' : th(w.from) + ' – ' + th(w.to));
+        add(c, h('div', { class: 'row' }, now ? h('span', { class: 'badge green', text: 'ใช้อยู่ตอนนี้' }) : past ? h('span', { class: 'badge gray', text: 'ผ่านไปแล้ว' }) : isStd ? null : h('span', { class: 'badge amber', text: 'ยังไม่ถึง' }),
+          Object.keys(w.weights.code).length ? h('span', { class: 'small muted', text: '⭐ เน้นย้ำ ' + Object.keys(w.weights.code).length + ' รายการ' }) : null));
+        add(c, h('div', { class: 'row', style: 'margin-top:8px;flex-wrap:wrap' },
+          h('button', { class: 'btn sm', onclick: function () { editor(w); }, text: '✏️ แก้ไข' }),
+          isStd ? null : h('button', { class: 'btn ghost sm', onclick: function () { editor(null, w); }, text: '📄 คัดลอกเป็นช่วงใหม่' }),
+          submitBtn('📣 ประกาศ', 'ghost sm', function () { return announceScore(w.id); }),
+          isStd ? null : submitBtn('ลบ', 'gray sm', function () { if (!confirm('ลบช่วง "' + w.name + '"? วันที่ในช่วงนี้จะกลับไปใช้เกณฑ์มาตรฐาน')) return; return api('score.delete', { id: w.id }).then(function () { toast('ลบแล้ว'); VIEWS.scoreAdmin(); }); })));
+        return c;
+      }
+      add($app, row(d.standard, true));
+      if (d.allPeriods.length) add($app, h('div', { class: 'section-label', text: 'ช่วงที่กำหนดเอง ' + d.allPeriods.length + ' ช่วง' }));
+      d.allPeriods.forEach(function (w) { add($app, row(w, false)); });
+
+      function editor(w, copyFrom) {
+        var isStd = w && w.id === 'default', src = (w || copyFrom).weights, x = JSON.parse(JSON.stringify(src));
+        setTitle(w ? '✏️ แก้เกณฑ์คะแนน' : '+ ช่วงคะแนนใหม่', w ? w.name : 'ค่าเริ่มจาก ' + (copyFrom.name || 'เกณฑ์มาตรฐาน'));
+        clear($app); window.scrollTo(0, 0);
+        function num(v, step) { return h('input', { type: 'number', inputmode: 'decimal', step: step || '0.5', value: v == null ? '' : String(v) }); }
+        var name = h('input', { value: w ? w.name : '', placeholder: 'เช่น เน้นรถบรรทุก ต.ค. 69' });
+        var nf = addDays(t, 1), from = h('input', { type: 'date', value: w ? w.from : nf }), to = h('input', { type: 'date', value: w ? w.to : addDays(nf, 9) });
+        var head = card('ข้อมูลช่วง');
+        add(head, field('ชื่อ', name));
+        if (!isStd) add(head, h('div', { class: 'row2' }, field('ตั้งแต่', from), field('ถึง', to)));
+        add($app, head);
+        // ใบสั่ง
+        var actIn = {}, tc = card('🧾 ใบสั่ง (คะแนนต่อใบ)', 'ทุกคนในรถได้เท่ากัน');
+        var ar = h('div', { class: 'grid3' }); ['T', 'C', 'R'].forEach(function (k) { actIn[k] = num(x.act[k]); add(ar, field(L.act[k], actIn[k])); }); add(tc, ar);
+        var emBox = h('div'), codes = L.codes || [];
+        function drawEm() {
+          clear(emBox);
+          Object.keys(x.code).forEach(function (k) {
+            var v = codes.filter(function (c) { return c.code === k; })[0], inp = num(x.code[k]);
+            inp.oninput = function () { x.code[k] = inp.value; };
+            add(emBox, h('div', { class: 'em-row' }, h('span', { class: 'grow', text: '⭐ ' + (v ? v.label : k) }), inp, h('button', { class: 'btn gray sm', onclick: function () { delete x.code[k]; drawEm(); }, text: '×' })));
+          });
+        }
+        drawEm();
+        var csel = h('select', null, h('option', { value: '', text: '+ เลือกความผิดที่ต้องการเน้นย้ำ' }));
+        codes.forEach(function (c) { add(csel, h('option', { value: c.code, text: c.label + ' (' + L.act[c.act] + ')' })); });
+        csel.onchange = function () { if (csel.value && !(csel.value in x.code)) { x.code[csel.value] = Math.max(2, (+actIn[(codes.filter(function (c) { return c.code === csel.value; })[0] || {}).act || 'C'].value || 1) * 2); drawEm(); } csel.value = ''; };
+        add(tc, h('label', { class: 'f', text: 'ความผิดที่เน้นย้ำ (คะแนนต่อใบแทนค่าตาม พ.ร.บ.)' }), emBox, csel);
+        add($app, tc);
+        // จับกุม
+        var war = num(x.warrant), flag = num(x.flag), joint = num(x.jointPct, '5'), catIn = {}, ac = card('🚨 จับกุมคดีอาญา (คะแนนต่อราย)', 'นับเมื่อคดีอนุมัติแล้ว');
+        add(ac, h('div', { class: 'grid2' }, field('ตามหมายจับ', war), field('ซึ่งหน้า (ทั่วไป)', flag)));
+        var cg = h('div', { class: 'grid2' });
+        L.cats.forEach(function (k) { catIn[k] = num(x.cat[k]); catIn[k].placeholder = 'ใช้ค่าซึ่งหน้า'; add(cg, field('ซึ่งหน้า ' + k, catIn[k])); });
+        add(ac, cg, field('ผู้ร่วมจับได้ (% ของคะแนน)', joint, 'ผู้จับหลักได้เต็ม'));
+        add($app, ac);
+        // บริการ/ภารกิจ/วินัย
+        var itIn = {}, sc = card('🤝 งานบริการ ภารกิจ และวินัย');
+        var ig = h('div', { class: 'grid2' });
+        L.items.forEach(function (i) { itIn[i[0]] = num(x[i[0]]); add(ig, field(i[1] + ' (ต่อ' + i[2] + ')', itIn[i[0]])); });
+        var missed = num(Math.abs(x.missed));
+        add(ig, field('🔴 ไม่ส่งเวร หัก (ต่อผลัด)', missed, 'หักลูกเรือทุกคนในรถ'));
+        add(sc, ig); add($app, sc);
+        var note = h('textarea', { placeholder: 'ข้อความเน้นย้ำถึงเจ้าหน้าที่ (แสดงในประกาศ)' }); note.value = w ? w.note || '' : (copyFrom && copyFrom.note) || '';
+        var reason = h('input', { placeholder: 'เหตุผลการแก้ไข (บันทึกในประวัติ)' });
+        var ncard = card('📝 หมายเหตุ'); add(ncard, note); if (w) add(ncard, field('เหตุผลการแก้ไข', reason)); add($app, ncard);
+        add($app, bar(h('button', { class: 'btn gray', onclick: function () { VIEWS.scoreAdmin(); }, text: 'ยกเลิก' }), submitBtn('บันทึกเกณฑ์', 'green grow', function () {
+          var cat = {}; L.cats.forEach(function (k) { if (catIn[k].value !== '') cat[k] = catIn[k].value; });
+          var wts = { act: { T: actIn.T.value, C: actIn.C.value, R: actIn.R.value }, code: x.code, warrant: war.value, flag: flag.value, cat: cat, jointPct: joint.value, missed: missed.value };
+          L.items.forEach(function (i) { wts[i[0]] = itIn[i[0]].value; });
+          return api('score.save', { id: w ? w.id : '', name: name.value, from: from.value, to: to.value, weights: wts, note: note.value, reason: reason.value }).then(function (r) {
+            apiInvalidate(); go('scoreAdmin', { saved: r.id, savedName: r.name }, true);
+          });
+        })));
+      }
+    }, function (e) { fail(e, VIEWS.scoreAdmin); });
   };
 
   // ======================= ตารางเวร + สลับเวร =======================
@@ -1531,7 +1728,7 @@
           add(list, h('button', { class: 'card clickable', style: 'padding:10px 12px', onclick: function () { edit(p); } },
             h('div', { class: 'row' }, h('b', { class: 'grow', text: p.name }), p.status === 'inactive' ? h('span', { class: 'badge gray', text: 'ปิด' }) : null,
               h('span', { class: 'badge ' + (p.superadmin || p.backup ? 'red' : 'green'), text: p.roleLabel || p.effRole }), h('span', { class: 'badge ' + (p.linked ? 'green' : 'gray'), text: p.linked ? 'LINE ✓' : 'ยังไม่ผูก' })),
-            h('div', { class: 'small muted', text: [p.position, p.callsign && 'นามเรียกขาน ' + p.callsign].filter(Boolean).join(' · ') }),
+            h('div', { class: 'small muted', text: [p.position, p.callsign && 'นามเรียกขาน ' + p.callsign, p.scoreGroupEff && p.scoreGroupEff !== 'สายตรวจ' && 'หมวดคะแนน: ' + p.scoreGroupEff].filter(Boolean).join(' · ') }),
             p.lineName ? h('div', { class: 'small muted', text: 'ชื่อในไลน์: ' + p.lineName }) : null,
             (p.grants.length || p.revokes.length || p.ovScope || p.expires || p.tags.length) ? h('div', { class: 'small muted', text: (p.grants.length ? '➕' + p.grants.length + ' ' : '') + (p.revokes.length ? '➖' + p.revokes.length + ' ' : '') + (p.ovScope ? 'ขอบเขต ' + p.ovScope + ' ' : '') + (p.expires ? '⏳ ถึง ' + th(p.expires) + ' ' : '') + (p.tags.length ? '🏷 ' + p.tags.join(', ') : '') }) : null));
         });
@@ -1574,6 +1771,13 @@
           var sug = h('div', { class: 'chips', style: 'margin-top:6px' }); SUG.forEach(function (x) { add(sug, h('button', { class: 'chip', onclick: function () { if (tags.indexOf(x) < 0) { tags.push(x); rt(); } }, text: '+ ' + x })); });
           body.push(h('div', { class: 'hr' }), h('label', { class: 'f', text: '🏷 แท็กทักษะ' }), tb, ti, sug);
         }
+        var sgSel = null;
+        if (can('people.manage')) { // หมวดคะแนน (แยกจากสิทธิ์) — ธุรการได้คะแนนเฉพาะผลัดที่ขึ้นรถ
+          sgSel = h('select', null, h('option', { value: '', text: 'ตามบทบาท (ตอนนี้: ' + (p.scoreGroupEff || '-') + ')' }), h('option', { value: 'สายตรวจ', text: 'สายตรวจ — จัดอันดับคะแนน' }),
+            h('option', { value: 'ธุรการ', text: 'ธุรการ — คิดเฉพาะผลัดที่ขึ้นรถ แสดงแยก' }), h('option', { value: 'ไม่คิดคะแนน', text: 'ไม่คิดคะแนน' }));
+          sgSel.value = p.scoreGroup || '';
+          body.push(h('div', { class: 'hr' }), field('🏅 หมวดคะแนน', sgSel));
+        }
         var extra = h('div', { class: 'row', style: 'margin-top:10px' });
         if (can('people.manage') && !p.superadmin) {
           add(extra, submitBtn(p.status === 'inactive' ? 'เปิดใช้งาน' : 'ปิดบัญชี (ย้าย/ออก)', 'gray sm', function () { var why = prompt('เหตุผล'); if (why == null) return; return api('admin.status', { pid: p.pid, status: p.status === 'inactive' ? 'active' : 'inactive', reason: why }).then(function () { toast('บันทึกแล้ว'); closeModal(); VIEWS.admin(); }); }));
@@ -1584,11 +1788,12 @@
           else if (p.linked && p.status !== 'inactive') add(extra, submitBtn('แต่งตั้งเป็นแอดมินสำรอง', 'amber sm', function () { if (!confirm('แต่งตั้ง ' + p.name + ' เป็นแอดมินสำรอง (แทนคนเดิมถ้ามี)?')) return; return api('admin.setBackup', { pid: p.pid }).then(function () { toast('แต่งตั้งแล้ว'); closeModal(); VIEWS.admin(); }); }));
         }
         body.push(extra);
-        var canSave = canPerm || tags;
+        var canSave = canPerm || tags || sgSel;
         modal(p.name, body, canSave ? 'บันทึก' : null, function () {
           var jobs = [];
           if (canPerm) jobs.push(api('admin.setAccess', { pid: p.pid, role: roleSel.value, grants: grants, revokes: revokes, scope: scope.value, expires: exp.value, note: note.value }));
           if (tags) jobs.push(api('admin.profile', { pid: p.pid, tags: tags }));
+          if (sgSel && sgSel.value !== (p.scoreGroup || '')) jobs.push(api('admin.profile', { pid: p.pid, scoreGroup: sgSel.value }));
           return Promise.all(jobs).then(function () { toast('✅ บันทึกแล้ว'); VIEWS.admin(); });
         });
       }
@@ -1698,7 +1903,7 @@
   var AUDIT_LABEL = { 'suspect.view': '🔒 เปิดดูข้อมูลผู้ต้องหา', 'suspect.search': '🔎 ค้นหาผู้ต้องหา', 'perm.set': '🔐 ปรับสิทธิ์รายคน', 'role.set': '🔐 แก้สิทธิ์บทบาท', 'backup.set': '👑 แต่งตั้งแอดมินสำรอง',
     'backup.remove': '👑 ถอดแอดมินสำรอง', 'settings.set': '⚙️ แก้ตั้งค่า', 'codes.save': '🧾 แก้รหัสความผิด', 'arrest.approved': '✅ อนุมัติคดี', 'arrest.returned': '↩️ ส่งคดีกลับแก้', 'arrest.edit': '✏️ แก้รายงานจับกุม',
     'event.void': '🗑 ยกเลิกรายการ', 'shift.void': '🗑 ยกเลิกรายงานผลัด', 'event.update': '✏️ แก้ไข ว.42/ช่วยเหลือ', 'register.auto': '🔗 ผูก LINE อัตโนมัติ', 'register.approved': '🔗 อนุมัติผูก LINE', 'register.rejected': '⛔ ปฏิเสธคำขอ', 'register.unlink': '🔗 ยกเลิกผูก LINE',
-    'people.status': '👤 เปลี่ยนสถานะบัญชี', 'people.import': '📥 นำเข้ากำลังพล', 'people.update': '👤 แก้ข้อมูลกำลังพล', 'export.xlsx': '⬇️ ส่งออก Excel', 'roster.import': '🗓 นำเข้าตารางเวร' };
+    'people.status': '👤 เปลี่ยนสถานะบัญชี', 'people.import': '📥 นำเข้ากำลังพล', 'people.update': '👤 แก้ข้อมูลกำลังพล', 'score.set': '🏅 ตั้ง/แก้เกณฑ์คะแนน', 'score.delete': '🏅 ลบช่วงคะแนน', 'score.start': '🏅 ตั้งวันเริ่มคิดคะแนน', 'export.xlsx': '⬇️ ส่งออก Excel', 'roster.import': '🗓 นำเข้าตารางเวร' };
   VIEWS.audit = function () {
     setTitle('🧾 ประวัติการใช้งาน', '200 รายการล่าสุด');
     loading();
