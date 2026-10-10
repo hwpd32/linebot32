@@ -383,3 +383,38 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .sb-bar { display: flex; gap: 2px; height: 12px; margin: 4px 0 3px 24px; }
 .sb-bar i { display: block; height: 100%; border-radius: 3px; }
 .sb-r .small.muted { margin-left: 24px; }
+/* สัดส่วนภารกิจ — ภาพ dashboard */
+.dsh .mxl-r { display: flex; align-items: center; white-space: nowrap; color: #1e293b; }
+.dsh .mxl-r i { display: inline-block; border-radius: 4px; flex: none; }
+.dsh .mxl-r .l { margin-left: 10px; overflow: hidden; text-overflow: ellipsis; }
+.dsh .mxl-r small { margin-left: 8px; font-size: .78em; color: #64748b; }
+.dsh .mxl-r b { margin-left: auto; padding-left: 10px; font-weight: 700; color: #0f2744; }
+.dsh .zg-c { display: flex; align-items: center; border-radius: 8px; padding: 0 10px; white-space: nowrap; overflow: hidden; }
+.dsh .zg-c b { font-size: 20px; font-weight: 700; color: #0f2744; }
+.dsh .zg-c .nm { font-size: 16px; color: #475569; margin-left: 6px; overflow: hidden; text-overflow: ellipsis; }
+.dsh .zg-c .v { font-size: 22px; font-weight: 700; margin-left: auto; min-width: 46px; text-align: right; }
+.dsh .zg-c .v + .v { margin-left: 4px; }
+.dsh .mx-key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 20px; color: #334155; }
+.dsh .mx-key i { display: inline-block; width: 18px; height: 18px; border-radius: 4px; margin-right: 6px; vertical-align: -2px; }
+.dsh .mx-seg { border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; }
+.dsh .mx-sc { display: flex; align-items: center; white-space: nowrap; }
+.dsh .mx-sc b { font-size: 26px; font-weight: 700; color: #0f2744; }
+.dsh .mx-sc span { font-size: 17px; color: #64748b; margin-left: 4px; }
+/* สัดส่วนภารกิจ — แอป */
+.mx-top { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.mx-donut { position: relative; width: 150px; height: 150px; flex: none; margin: 0 auto; }
+.mx-donut svg { display: block; }
+.mx-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.mx-c b { font-size: 24px; color: var(--navy); line-height: 1; }
+.mx-c span { font-size: 11px; color: var(--muted); }
+.mx-lg { flex: 1; min-width: 200px; display: grid; gap: 3px; font-size: 13px; }
+.mx-li { display: flex; align-items: center; gap: 6px; }
+.mx-li i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.mx-li .l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-li .n { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.mx-li b { min-width: 42px; text-align: right; color: var(--navy); }
+.mx-r { padding: 6px 0; border-bottom: 1px solid #edf1f6; }
+.mx-r:last-child { border-bottom: 0; }
+.mx-h { display: flex; align-items: baseline; gap: 4px; }
+.mx-bar { display: flex; gap: 1px; height: 14px; margin: 4px 0 3px; border-radius: 4px; overflow: hidden; background: #eef2f7; }
+.mx-bar i { display: block; height: 100%; }
