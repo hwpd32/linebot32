@@ -89,7 +89,7 @@
   }
   function apiRaw(action, data) {
     var ctl = window.AbortController ? new AbortController() : null;
-    var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken }), signal: ctl ? ctl.signal : undefined });
+    var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken, viewAs: S.viewAs || undefined }), signal: ctl ? ctl.signal : undefined });
     return withTimeout(req, CFG.API_TIMEOUT_MS || 30000, 'ระบบตอบช้าเกินไป (เกิน 30 วินาที) กรุณากดลองใหม่').then(null, function (e) { if (ctl && e.code === 'TIMEOUT') ctl.abort(); throw e; })
       .then(function (r) { return r.json().catch(function () { throw new Error('ระบบตอบกลับผิดรูปแบบ (HTTP ' + r.status + ') กรุณาลองใหม่'); }); }, function (e) { if (e.code === 'TIMEOUT') throw e; throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสัญญาณแล้วลองใหม่'); })
       .then(function (j) {
@@ -220,7 +220,7 @@
         go(VIEWS[v] ? v : 'home', params, true);
         prefetchCurrentShift();
       }
-      var cached = S.uid ? bootCacheGet(S.uid) : null;
+      var cached = S.uid && !S.viewAs ? bootCacheGet(S.uid) : null;
       if (cached) { applyBoot(cached); open(); refreshBootQuiet(); return; }
       return boot().then(open);
     }).catch(function (e) { window.__booted = true; fail(e, function () { location.reload(); }); });
@@ -230,7 +230,21 @@
   function bootCacheGet(uid) { try { var j = JSON.parse(localStorage.getItem(BOOT_KEY) || 'null'); return j && j.uid === uid && Date.now() - j.at < BOOT_MAX_AGE && j.b && j.b.registered ? j.b : null; } catch (e) { return null; } }
   function bootCachePut(uid, b) { try { if (b && b.registered) localStorage.setItem(BOOT_KEY, JSON.stringify({ uid: uid, at: Date.now(), b: b })); else localStorage.removeItem(BOOT_KEY); } catch (e) { } }
   function applyBoot(b) { S.boot = b; S._bootAt = Date.now(); setTitle('รายงานผล ' + (b.station || '').split(' ')[0], b.me ? b.me.name + ' · ' + (b.perms.roleLabel || '') : ''); }
-  function boot() { return api('bootstrap').then(function (b) { applyBoot(b); bootCachePut(S.uid, b); return b; }); }
+  function boot() { return api('bootstrap').then(function (b) { applyBoot(b); if (!S.viewAs) bootCachePut(S.uid, b); viewBanner(); return b; }); }
+  // ---------- โหมดจำลองมุมมอง (แอดมิน) ----------
+  try { S.viewAs = JSON.parse(sessionStorage.getItem('viewAs') || 'null'); } catch (e) { S.viewAs = null; }
+  function setViewAs(v) {
+    S.viewAs = v; try { if (v) sessionStorage.setItem('viewAs', JSON.stringify(v)); else sessionStorage.removeItem('viewAs'); } catch (e) { }
+    apiInvalidate(); loading(v ? 'กำลังสลับมุมมอง…' : 'กำลังกลับสู่มุมมองแอดมิน…');
+    return boot().then(function () { go('home', {}, true); }, function (e) { if (v) { toast('⚠️ ' + e.message, 4000); setViewAs(null); } });
+  }
+  function viewBanner() {
+    var b = document.getElementById('viewas'); if (!b) { b = h('div', { id: 'viewas' }); document.body.insertBefore(b, document.body.firstChild); }
+    var v = S.boot && S.boot.viewAs; b.hidden = !v; clear(b); document.body.classList.toggle('viewing', !!v);
+    if (!v) return;
+    add(b, h('span', { class: 'grow', text: '👁 จำลองมุมมอง: ' + v.name + ' (' + v.roleLabel + ')' + (v.sample ? ' · ตัวแทนบทบาท' : '') + ' — กดบันทึก = บันทึกจริงในนามแอดมิน' }),
+      h('button', { onclick: function () { setViewAs(null); }, text: 'ออก' }));
+  }
   function refreshBoot() { return boot().then(function () { renderTabs(TOP[S.view]); }, function () { }); }
   // อัปเดตเบื้องหลังหลังเปิดจากแคช: ถ้าข้อมูลเปลี่ยนและผู้ใช้ยังไม่ได้กรอกอะไร ให้วาดหน้าหลัก/ตอนนี้ใหม่
   function refreshBootQuiet() {
@@ -407,6 +421,7 @@
       pm ? rowLink('📥', 'นำเข้า/อัปเดตกำลังพล', 'จากไฟล์ CSV', function () { go('peopleImport'); }) : null,
       pm || can('perm.manage') ? rowLink('🧾', 'ประวัติการใช้งาน', 'การแก้ไข · การเปิดดูข้อมูลผู้ต้องหา', function () { go('audit'); }) : null]);
     if (ad) group('งานระบบ (เฉพาะแอดมิน)', [
+      rowLink('👁', 'จำลองมุมมองตามสิทธิ์', 'ดูแอปในมุมของแต่ละบทบาทหรือรายคน', function () { go('viewAs'); }),
       rowLink('🔐', 'สิทธิ์ตามบทบาท', 'กำหนดว่าแต่ละบทบาทเห็น/ทำอะไรได้', function () { go('roles'); }),
       rowLink('🧾', 'รหัสความผิด', 'เพิ่ม/แก้/ปิดรายการความผิด', function () { go('codes'); }),
       rowLink('⚙️', 'ตั้งค่าระบบ', 'โควตาข้อความ · การแจ้งเตือน · ข้อความมาตรฐาน', function () { go('settings'); })]);
@@ -683,13 +698,13 @@
     var active = (S.boot.activeEscorts || []);
     var mine = S.boot.myShifts || [];
     var myCars = mine.map(function (m) { return String(m.car); });
-    var act = active.filter(function (e) { return myCars.indexOf(String(e.car)) >= 0; });
+    var act = active.filter(function (e) { return can('report.editOthers') || myCars.indexOf(String(e.car)) >= 0 || (e.crew || []).indexOf(S.boot.me.pid) >= 0; });
     if (act.length) {
       var c = card('⏱ ขบวนที่กำลังนำ');
       act.forEach(function (e) {
         var rt = h('input', { type: 'checkbox' }), ho = h('input', { placeholder: 'ส่งต่อให้ (เช่น ส.ทล.3)' }), res = h('input', { placeholder: 'ผล/หมายเหตุ เช่น ถึงปลายทางปลอดภัย (ไม่บังคับ)' });
         add(c, h('div', { class: 'list-item', style: 'display:block' }, h('b', { text: '🚔 ' + e.car + ' · ' + e.sub + (e.payload.name ? ' · ' + e.payload.name : '') }),
-          h('div', { class: 'muted small', text: 'เริ่ม ' + hm(e.payload.start) + ' น.' }), h('label', { class: 'cap' }, rt, 'ไป-กลับ (นับ 2 ขบวน)'), ho, res,
+          h('div', { class: 'muted small', text: 'เริ่ม ' + (e.payload.start ? th(e.payload.start.slice(0, 10)) + ' ' + hm(e.payload.start) + ' น.' : '') + (myCars.indexOf(String(e.car)) < 0 ? ' · กดจบแทนลูกเรือได้ (ผู้ดูแล)' : '') }), h('label', { class: 'cap' }, rt, 'ไป-กลับ (นับ 2 ขบวน)'), ho, res,
           h('div', { style: 'margin-top:8px' }, submitBtn('🏁 จบขบวน', 'amber block', function () {
             return api('escort.end', { eventId: e.id, roundTrip: rt.checked, handoverTo: ho.value, result: res.value }).then(function (r) { S.boot.activeEscorts = S.boot.activeEscorts.filter(function (x) { return x.id !== e.id; }); done('จบขบวนแล้ว', r.message, { next: 'escort' }); });
           }))));
@@ -1127,6 +1142,19 @@
         add(kp, h('div', { class: 'kpi' }, h('div', { class: 'n', text: a }), h('div', { class: 't', text: x[0] + ' ' + x[1] }), h('div', { class: 'd ' + (a > b ? 'up' : a < b ? 'down' : ''), text: a > b ? '▲' + (a - b) : a < b ? '▼' + (b - a) : '＝' })));
       });
       add(k, kp); add($app, k);
+      // ขบวน ว.42 ที่กำลังนำอยู่ (รวมผลัดก่อนที่ยังไม่กดจบ)
+      var myCarsNow = (S.boot.myShifts || []).map(function (m) { return String(m.car); });
+      if ((n.escorts || []).length) {
+        var ec = card('🔵 กำลังนำขบวน ว.42', n.escorts.length + ' คัน');
+        n.escorts.forEach(function (e) {
+          var mayEnd = can('report.editOthers') || myCarsNow.indexOf(e.car) >= 0 || e.crew.indexOf(S.boot.me.pid) >= 0;
+          add(ec, h('div', { class: 'list-item' }, h('div', { class: 'grow' }, h('b', { text: 'รถ ' + e.car + ' · ' + e.name }),
+            h('div', { class: 'small muted', text: [e.from && e.to ? e.from + ' → ' + e.to : e.from || e.to, e.start ? 'เริ่ม ' + th(e.start.slice(0, 10)) + ' ' + hm(e.start) + ' น.' : ''].filter(Boolean).join(' · ') })),
+            mayEnd ? h('button', { class: 'btn amber sm', onclick: function () { go('escort'); }, text: '🏁 จบขบวน' }) : null));
+        });
+        add(ec, h('p', { class: 'muted small', text: 'ลูกเรือ และหัวหน้าสถานี/จ่ากอง/เจ้าหน้าที่รายงาน/แอดมิน กดจบได้ · ถ้าไม่มีใครกด ระบบปิดเองเมื่อพ้นผลัด 2 ชม.' }));
+        add($app, ec);
+      }
       var zc = card('🚓 รถใน' + SHIFT[n.shift].label + 'นี้', n.cars.filter(function (c) { return c.status === 'done' || c.status === 'noresult'; }).length + '/' + n.cars.length + ' ส่งเวรแล้ว');
       var cars = h('div', { class: 'cars' });
       n.cars.forEach(function (c) {
@@ -1151,6 +1179,7 @@
   function carSheet(c) {
     var b = [h('p', { class: 'muted', text: STI[c.status][0] + ' ' + STI[c.status][1] + (c.since ? ' ตั้งแต่ ' + hm(c.since) + ' น.' : '') })];
     c.crew.forEach(function (m) { b.push(h('div', { class: 'person' }, h('div', { class: 'who' }, h('b', { text: m.full }), h('span', { class: 'muted small', text: m.role })), m.phone ? h('a', { class: 'btn ghost sm', href: 'tel:' + m.phone, text: '📞 โทร' }) : null)); });
+    if (c.status === 'escort' && (can('report.editOthers') || (S.boot.myShifts || []).some(function (m) { return String(m.car) === String(c.car); }) || c.crew.some(function (m) { return m.pid === S.boot.me.pid; }))) b.push(h('button', { class: 'btn amber block', onclick: function () { closeModal(); go('escort'); }, text: '🏁 จบขบวน ว.42 ของรถคันนี้' }));
     if (c.totals) b.push(h('p', { text: '🧾 ' + (c.totals.ticket || 0) + ' (🚚' + (c.totals.T || 0) + ' 🚗' + (c.totals.C || 0) + ') · 🚔 ' + (c.totals.escort || 0) + ' · 🤝 ' + (c.totals.assist || 0) }));
     modal('รถ ' + c.car + ' · เขต ' + c.zone, b);
   }
@@ -1798,6 +1827,32 @@
         });
       }
     }, function (e) { fail(e, VIEWS.admin); });
+  };
+  // จำลองมุมมองตามบทบาท/รายคน (แอดมิน)
+  VIEWS.viewAs = function () {
+    setTitle('👁 จำลองมุมมองตามสิทธิ์', 'เห็นแอปเหมือนที่บุคคลนั้นเห็นจริง');
+    loading();
+    Promise.all([api('admin.meta'), api('admin.people')]).then(function (r) {
+      var meta = r[0], people = r[1]; clear($app);
+      add($app, h('div', { class: 'note', text: 'ระหว่างจำลอง เมนู ปุ่ม และข้อมูลจะเป็นตามสิทธิ์ของบุคคลนั้น มีแถบสีส้มด้านบน กด "ออก" เพื่อกลับ · ถ้ากดบันทึก/ส่งรายงาน จะบันทึกจริงในนามแอดมิน' }));
+      var rc = card('ดูตามบทบาท', 'ใช้ตัวแทนคนแรกของบทบาท');
+      meta.roles.forEach(function (x) {
+        var rep = people.filter(function (p) { return p.role === x.id && !p.superadmin && !p.backup && p.status !== 'inactive'; })[0];
+        add(rc, h('div', { class: 'list-item' }, h('div', { class: 'grow' }, h('b', { text: x.label }), h('div', { class: 'small muted', text: (rep ? 'ตัวแทน: ' + rep.name : 'ยังไม่มีคนในบทบาทนี้ (ใช้ตัวอย่าง)') + ' · ' + x.caps.length + ' สิทธิ์ · ' + (x.scope === 'station' ? 'เห็นทั้งสถานี' : 'เห็นเฉพาะตนเอง') })),
+          h('button', { class: 'btn sm', onclick: function () { setViewAs({ role: x.id }); }, text: 'ดูมุมนี้' })));
+      });
+      add($app, rc);
+      var pc = card('ดูรายคน'), q = h('input', { placeholder: '🔎 พิมพ์ชื่อ', oninput: draw }), list = h('div');
+      function draw() {
+        clear(list); var s = q.value.trim();
+        if (s.length < 1) return add(list, h('p', { class: 'muted small', text: 'พิมพ์ชื่อเพื่อค้นหา' }));
+        people.filter(function (p) { return !p.superadmin && (p.first + p.last + (p.nick || '')).indexOf(s) >= 0; }).slice(0, 12).forEach(function (p) {
+          add(list, h('div', { class: 'list-item' }, h('div', { class: 'grow' }, h('b', { text: p.name }), h('div', { class: 'small muted', text: (p.roleLabel || p.role) + (p.linked ? '' : ' · ยังไม่ผูก LINE') })),
+            h('button', { class: 'btn ghost sm', onclick: function () { setViewAs({ pid: p.pid }); }, text: 'ดูมุมนี้' })));
+        });
+      }
+      draw(); add(pc, q, list); add($app, pc);
+    }, function (e) { fail(e, VIEWS.viewAs); });
   };
   // ตารางสิทธิ์ตามบทบาท (งานระบบ)
   VIEWS.roles = function () {
