@@ -471,3 +471,35 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .tl-body { min-width: 0; flex: 1; }
 .tl-lines { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
 .tl-lines li { margin: 2px 0; overflow-wrap: anywhere; }
+/* ---------- v1.8.1 สถานะการรายงานตามตารางเวร ---------- */
+.db h3 { margin-bottom: 6px; }
+.db .chips { margin-bottom: 6px; }
+.db-pick { display: inline-flex; align-items: center; gap: 4px; }
+.db .chips { align-items: center; }
+.db-pick { padding-top: 4px; padding-bottom: 4px; }
+.db-pick input { border: 0; background: transparent; font: inherit; font-size: 14px; padding: 0; margin: 0; width: 124px; min-width: 0; height: 26px; min-height: 0; line-height: 26px; color: inherit; box-shadow: none; }
+.db-key { font-size: 13px; color: #475569; margin-top: 8px; }
+.db-legend summary { cursor: pointer; font-weight: 600; }
+.db-legend[open] summary { margin-bottom: 4px; }
+.db-date-label { font-weight: 600; margin: 4px 0 2px; }
+.db-car { border: 1px solid #e2e8f0; border-left: 5px solid #cbd5e1; border-radius: 10px; padding: 8px 10px; margin: 6px 0; }
+.db-car.st-done { border-left-color: var(--green); } .db-car.st-due { border-left-color: #eab308; } .db-car.st-late { border-left-color: var(--red); } .db-car.st-wait, .db-car.st-void { border-left-color: #cbd5e1; }
+.db-head { margin-bottom: 4px; }
+.db-step { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px dashed #eef2f7; font-size: 14px; }
+.db-mine > .db-step { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; margin: 6px 0; }
+.db-step:first-of-type { border-top: 0; }
+.db-step .grow { min-width: 0; overflow-wrap: anywhere; }
+.db-step .btn { flex: none; }
+.db-ic { flex: none; width: 22px; text-align: center; }
+.st-done { color: #15803d; } .st-due { color: #a16207; } .st-late { color: var(--red); font-weight: 600; } .st-wait, .st-void { color: #64748b; }
+.db-step.st-done, .db-step.st-wait, .db-step.st-void { font-weight: 400; }
+.db-ok { color: #15803d; margin: 6px 0 0; }
+.db-sum { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; margin-bottom: 6px; }
+.db-tbl { display: grid; gap: 0; font-size: 13px; }
+.db-tr { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid #eef2f7; }
+.db-th { font-weight: 600; color: #475569; border-top: 0; }
+.db-cn { min-width: 0; } .db-cn small { display: block; overflow-wrap: anywhere; }
+.db-cell { min-width: 0; }
+.db-me { background: #f0f9ff; border-radius: 6px; }
+.db-legend { font-size: 13px; line-height: 1.6; margin-top: 10px; }
+.db-legend div { margin-top: 2px; }

@@ -381,9 +381,99 @@
   VIEWS.menu = VIEWS.home;
 
   // ======================= แท็บรายงาน =======================
+  // ---------- สถานะการรายงานตามตารางเวร (บนสุดของหน้า "รายงาน") ----------
+  // ✅ ทำแล้ว · 🟡 ถึงเวลาแล้ว · 🔴 เลยกำหนด · ⚪ ยังไม่ถึงเวลา · ➖ ยกเลิก — ของฉันมีปุ่มทำต่อ, ผู้ดูภาพรวมเห็นทั้งสถานี
+  var DB_ST = { done: ['✅', 'st-done'], due: ['🟡', 'st-due'], late: ['🔴', 'st-late'], wait: ['⚪', 'st-wait'], void: ['➖', 'st-void'] };
+  function dbWhen(at, base) { at = String(at || ''); var d = at.slice(0, 10); return (d && d !== base ? th(d) + ' ' : '') + hm(at) + ' น.'; }
+  function dbLate(due) { var t = new Date(String(due).slice(0, 19) + '+07:00').getTime(), m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m >= 60 ? Math.floor(m / 60) + ' ชม.' + (m % 60 ? ' ' + (m % 60) + ' นาที' : '') : m + ' นาที'; }
+  function dbStepText(kind, x, base) {
+    var w = kind === 'in' ? 'เข้าเวร' : 'ส่งเวร';
+    if (x.state === 'done') return w + (x.noResult ? ' (ไม่มีผล)' : '') + ' ' + dbWhen(x.at, base) + (x.by ? ' · ' + x.by : '');
+    if (x.state === 'due') return 'ถึงเวลา' + w + ' — รายงานภายใน ' + dbWhen(x.due, base);
+    if (x.state === 'late') return x.skipped ? 'ไม่ได้รายงานเข้าเวร (ส่งเวรแล้ว)' : 'เลยกำหนด' + w + ' ' + dbLate(x.due) + ' (กำหนด ' + dbWhen(x.due, base) + ')';
+    if (x.state === 'wait') return w + 'ได้ตั้งแต่ ' + dbWhen(x.from, base);
+    return 'ผลัดนี้ถูกยกเลิก';
+  }
+  function dutyBoardCard(container) {
+    // วันที่ "วันนี้" ใช้เวลาของเซิร์ฟเวอร์ (โหลดครั้งแรกไม่ส่งวันที่) — กันเครื่องตั้งเวลาไม่ตรง
+    var t = today(), y = addDays(t, -1), sel = null, chips = h('div', { class: 'chips' }), body = h('div');
+    var dateIn = h('input', { type: 'date', class: 'db-date', max: addDays(t, 1), min: addDays(t, -31), value: t });
+    function setToday(d) { if (d && d !== t) { t = d; y = addDays(t, -1); dateIn.max = addDays(t, 1); dateIn.min = addDays(t, -31); } if (!sel) { sel = t; dateIn.value = t; } rc(); }
+    function rc() {
+      clear(chips);
+      [['วันนี้', t], ['เมื่อวาน', y]].forEach(function (x) { add(chips, h('button', { class: 'chip' + (sel === x[1] ? ' on' : ''), onclick: function () { sel = x[1]; dateIn.value = sel; rc(); load(); }, text: x[0] })); });
+      add(chips, h('label', { class: 'chip db-pick' + (sel !== t && sel !== y ? ' on' : '') }, '📅 ', dateIn));
+    }
+    dateIn.onchange = function () { if (dateIn.value) { sel = dateIn.value; rc(); load(); } };
+    add(container, h('div', { class: 'card db' }, h('h3', null, '📋 สถานะการรายงานตามตารางเวร'), chips, body));
+    function stepRow(kind, x, base, act) {
+      var st = DB_ST[x.state] || DB_ST.wait, row = h('div', { class: 'db-step ' + st[1] }, h('span', { class: 'db-ic', text: st[0] }), h('span', { class: 'grow', text: dbStepText(kind, x, base) }));
+      if (act && (x.state === 'due' || x.state === 'late') && !x.skipped) add(row, h('button', { class: 'btn sm ' + (x.state === 'late' ? 'red' : 'amber'), onclick: act, text: (kind === 'in' ? 'เข้าเวร' : 'ส่งเวร') + 'เลย ›' }));
+      return row;
+    }
+    function worst(c) { var r = ['late', 'due', 'wait', 'done', 'void'], ss = [c.checkin.state, c.checkout.state, c.escort ? c.escort.state : 'done']; for (var i = 0; i < r.length; i++) if (ss.indexOf(r[i]) >= 0) return r[i]; return 'done'; }
+    function load() {
+      clear(body); add(body, h('div', { class: 'loading' }, spinner()));
+      api('duty.board', sel ? { date: sel } : {}, { fresh: true }).then(function (b) {
+        setToday(b.today);
+        clear(body);
+        add(body, h('div', { class: 'db-date-label', text: th(b.date) + (b.date === t ? ' (วันนี้)' : b.date === y ? ' (เมื่อวาน)' : '') }));
+        // ของฉัน
+        var mine = [], todo = 0;
+        b.shifts.forEach(function (s) { s.cars.forEach(function (c) { if (c.mine) mine.push([s, c]); }); });
+        var me = h('div', { class: 'db-mine' }); add(body, h('div', { class: 'section-label', text: '👤 ของฉัน' }), me);
+        if (!mine.length) add(me, h('p', { class: 'muted small', text: 'ไม่มีเวรของท่านตามตารางใน' + (b.date === t ? 'วันนี้' : 'วันที่เลือก') }));
+        mine.forEach(function (sc) {
+          var s = sc[0], c = sc[1], q = { d: b.date, s: s.shift, car: c.car }, wst = worst(c);
+          if (wst === 'late' || wst === 'due') todo++;
+          var blk = h('div', { class: 'db-car ' + DB_ST[wst][1] }, h('div', { class: 'db-head' }, h('b', { text: SHIFT[s.shift].icon + ' ผลัด' + SHIFT[s.shift].label + ' · รถ ' + c.car + ' · เขต ' + c.zone }),
+            h('div', { class: 'small muted', text: c.crew.join(', ') })),
+            stepRow('in', c.checkin, b.date, function () { go('checkin', q); }), stepRow('out', c.checkout, b.date, function () { go('checkout', q); }));
+          if (c.escort) add(blk, h('div', { class: 'db-step ' + DB_ST[c.escort.state][1] }, h('span', { class: 'db-ic', text: '🟠' }), h('span', { class: 'grow', text: 'ว.42 "' + c.escort.name + '" ยังไม่กดจบขบวน' }),
+            h('button', { class: 'btn sm amber', onclick: function () { go('escort'); }, text: 'จบขบวน ›' })));
+          add(me, blk);
+        });
+        b.cases.forEach(function (k) {
+          todo += k.status === 'returned' ? 1 : 0;
+          add(me, h('div', { class: 'db-step ' + (k.status === 'returned' ? 'st-late' : 'st-due') }, h('span', { class: 'db-ic', text: k.status === 'returned' ? '🔴' : '🟡' }),
+            h('span', { class: 'grow', text: (k.status === 'returned' ? 'คดีถูกส่งกลับให้แก้: ' : 'คดีรออนุมัติ: ') + k.title + ' (' + th(k.date) + ')' + (k.note ? ' — ' + k.note : '') }),
+            h('button', { class: 'btn sm ' + (k.status === 'returned' ? 'red' : 'ghost'), onclick: function () { go(k.status === 'returned' ? 'arrest' : 'case', { id: k.id }); }, text: k.status === 'returned' ? 'แก้คดี ›' : 'เปิดคดี ›' })));
+        });
+        if (b.toApprove) add(me, h('div', { class: 'db-step st-due' }, h('span', { class: 'db-ic', text: '🟡' }), h('span', { class: 'grow', text: 'มีคดีรอท่านตรวจ/อนุมัติ ' + b.toApprove + ' คดี' }),
+          h('button', { class: 'btn sm amber', onclick: function () { go('cases'); }, text: 'ตรวจคดี ›' })));
+        if (mine.length && !todo) add(me, h('p', { class: 'db-ok', text: '👍 ไม่มีรายการค้าง' }));
+        // ทั้งสถานี
+        if (b.all) {
+          add(body, h('div', { class: 'section-label', text: '🏢 ทั้งสถานี' + (b.zone ? ' (เขต ' + b.zone + ')' : '') }));
+          b.shifts.forEach(function (s) {
+            var n = s.count, sc = card(SHIFT[s.shift].icon + ' ผลัด' + SHIFT[s.shift].label + ' ' + hm(s.start).replace(':', '.') + '–' + hm(s.end).replace(':', '.') + ' น.');
+            add(sc, h('div', { class: 'db-sum' }, h('span', { text: 'เข้าเวร ' + n.checkin + '/' + n.cars }), h('span', { text: 'ส่งเวร ' + n.checkout + '/' + n.cars }),
+              n.late ? h('span', { class: 'st-late', text: '🔴 เลยกำหนด ' + n.late }) : null, n.due ? h('span', { class: 'st-due', text: '🟡 ถึงเวลา ' + n.due }) : null));
+            if (!s.cars.length) add(sc, h('p', { class: 'muted small', text: 'ไม่มีรถในตารางเวรผลัดนี้' }));
+            var tb = h('div', { class: 'db-tbl' }, h('div', { class: 'db-tr db-th' }, h('span', { text: 'รถ / ลูกเรือ' }), h('span', { text: 'เข้าเวร' }), h('span', { text: 'ส่งเวร' })));
+            s.cars.forEach(function (c) {
+              function cell(x) { var st = DB_ST[x.state] || DB_ST.wait; return h('span', { class: 'db-cell ' + st[1] }, st[0] + ' ' + (x.state === 'done' ? hm(x.at) + (x.noResult ? ' ไม่มีผล' : '') : x.state === 'late' ? (x.skipped ? 'ไม่ได้รายงาน' : 'เลยกำหนด') : x.state === 'due' ? 'ถึงเวลา' : x.state === 'wait' ? 'ยังไม่ถึง' : 'ยกเลิก')); }
+              add(tb, h('div', { class: 'db-tr' + (c.mine ? ' db-me' : '') }, h('span', { class: 'db-cn' }, h('b', { text: 'เขต ' + c.zone + ' · ' + c.car }), c.escort ? h('span', { class: 'st-due', text: ' 🟠 ว.42 ค้าง' }) : null,
+                h('small', { class: 'muted', text: c.crew.join(', ') })), cell(c.checkin), cell(c.checkout)));
+            });
+            add(sc, tb); add(body, sc);
+          });
+        }
+        var r = b.rules;
+        add(body, h('div', { class: 'db-key' }, '✅ ทำแล้ว · 🟡 ถึงเวลา ทำทันที · 🔴 เลยกำหนด · ⚪ ยังไม่ถึงเวลา'));
+        add(body, h('details', { class: 'note db-legend' }, h('summary', { text: 'ℹ️ คำแนะนำ: ต้องทำอะไรบ้าง' }),
+          h('div', { text: '✅ ทำแล้ว (แสดงเวลาและผู้รายงาน) · ⚪ ยังไม่ถึงเวลา · ➖ ผลัดถูกยกเลิก' }),
+          h('div', { text: '🟡 ถึงเวลาแล้ว ให้รายงานทันที — เข้าเวรได้ตั้งแต่ ' + r.early + ' นาทีก่อนเริ่มผลัด และภายใน ' + r.checkin + ' นาทีหลังเริ่มผลัด · ส่งเวรภายใน ' + (r.checkout / 60) + ' ชม. หลังจบผลัด' }),
+          h('div', { text: '🔴 เลยกำหนด ให้รีบรายงาน (ถ้าส่งไม่ได้ให้แจ้งธุรการ) — ผลัดที่ไม่ส่งเวรอาจถูกหักคะแนนตามเกณฑ์ · 🟠 ว.42 ที่ยังไม่กดจบ ให้กด "จบขบวน" เมื่อส่งต่อแล้ว' }),
+          h('div', { text: 'ผลัดกลางวัน ' + String(r.D.start).padStart(2, '0') + '.00–' + r.D.end + '.00 น. · ผลัดกลางคืน ' + r.N.start + '.00–' + String(r.N.end - 24).padStart(2, '0') + '.00 น. (นับเป็นวันที่เริ่มผลัด) · รายชื่อตามตารางเวรและการสลับเวร' })));
+      }, function (e) { clear(body); add(body, errorBox(e.message)); });
+    }
+    load();
+  }
   VIEWS.report = function () {
     setTitle('📝 รายงาน', 'เลือกสิ่งที่จะรายงาน');
     clear($app);
+    if (can('report.own')) dutyBoardCard($app);
     function tile(ic, color, title, sub, view) { return h('button', { class: 'tile', onclick: function () { go(view); } }, h('span', { class: 'ic', style: 'background:' + color, text: ic }), h('b', { text: title }), sub ? h('small', { text: sub }) : null); }
     if (can('report.own')) {
       add($app, h('div', { class: 'section-label', text: 'ประจำผลัด' }), h('div', { class: 'tiles' },
