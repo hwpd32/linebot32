@@ -1569,8 +1569,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (!tokenOk()) { const e = new Error('การเข้าสู่ระบบ LINE หมดอายุ'); e.code = 'AUTH'; throw e; }
     let j;
     try {
-      const r = await fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, data: data || {}, idToken: B.idToken }) });
-      j = await r.json();
+      const ac = root.AbortController ? new AbortController() : null, to = ac && setTimeout(() => ac.abort(), 120000);
+      try {
+        const r = await fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, data: data || {}, idToken: B.idToken }), signal: ac ? ac.signal : undefined });
+        j = await r.json();
+      } finally { if (to) clearTimeout(to); }
     } catch (e) { throw new Error('เชื่อมต่อระบบรายงานผลไม่ได้ชั่วคราว (อินเทอร์เน็ตหรือเซิร์ฟเวอร์)'); }
     if (!j.ok) { const e = new Error(j.error || 'ส่งไม่สำเร็จ'); e.code = j.code; throw e; }
     return j.data;
@@ -1632,6 +1635,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
     saveQueue().then(flush);
   }
+  // ส่ง 1 ชุด — ถ้าเชื่อมต่อสะดุดชั่วคราว ลองใหม่อีก 2 ครั้ง (3 วิ, 10 วิ) ก่อนรอรอบถัดไป
+  async function sendBatch(batch) {
+    const waits = [3000, 10000];
+    for (let t = 0; ; t++) {
+      try { return await api('fine.ingest', { days: batch }); }
+      catch (e) { if (e.code || t >= waits.length) throw e; await new Promise(r => setTimeout(r, waits[t])); }
+    }
+  }
   async function flush() {
     if (B.sending) return;
     if (!B.can || B.state !== 'ok') return paint();
@@ -1641,7 +1652,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     try {
       for (let i = 0; i < dates.length; i += 5) {
         const batch = dates.slice(i, i + 5).map(d => B.queue[d]).filter(Boolean);
-        await api('fine.ingest', { days: batch });
+        await sendBatch(batch);
         batch.forEach(p => { if (B.queue[p.date] === p) delete B.queue[p.date]; });
         await saveQueue();
       }
@@ -1650,9 +1661,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       B.err = e.message || String(e);
       if (e.code === 'AUTH') B.state = 'expired';
       else if (e.code === 'PERM') { B.can = false; B.state = 'noperm'; }
-      else B.retryT = setTimeout(flush, 60000);
+      else B.retryT = setTimeout(flush, 30000);
     } finally { B.sending = false; }
     paint();
+    // มีรายการเข้าคิวระหว่างกำลังส่ง → ส่งต่อทันที
+    if (!B.err && Object.keys(B.queue).length) { setTimeout(flush, 500); return; }
     if (!B.err) refreshStatus();
   }
 
