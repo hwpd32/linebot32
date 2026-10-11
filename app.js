@@ -93,6 +93,8 @@
     return withTimeout(req, CFG.API_TIMEOUT_MS || 30000, 'ระบบตอบช้าเกินไป (เกิน 30 วินาที) กรุณากดลองใหม่').then(null, function (e) { if (ctl && e.code === 'TIMEOUT') ctl.abort(); throw e; })
       .then(function (r) { return r.json().catch(function () { throw new Error('ระบบตอบกลับผิดรูปแบบ (HTTP ' + r.status + ') กรุณาลองใหม่'); }); }, function (e) { if (e.code === 'TIMEOUT') throw e; throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสัญญาณแล้วลองใหม่'); })
       .then(function (j) {
+        // คำขอถูกเปลี่ยนเป็น GET ระหว่างทาง (ได้คำตอบ health แทน) = ระบบยังไม่ได้ทำรายการ → แจ้งให้ลองใหม่ ไม่ถือว่าสำเร็จ
+        if (j && j.app && j.version && !('data' in j) && !j.error) throw new Error('การเชื่อมต่อสะดุด ระบบยังไม่ได้รับรายการ กรุณากดลองใหม่');
         if (j.ok) return j.data;
         if (j.code === 'AUTH' && window.liff && liff.isLoggedIn()) { try { liff.logout(); if (!liff.isInClient()) liff.login({ redirectUri: location.href }); } catch (x) { } }
         var e = new Error(j.error || 'เกิดข้อผิดพลาด'); e.code = j.code; throw e;
@@ -450,7 +452,7 @@
             add(sc, h('div', { class: 'db-sum' }, h('span', { text: 'เข้าเวร ' + n.checkin + '/' + n.cars }), h('span', { text: 'ส่งเวร ' + n.checkout + '/' + n.cars }),
               n.late ? h('span', { class: 'st-late', text: '🔴 เลยกำหนด ' + n.late }) : null, n.due ? h('span', { class: 'st-due', text: '🟡 ถึงเวลา ' + n.due }) : null));
             if (!s.cars.length) add(sc, h('p', { class: 'muted small', text: 'ไม่มีรถในตารางเวรผลัดนี้' }));
-            var tb = h('div', { class: 'db-tbl' }, h('div', { class: 'db-tr db-th' }, h('span', { text: 'รถ / ลูกเรือ' }), h('span', { text: 'เข้าเวร' }), h('span', { text: 'ส่งเวร' })));
+            var tb = h('div', { class: 'db-tbl' }, h('div', { class: 'db-tr db-th' }, h('span', { text: 'รถ / เจ้าหน้าที่' }), h('span', { text: 'เข้าเวร' }), h('span', { text: 'ส่งเวร' })));
             s.cars.forEach(function (c) {
               function cell(x) { var st = DB_ST[x.state] || DB_ST.wait; return h('span', { class: 'db-cell ' + st[1] }, st[0] + ' ' + (x.state === 'done' ? hm(x.at) + (x.noResult ? ' ไม่มีผล' : '') : x.state === 'late' ? (x.skipped ? 'ไม่ได้รายงาน' : 'เลยกำหนด') : x.state === 'due' ? 'ถึงเวลา' : x.state === 'wait' ? 'ยังไม่ถึง' : 'ยกเลิก')); }
               add(tb, h('div', { class: 'db-tr' + (c.mine ? ' db-me' : '') }, h('span', { class: 'db-cn' }, h('b', { text: 'เขต ' + c.zone + ' · ' + c.car }), c.escort ? h('span', { class: 'st-due', text: ' 🟠 ว.42 ค้าง' }) : null,
@@ -520,7 +522,7 @@
       var b = h('div', { class: 'wk-det' }), q = { d: d, s: r.shift, car: r.car };
       function line(ic, txt, cls) { return h('div', { class: 'db-step ' + (cls || '') }, h('span', { class: 'db-ic', text: ic }), h('span', { class: 'grow', text: txt })); }
       function when(at) { return hm(at) + ' น.' + (String(at).slice(0, 10) !== d ? ' (' + th(String(at).slice(0, 10)) + ')' : ''); }
-      add(b, h('p', { class: 'muted small', style: 'margin:0 0 6px', text: '👥 ' + (c.crew.join(', ') || 'ไม่มีรายชื่อลูกเรือ') + (r.zone ? ' · เขต ' + r.zone : '') }));
+      add(b, h('p', { class: 'muted small', style: 'margin:0 0 6px', text: '👥 ' + (c.crew.join(', ') || 'ไม่มีรายชื่อเจ้าหน้าที่') + (r.zone ? ' · เขต ' + r.zone : '') }));
       if (c.st === 'void') add(b, line('➖', 'ผลัดนี้ถูกยกเลิก'));
       else {
         add(b, line(c.in ? '✅' : c.phase === 'wait' ? '⚪' : '🔴', c.in ? 'เข้าเวร ' + when(c.in.at) + (c.in.by ? ' · ' + c.in.by : '') : c.phase === 'wait' ? 'ยังไม่ถึงเวลาเข้าเวร' : 'ไม่ได้กดเข้าเวร', c.in ? 'st-done' : ''));
@@ -545,7 +547,7 @@
         add(b, el);
       });
       if (c.can && c.out && c.canBack) add(b, h('button', { class: 'btn ghost block', style: 'margin-top:10px', onclick: function () { closeModal(); go('checkout', q); }, text: '✏️ เพิ่ม/แก้ผลการปฏิบัติของผลัดนี้' }));
-      if (!c.can && fixable) add(b, h('p', { class: 'muted small', style: 'margin:8px 0 0', text: 'ผลัดนี้ไม่ใช่ของท่าน — แจ้งลูกเรือของรถคันนี้ หรือธุรการ (ผู้มีสิทธิ์แก้รายงานผู้อื่น) ให้รายงานให้ครบ' }));
+      if (!c.can && fixable) add(b, h('p', { class: 'muted small', style: 'margin:8px 0 0', text: 'ผลัดนี้ไม่ใช่ของท่าน — แจ้งเจ้าหน้าที่ของรถคันนี้ หรือธุรการ (ผู้มีสิทธิ์แก้รายงานผู้อื่น) ให้รายงานให้ครบ' }));
       if (c.can && !c.canBack && fixable) add(b, h('p', { class: 'muted small', style: 'margin:8px 0 0', text: 'เกิน ' + data.backDays + ' วันแล้ว ต้องให้ธุรการบันทึกแทน' }));
       modal(SHIFT[r.shift].icon + ' ' + wd(d) + ' ' + th(d) + ' · ผลัด' + SHIFT[r.shift].label + ' · รถ ' + r.car, b);
     }
@@ -559,7 +561,7 @@
       add(body.parentNode, h('details', { class: 'note db-legend' }, h('summary', { text: 'ℹ️ ความหมาย' }),
         h('div', { text: '✅ เข้าเวรและส่งเวรครบตามเวลา · 🔴 ไม่ได้เข้าเวร/ไม่ได้ส่งเวร · 🟠 ไม่สมบูรณ์: ส่งเวรช้า (เกิน ' + (w.rules.checkout / 60) + ' ชม. หลังจบผลัด) ว.42 ไม่กดจบ หรือคดีรออนุมัติ/ถูกส่งกลับ · 🔵 กำลังปฏิบัติ · ⚪ ยังไม่ถึงเวลา · ➖ ยกเลิกผลัด' }),
         h('div', { text: 'ตัวเลขในช่อง = ผลรวมที่รายงานในผลัดนั้น (ใบสั่ง ตักเตือน ตรวจรถ ช่วยเหลือ จับกุม ว.42 ภารกิจ) · แตะช่องเพื่อดูรายละเอียด' }),
-        h('div', { text: 'ลูกเรือส่งเข้าเวร/ส่งเวรย้อนหลังเองได้ภายใน ' + w.backDays + ' วัน (ระบบบันทึกว่าส่งช้า) · เกินนั้นหรือผลัดของผู้อื่นให้ธุรการบันทึกแทน' })));
+        h('div', { text: 'เจ้าหน้าที่ส่งเข้าเวร/ส่งเวรย้อนหลังเองได้ภายใน ' + w.backDays + ' วัน (ระบบบันทึกว่าส่งช้า) · เกินนั้นหรือผลัดของผู้อื่นให้ธุรการบันทึกแทน' })));
     }, function (e) { clear(body); add(body, errorBox(e.message)); });
   }
 
@@ -570,7 +572,7 @@
     function tile(ic, color, title, sub, view) { return h('button', { class: 'tile', onclick: function () { go(view); } }, h('span', { class: 'ic', style: 'background:' + color, text: ic }), h('b', { text: title }), sub ? h('small', { text: sub }) : null); }
     if (can('report.own')) {
       add($app, h('div', { class: 'section-label', text: 'ประจำผลัด' }), h('div', { class: 'tiles' },
-        tile('▶', 'var(--green)', 'เข้าเวร', 'ยืนยันลูกเรือ/อุปกรณ์', 'checkin'),
+        tile('▶', 'var(--green)', 'เข้าเวร', 'ยืนยันเจ้าหน้าที่/อุปกรณ์', 'checkin'),
         tile('✓', 'var(--blue)', 'ส่งเวร', 'ใบสั่งและผลการปฏิบัติ', 'checkout'),
         tile('🚔', 'var(--amber)', 'ว.42', 'นำขบวน เริ่ม/จบ', 'escort'),
         tile('🤝', 'var(--teal)', 'ช่วยเหลือ', 'ว.18 ว.40 เหตุการณ์', 'assist'),
@@ -601,7 +603,7 @@
       can('view.suspect') ? rowLink('🔎', 'ค้นหาผู้ต้องหา', 'ชื่อ / เลขบัตร / เบอร์ — ทุกการค้นหาถูกบันทึก', function () { go('suspects'); }) : null,
       can('pr.make') ? rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'prompt + เบลอรูป', function () { go('pr'); }) : null]);
     group('ตารางเวรและรายงาน', [
-      rowLink('📅', 'ภาพสรุปผลประจำวัน', 'ตารางรายรถแยกผลัด · การรายงาน · หมายเหตุ · สะสมเดือน (ไม่ใช้คะแนน)', function () { go('daily'); }),
+      rowLink('📅', 'ภาพสรุปผลประจำวัน', 'ตารางรายรถแยกผลัด · หมายเหตุ · สะสมวงรอบ (ไม่ใช้คะแนน)', function () { go('daily'); }),
       rowLink('📊', 'ภาพรายงานผู้บังคับบัญชา', 'Dashboard รายวัน/วงรอบ/เดือน · ส่งภาพ + ข้อความเข้าไลน์', function () { go('dash'); }),
       can('view.now') ? rowLink('🗓', 'ตารางเวร', 'ใครเข้าผลัดไหน · สลับเวร', function () { go('roster'); }) : null,
       can('export') ? rowLink('⬇️', 'ส่งออก', 'Excel สถิติ · ข้อความ บก.ทล.', function () { go('export'); }) : null]);
@@ -834,10 +836,10 @@
     return wrap;
   }
 
-  // ======================= ส่วนประกอบ: ลูกเรือ =======================
+  // ======================= ส่วนประกอบ: เจ้าหน้าที่ =======================
   var ROLES = ['พลขับ', 'พงว.', 'ประจำรถ', 'ผบ.รถ', 'แทน', 'เสริม'];
   function crewEditor(expected, existing) {
-    var box = card('👮 ลูกเรือ', 'ติ๊กเฉพาะคนที่ขึ้นรถจริง');
+    var box = card('👮 เจ้าหน้าที่', 'ติ๊กเฉพาะคนที่ขึ้นรถจริง');
     var rows = [];
     var base = existing && existing.length ? existing.map(function (c) { return { pid: c.pid, role: c.role, on: true }; }) : [];
     (expected || []).forEach(function (c) {
@@ -859,7 +861,7 @@
     }
     render();
     add(box, list, h('button', { class: 'btn ghost sm', style: 'margin-top:8px', onclick: function () {
-      pickPerson('เพิ่มลูกเรือ', function (p) { if (!base.some(function (b) { return b.pid === p.pid; })) base.push({ pid: p.pid, role: 'แทน', on: true }); render(); box.dispatchEvent(new Event('crewchange')); });
+      pickPerson('เพิ่มเจ้าหน้าที่', function (p) { if (!base.some(function (b) { return b.pid === p.pid; })) base.push({ pid: p.pid, role: 'แทน', on: true }); render(); box.dispatchEvent(new Event('crewchange')); });
     }, text: '➕ เพิ่มคน (มาแทน/เสริม)' }));
     box.getCrew = function () { return base.filter(function (c) { return c.on; }).map(function (c) { return { pid: c.pid, role: c.role || 'ประจำรถ' }; }); };
     return box;
@@ -913,7 +915,7 @@
       cur = sel; clear(body); add(body, h('div', { class: 'loading' }, spinner()), skeleton(2));
       api('shift.get', { dutyDate: sel.dutyDate, shift: sel.shift, car: sel.car }).then(function (g) {
         clear(body);
-        if (g.record && g.record.checkinAt) add(body, h('div', { class: 'note', text: 'ผลัดนี้กดเข้าเวรแล้วเมื่อ ' + hm(g.record.checkinAt) + ' น. — บันทึกอีกครั้งเพื่อแก้ลูกเรือ/อุปกรณ์' }));
+        if (g.record && g.record.checkinAt) add(body, h('div', { class: 'note', text: 'ผลัดนี้กดเข้าเวรแล้วเมื่อ ' + hm(g.record.checkinAt) + ' น. — บันทึกอีกครั้งเพื่อแก้เจ้าหน้าที่/อุปกรณ์' }));
         crewBox = crewEditor(g.expected, g.record && g.record.crew);
         // รายการตรวจ 3 ข้อ (ค่าตั้งต้นปกติ) — ติ๊กออกแล้วพิมพ์สิ่งที่ไม่ปกติแทน
         var ckBox = card('📋 รายการตรวจ', 'ติ๊กออกถ้าไม่ปกติ แล้วพิมพ์รายละเอียด');
@@ -996,7 +998,7 @@
     function renderTickets() {
       clear(ticketsCard); add(ticketsCard, h('h3', null, '🧾 ใบสั่ง', h('span', { class: 'right', text: 'เลือกผู้ออก แล้วกด + ตามความผิด' })));
       var crew = crewBox ? crewBox.getCrew() : [];
-      if (!crew.length) { add(ticketsCard, h('p', { class: 'muted', text: 'ติ๊กลูกเรือก่อน' })); updateBar(); return; }
+      if (!crew.length) { add(ticketsCard, h('p', { class: 'muted', text: 'ติ๊กเจ้าหน้าที่ก่อน' })); updateBar(); return; }
       if (!issuer || !crew.some(function (c) { return c.pid === issuer; })) issuer = crew[0].pid;
       var who = h('div', { class: 'chips', style: 'margin-bottom:10px' });
       crew.forEach(function (c) {
@@ -1037,7 +1039,7 @@
       var crew = crewBox.getCrew(), tickets = [];
       Object.keys(state.tickets).forEach(function (pid) {
         Object.keys(state.tickets[pid]).forEach(function (code) {
-          if (!crew.some(function (c) { return c.pid === pid; })) throw new Error(person(pid).short + ' ไม่ได้อยู่ในลูกเรือ แต่มีใบสั่ง — ติ๊กชื่อหรือลบใบสั่ง');
+          if (!crew.some(function (c) { return c.pid === pid; })) throw new Error(person(pid).short + ' ไม่ได้อยู่ในเจ้าหน้าที่ แต่มีใบสั่ง — ติ๊กชื่อหรือลบใบสั่ง');
           tickets.push({ pid: pid, code: code, count: state.tickets[pid][code] });
         });
       });
@@ -1061,7 +1063,7 @@
       act.forEach(function (e) {
         var rt = h('input', { type: 'checkbox' }), ho = h('input', { placeholder: 'ส่งต่อให้ (เช่น ส.ทล.3)' }), res = h('input', { placeholder: 'ผล/หมายเหตุ เช่น ถึงปลายทางปลอดภัย (ไม่บังคับ)' });
         add(c, h('div', { class: 'list-item', style: 'display:block' }, h('b', { text: '🚔 ' + e.car + ' · ' + e.sub + (e.payload.name ? ' · ' + e.payload.name : '') }),
-          h('div', { class: 'muted small', text: 'เริ่ม ' + (e.payload.start ? th(e.payload.start.slice(0, 10)) + ' ' + hm(e.payload.start) + ' น.' : '') + (myCars.indexOf(String(e.car)) < 0 ? ' · กดจบแทนลูกเรือได้ (ผู้ดูแล)' : '') }), h('label', { class: 'cap' }, rt, 'ไป-กลับ (นับ 2 ขบวน)'), ho, res,
+          h('div', { class: 'muted small', text: 'เริ่ม ' + (e.payload.start ? th(e.payload.start.slice(0, 10)) + ' ' + hm(e.payload.start) + ' น.' : '') + (myCars.indexOf(String(e.car)) < 0 ? ' · กดจบแทนเจ้าหน้าที่ได้ (ผู้ดูแล)' : '') }), h('label', { class: 'cap' }, rt, 'ไป-กลับ (นับ 2 ขบวน)'), ho, res,
           h('div', { style: 'margin-top:8px' }, submitBtn('🏁 จบขบวน', 'amber block', function () {
             return api('escort.end', { eventId: e.id, roundTrip: rt.checked, handoverTo: ho.value, result: res.value }).then(function (r) { S.boot.activeEscorts = S.boot.activeEscorts.filter(function (x) { return x.id !== e.id; }); done('จบขบวนแล้ว', r.message, { next: 'escort' }); });
           }))));
@@ -1171,7 +1173,7 @@
     var timer = null; function autosave() { clearTimeout(timer); timer = setTimeout(save, 600); }
     function inp(key, attrs) { var el = h(attrs && attrs.tag || 'input', Object.assign({ value: f[key] == null ? '' : String(f[key]) }, attrs || {})); el.oninput = function () { f[key] = el.value; autosave(); }; return el; }
     if (fromDraft) add($app, h('div', { class: 'note' }, 'กู้คืนร่างที่กรอกค้างไว้แล้ว ', h('button', { class: 'btn ghost sm', onclick: function () { Draft.del('arrest'); VIEWS.arrest(params); }, text: 'เริ่มใหม่' })));
-    // รถ/ผลัด: ตั้งต้นจากผลัดปัจจุบันของผู้รายงาน และเติมชุดจับกุมจากลูกเรือ
+    // รถ/ผลัด: ตั้งต้นจากผลัดปัจจุบันของผู้รายงาน และเติมชุดจับกุมจากเจ้าหน้าที่
     var m = (S.boot.myShifts || []).filter(function (x) { return params.car ? x.car === params.car && x.dutyDate === params.d : x.state === 'เข้าเวร' || (x.dutyDate === S.boot.current.dutyDate && x.shift === S.boot.current.shift); })[0];
     if (m && !editing) f.car = m.car;
     // 1) ประเภท
@@ -1514,7 +1516,7 @@
             h('div', { class: 'small muted', text: [e.from && e.to ? e.from + ' → ' + e.to : e.from || e.to, e.start ? 'เริ่ม ' + th(e.start.slice(0, 10)) + ' ' + hm(e.start) + ' น.' : ''].filter(Boolean).join(' · ') })),
             mayEnd ? h('button', { class: 'btn amber sm', onclick: function () { go('escort'); }, text: '🏁 จบขบวน' }) : null));
         });
-        add(ec, h('p', { class: 'muted small', text: 'ลูกเรือ และหัวหน้าสถานี/จ่ากอง/เจ้าหน้าที่รายงาน/แอดมิน กดจบได้ · ถ้าไม่มีใครกด ระบบปิดเองเมื่อพ้นผลัด 2 ชม.' }));
+        add(ec, h('p', { class: 'muted small', text: 'เจ้าหน้าที่ และหัวหน้าสถานี/จ่ากอง/เจ้าหน้าที่รายงาน/แอดมิน กดจบได้ · ถ้าไม่มีใครกด ระบบปิดเองเมื่อพ้นผลัด 2 ชม.' }));
         add($app, ec);
       }
       var zc = card('🚓 รถใน' + SHIFT[n.shift].label + 'นี้', n.cars.filter(function (c) { return c.status === 'done' || c.status === 'noresult'; }).length + '/' + n.cars.length + ' ส่งเวรแล้ว');
@@ -1569,13 +1571,13 @@
     return d ? h('span', { class: 'dl ' + (d > 0 ? 'up' : 'dn'), text: (d > 0 ? '▲' : '▼') + Math.abs(d) }) : null;
   }
   function activeCars(list) { return (list || []).filter(function (c) { return c.shifts || c.arrest || c.ticket || c.escort || c.assist || c.checks || c.score; }); }
-  /** ตารางรายคัน (จัดกลุ่มตามเขต) — compact = หน้าแรก (คอลัมน์หลัก), เต็ม = หน้าสรุปผล (ผลัด ฐานความผิด ลูกเรือ ต่อผลัด) */
+  /** ตารางรายคัน (จัดกลุ่มตามเขต) — compact = หน้าแรก (คอลัมน์หลัก), เต็ม = หน้าสรุปผล (ผลัด ฐานความผิด เจ้าหน้าที่ ต่อผลัด) */
   function boardTable(cars, opts) {
     opts = opts || {}; cars = activeCars(cars);
     if (!cars.length) return h('p', { class: 'muted small', text: 'ยังไม่มีข้อมูลรายรถในช่วงนี้' });
     var cols = opts.compact
       ? [['รถ', 'car'], ['อาญา', 'arrest', 1], ['จราจร', 'ticket', 1], ['ว.42', 'escort', 1], ['ช่วยเหลือ', 'assist', 1], ['คะแนน', 'score', 1]]
-      : [['รถ', 'car'], ['ผลัด', 'shifts'], ['อาญา', 'arrest', 1], ['ฐานความผิด', 'crimes'], ['จราจร', 'ticket', 1], ['ว.42', 'escort', 1], ['ช่วยเหลือ', 'assist', 1], ['คะแนน', 'score', 1], ['ต่อผลัด', 'perShift', 1], ['ลูกเรือ', 'crew']];
+      : [['รถ', 'car'], ['ผลัด', 'shifts'], ['อาญา', 'arrest', 1], ['ฐานความผิด', 'crimes'], ['จราจร', 'ticket', 1], ['ว.42', 'escort', 1], ['ช่วยเหลือ', 'assist', 1], ['คะแนน', 'score', 1], ['ต่อผลัด', 'perShift', 1], ['เจ้าหน้าที่', 'crew']];
     var max = {}; cols.forEach(function (k) { if (k[2]) max[k[1]] = Math.max.apply(null, cars.map(function (c) { return +c[k[1]] || 0; }).concat([1])); });
     var t = h('table', { class: 't bt' }), hr = h('tr'); cols.forEach(function (k) { add(hr, h('th', { text: k[0] })); }); add(t, h('thead', null, hr));
     var tb = h('tbody'), z = null, zn = S.boot.zones || {};
@@ -1760,7 +1762,7 @@
     if (s.board) {
       var bc = card('🚓 คะแนนผลงานรายรถ', '▲▼ เทียบ ' + th(s.board.prev.from) + (s.board.prev.to !== s.board.prev.from ? ' – ' + th(s.board.prev.to) : ''));
       add(bc, carScoreList(s.board.cars),
-        h('details', { style: 'margin-top:10px' }, h('summary', { class: 'small', text: '📋 ตารางละเอียดรายรถ (ผลัด · ฐานความผิด · ลูกเรือ · ต่อผลัด)' }), boardTable(s.board.cars),
+        h('details', { style: 'margin-top:10px' }, h('summary', { class: 'small', text: '📋 ตารางละเอียดรายรถ (ผลัด · ฐานความผิด · เจ้าหน้าที่ · ต่อผลัด)' }), boardTable(s.board.cars),
           h('p', { class: 'small muted', style: 'margin:6px 0 0', text: 'คดีจับร่วมนับให้ทุกคันที่ร่วม · (ตัวเลข) หลังชื่อ = จำนวนผลัดที่ขึ้นรถคันนั้น · ต่อผลัด = คะแนน ÷ ผลัด' })),
         s.board.criteria ? h('p', { class: 'small muted', style: 'margin:4px 0 0', text: weightNote(s.board.criteria) }) : null);
       add(out, markZeros(bc));
@@ -1885,7 +1887,7 @@
         var q = { d: r.dutyDate, s: r.shift, car: r.car };
         if (r.status === 'ส่งเวร' || r.status === 'ไม่มีผล') return go('checkout', q);
         return modal('แก้ไขผลัดนี้', [h('p', { class: 'muted', text: 'เลือกสิ่งที่ต้องการแก้' }),
-          h('button', { class: 'btn block', style: 'margin-bottom:8px', onclick: function () { closeModal(); go('checkin', q); }, text: '🟢 แก้ลูกเรือ/รายการตรวจ (เข้าเวร)' }),
+          h('button', { class: 'btn block', style: 'margin-bottom:8px', onclick: function () { closeModal(); go('checkin', q); }, text: '🟢 แก้เจ้าหน้าที่/รายการตรวจ (เข้าเวร)' }),
           h('button', { class: 'btn green block', onclick: function () { closeModal(); go('checkout', q); }, text: '✅ ส่งเวร/แก้ผลการปฏิบัติ' })]);
       }
       if (r.kind === 'arrest') return go('arrest', { id: r.id });
@@ -1983,7 +1985,7 @@
     if (emph.length) add(c, h('div', { class: 'emph' }, h('b', { text: '⭐ เน้นย้ำช่วงนี้' }), emph.map(function (k) { return h('div', { text: (cmap[k] ? cmap[k].label : k) + ' — ' + fmtPts(x.code[k]) + ' คะแนน/ใบ' }); })));
     var tbl = h('div', { class: 'crit' });
     items.forEach(function (i) { add(tbl, h('div', { class: 'ci' }, h('span', { text: i[0] }), h('b', { class: i[1] < 0 ? 'neg' : '', text: fmtPts(i[1]) + ' / ' + i[2] }))); });
-    add(c, tbl, h('p', { class: 'muted small', text: 'ใบสั่ง: ลูกเรือทุกคนในรถได้คะแนนเท่ากัน · จับกุม: หมายจับคิดต่อหมาย (1 ราย 3 หมาย = 3 หมาย) ซึ่งหน้าคิดต่อราย · ยาเสพติดคิดต่อคดีตามของกลางรวม (ไม่คูณจำนวนผู้ต้องหา หลายชนิดใช้ขั้นสูงสุด) · คดีร่วมหลายคัน: รถผู้จับหลักได้ ' + fmtPts(x.primaryPct != null ? x.primaryPct : 60) + '% รถที่ร่วมแบ่งส่วนที่เหลือ (รวม 100%) ระบุรถหลักไม่ได้หารเท่ากัน · ทุกคนในรถได้เท่าส่วนของรถ' }));
+    add(c, tbl, h('p', { class: 'muted small', text: 'ใบสั่ง: เจ้าหน้าที่ทุกคนในรถได้คะแนนเท่ากัน · จับกุม: หมายจับคิดต่อหมาย (1 ราย 3 หมาย = 3 หมาย) ซึ่งหน้าคิดต่อราย · ยาเสพติดคิดต่อคดีตามของกลางรวม (ไม่คูณจำนวนผู้ต้องหา หลายชนิดใช้ขั้นสูงสุด) · คดีร่วมหลายคัน: รถผู้จับหลักได้ ' + fmtPts(x.primaryPct != null ? x.primaryPct : 60) + '% รถที่ร่วมแบ่งส่วนที่เหลือ (รวม 100%) ระบุรถหลักไม่ได้หารเท่ากัน · ทุกคนในรถได้เท่าส่วนของรถ' }));
     if (w.note) add(c, h('p', { class: 'small', text: 'หมายเหตุ: ' + w.note }));
     if (canManage) add(c, h('div', { class: 'row', style: 'margin-top:8px' }, submitBtn('📣 ประกาศเกณฑ์นี้เข้ากลุ่ม', 'ghost sm grow', function () { return announceScore(w.id); })));
     return c;
@@ -2148,7 +2150,7 @@
         var ig = h('div', { class: 'grid2' });
         L.items.forEach(function (i) { itIn[i[0]] = num(x[i[0]]); add(ig, field(i[1] + ' (ต่อ' + i[2] + ')', itIn[i[0]])); });
         var missed = num(Math.abs(x.missed));
-        add(ig, field('🔴 ไม่ส่งเวร หัก (ต่อผลัด)', missed, 'หักลูกเรือทุกคนในรถ'));
+        add(ig, field('🔴 ไม่ส่งเวร หัก (ต่อผลัด)', missed, 'หักเจ้าหน้าที่ทุกคนในรถ'));
         add(sc, ig); add($app, sc);
         var note = h('textarea', { placeholder: 'ข้อความเน้นย้ำถึงเจ้าหน้าที่ (แสดงในประกาศ)' }); note.value = w ? w.note || '' : (copyFrom && copyFrom.note) || '';
         var reason = h('input', { placeholder: 'เหตุผลการแก้ไข (บันทึกในประวัติ)' });
@@ -2802,7 +2804,7 @@
     var COLS = [
       ['เขต', 84], ['รถ', 110, function (c) { return [h('b', { style: 'font-size:' + (big - 1) + 'px', text: c.car })]; }],
       ['ผลัดที่ออก', 120, function (c) { return num(c.shifts, null, 'วัน ' + c.D + ' · คืน ' + c.N); }],
-      ['ลูกเรือ', 300, function (c) { var top = c.crew.length ? c.crew[0].n : 0; return [h('div', { class: 't', style: 'font-size:' + (sm + 2) + 'px;max-height:' + (rh - 6) + 'px', text: c.crew.map(function (m) { return m.name + (m.n < top ? '(' + m.n + ')' : ''); }).join(' · ') || '-' })]; }, 'l'],
+      ['เจ้าหน้าที่', 300, function (c) { var top = c.crew.length ? c.crew[0].n : 0; return [h('div', { class: 't', style: 'font-size:' + (sm + 2) + 'px;max-height:' + (rh - 6) + 'px', text: c.crew.map(function (m) { return m.name + (m.n < top ? '(' + m.n + ')' : ''); }).join(' · ') || '-' })]; }, 'l'],
       ['อาญา', 180, function (c) { return num(c.arrest, c.prev.arrest, 'หมายจับ ' + c.warrant + ' · ซึ่งหน้า ' + c.flag); }, '', 'arrest'],
       ['ฐานความผิด', 440, function (c) { var m = {}; c.crimes.forEach(function (x) { m[x.label] = x.n; }); return [h('div', { class: 't', style: 'font-size:' + (sm + 2) + 'px;max-height:' + (rh - 6) + 'px' }, c.crimes.length ? crimeText(m) : h('span', { class: 'muted', text: '-' }), c.joint ? h('span', { class: 'jt', text: ' (จับร่วม ' + c.joint + ')' }) : null)]; }, 'l'],
       ['จราจร', 150, function (c) { return num(c.ticket, c.prev.ticket, 'ขส ' + c.T + ' · รย ' + c.C + (c.R ? ' · จร ' + c.R : '')); }, '', 'ticket'],
@@ -2942,7 +2944,7 @@
     function lr() { clear(lchips); [['compact', 'แบบสรุป'], ['full', 'แบบละเอียด']].forEach(function (x) { add(lchips, h('button', { class: 'chip' + (layout === x[0] ? ' on' : ''), onclick: function () { layout = x[0]; lr(); draw(); }, text: x[1] })); }); }
     lr();
     add($app, dashPicker(load), h('div', { class: 'card' }, h('div', { class: 'section-label', style: 'margin:0 0 6px', text: 'รูปแบบภาพหลัก' }), lchips,
-      h('p', { class: 'muted small', style: 'margin:6px 0 0', text: 'ส่งครั้งเดียวได้ครบ: ภาพหลัก + ตารางรายรถ (ผลัด ลูกเรือ อาญา จราจร ว.42 ช่วยเหลือ คะแนน เทียบรอบก่อน) + สัดส่วนภารกิจรายรถ + รายการคดีอาญา + ข้อความรายงาน' })), out);
+      h('p', { class: 'muted small', style: 'margin:6px 0 0', text: 'ส่งครั้งเดียวได้ครบ: ภาพหลัก + ตารางรายรถ (ผลัด เจ้าหน้าที่ อาญา จราจร ว.42 ช่วยเหลือ คะแนน เทียบรอบก่อน) + สัดส่วนภารกิจรายรถ + รายการคดีอาญา + ข้อความรายงาน' })), out);
     function range() { return data.from + (data.to !== data.from ? '_' + data.to : ''); }
     /** ภาพที่ส่ง: ภาพหลัก → ตารางรายรถ → สัดส่วนภารกิจรายรถ → รายการคดี (ถ้ามีคดี) */
     function pages() {
@@ -3012,9 +3014,8 @@
 
   // ======================= ภาพสรุปผลการปฏิบัติประจำวัน (รายรถแยกผลัด · ไม่ใช้คะแนน) =======================
   var DY_COLS = [['T', 'พ.ร.บ.', 'ขนส่ง', 'tk'], ['C', 'พ.ร.บ.', 'รถยนต์', 'tk'], ['R', 'พ.ร.บ.', 'จราจร', 'tk'],
-    ['warning', 'ว่ากล่าว', 'ตักเตือน', 'ck'], ['truck_check', 'ตรวจรถ', 'บรรทุก', 'ck'], ['suspect_check', 'ตรวจรถ', 'ต้องสงสัย', 'ck'],
     ['assist', 'ช่วย', 'เหลือ', 'as'], ['warrant', 'หมาย', 'จับ', 'ar'], ['crime', 'อาญา', 'ทั่วไป', 'ar'], ['escort', 'ว.42', '', 'es'], ['mission', 'ภารกิจ', '', 'mi']];
-  var DY_GRP = { tk: ['ใบสั่ง (ราย)', '#1d4ed8', 'rgba(37,99,235,.06)'], ck: ['ตักเตือน / ตรวจรถ', '#475569', 'rgba(100,116,139,.06)'], as: ['', '#0d9488', 'rgba(13,148,136,.07)'],
+  var DY_GRP = { tk: ['ใบสั่ง (ราย)', '#1d4ed8', 'rgba(37,99,235,.06)'], as: ['', '#0d9488', 'rgba(13,148,136,.07)'],
     ar: ['จับกุม', '#c2410c', 'rgba(234,88,12,.07)'], es: ['', '#b45309', 'rgba(245,158,11,.09)'], mi: ['', '#7c3aed', 'rgba(124,58,237,.06)'] };
   var TH_WDF = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
   function thLong(iso) { var p = iso.split('-'); return TH_WDF[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()] + 'ที่ ' + (+p[2]) + ' ' + TH_MF[+p[1] - 1] + ' ' + (+p[0] + 543); }
@@ -3024,116 +3025,93 @@
     var m = String(x.text).match(/^(.*?)(\s\d[\d,]*\s(?:ราย|หมาย|ครั้ง|ขบวน|คัน))$/);
     return h('div', { class: 'dy-ni k-' + x.k }, (k + 1) + '.' + (m ? m[1] : x.text), m ? h('span', { class: 'dy-nw', text: m[2] }) : null);
   }
-  /** ภาพ (1920 กว้าง สูงตามจำนวนแถว) — opt.me = pid ที่จะเน้นแถวของตน (เฉพาะดูในแอป ไม่ใส่ในภาพที่ส่ง) */
+  /** ภาพ (1920 กว้าง สูงตามจำนวนแถว) — ผลการปฏิบัติล้วน (ไม่มีการเข้าเวร/ส่งเวร ตักเตือน/ตรวจรถ คะแนน) · opt.me = pid ที่เน้นแถว (เฉพาะดูในแอป) */
   function dailyNode(d, opt) {
     opt = opt || {};
     var st = ab('dsh dy', 0, 0, 1920, 1080); st.setAttribute('data-h', 1080);
     add(st, header(d));
+    var cyc = th(d.cycleFrom).replace(/\s.*$/, '') + '–' + th(d.date);
     var tt = ab('d-title', 46, 140, 1500, null, 'font-size:52px'); tt.textContent = 'ผลการปฏิบัติประจำวัน · ' + thLong(d.date); add(st, tt);
     var pn = ab('d-note', 0, 160, 0, null, 'right:48px;left:auto;font-size:25px;text-align:right');
-    pn.textContent = d.final ? 'สะสม ' + th(d.monthFrom) + ' – ' + th(d.date) : 'ข้อมูล ณ ' + hm(d.now) + ' น. (ผลัดกลางคืนยังไม่ครบกำหนดส่งเวร)'; add(st, pn);
-    // ---- แถบตัวเลขสำคัญ ----
-    var t = d.total, y = d.yesterday, a = d.avg7, rp = d.report, cars = rp.D.cars + rp.N.cars, outs = rp.D.out + rp.N.out;
+    pn.textContent = d.final ? 'สะสมวงรอบ ' + cyc : 'ข้อมูล ณ ' + hm(d.now) + ' น. (ผลัดกลางคืนยังไม่ครบกำหนดส่งเวร)'; add(st, pn);
+    // ---- การ์ด 5 ใบ: วันนี้ + เทียบเมื่อวาน + สะสมวงรอบ ----
+    var t = d.total, y = d.yesterday, c = d.cycle;
     function dl(cur, prev) { var x = h('i', { class: 'nz ' + (cur > prev ? 'dl-up' : cur < prev ? 'dl-dn' : 'dl-eq') }); x.textContent = cur > prev ? '▲' + fmtN(cur - prev) : cur < prev ? '▼' + fmtN(prev - cur) : '='; return x; }
     var K = [
-      ['การรายงาน (ส่งเวร)', outs + '/' + cars, null, 'ไม่ได้รายงาน ' + rp.miss.length + ' · ส่งช้า ' + rp.slow.length, rp.miss.length ? '#dc2626' : '#16a34a', 1],
-      ['ใบสั่ง (ราย)', dyTickets(t), dyTickets(y), 'ขส ' + t.T + ' · รย ' + t.C + ' · จร ' + t.R + ' · เตือน ' + t.warning, '#1d4ed8'],
-      ['จับกุม', t.warrant + t.crime, y.warrant + y.crime, 'หมายจับ ' + t.warrant + ' · อาญา ' + t.crime + ' ราย', '#c2410c'],
-      ['ตรวจรถ (คัน)', t.truck_check + t.suspect_check, y.truck_check + y.suspect_check, 'บรรทุก ' + t.truck_check + ' · ต้องสงสัย ' + t.suspect_check, '#475569'],
-      ['ว.42 (ขบวน)', t.escort, y.escort, 'ภารกิจ ' + t.mission + ' ครั้ง', '#b45309'],
-      ['ช่วยเหลือ/เหตุการณ์', t.assist, y.assist, 'เฉลี่ย 7 วัน ' + fmtN(a.assist) + ' ครั้ง/วัน', '#0d9488']];
-    var kw = (1828 - 5 * 20) / 6;
+      ['ใบสั่ง (ราย)', dyTickets(t), dyTickets(y), 'ขส ' + t.T + ' · รย ' + t.C + ' · จร ' + t.R + '  |  วงรอบ ' + fmtN(dyTickets(c)), '#1d4ed8'],
+      ['จับกุม', t.warrant + t.crime, y.warrant + y.crime, 'หมายจับ ' + t.warrant + ' · อาญา ' + t.crime + '  |  วงรอบ ' + fmtN(c.warrant + c.crime), '#c2410c'],
+      ['ว.42 (ขบวน)', t.escort, y.escort, 'สะสมวงรอบ ' + fmtN(c.escort) + ' ขบวน', '#b45309'],
+      ['ช่วยเหลือ/เหตุการณ์', t.assist, y.assist, 'สะสมวงรอบ ' + fmtN(c.assist) + ' ครั้ง', '#0d9488'],
+      ['ภารกิจ/จิตอาสา', t.mission, y.mission, 'สะสมวงรอบ ' + fmtN(c.mission) + ' ครั้ง', '#7c3aed']];
+    var kw = (1828 - 4 * 22) / 5;
     K.forEach(function (k, i) {
-      var c = ab('d-card dy-k', 46 + i * (kw + 20), 222, kw, 128, 'border-top:8px solid ' + k[4]);
-      add(c, h('span', { class: 'dy-kl', text: k[0] }), h('div', { class: 'dy-kv' }, h('b', { text: typeof k[1] === 'number' ? fmtN(k[1]) : k[1] }), k[2] == null ? null : dl(k[1], k[2]), k[2] == null ? null : h('small', { class: 'nz', text: 'เมื่อวาน ' + fmtN(k[2]) })),
-        h('span', { class: 'dy-ks' + (k[5] ? ' nz' : ''), text: k[3] }));
-      add(st, c);
+      var cd = ab('d-card dy-k', 46 + i * (kw + 22), 222, kw, 128, 'border-top:8px solid ' + k[4]);
+      add(cd, h('span', { class: 'dy-kl', text: k[0] }), h('div', { class: 'dy-kv' }, h('b', { text: fmtN(k[1]) }), dl(k[1], k[2]), h('small', { class: 'nz', text: 'เมื่อวาน ' + fmtN(k[2]) })),
+        h('span', { class: 'dy-ks', text: k[3] }));
+      add(st, cd);
     });
-    // ---- ตาราง ----
+    // ---- ตาราง: เขต → กลางวัน → กลางคืน ----
     var box = ab('dy-box', 46, 374, 1828, null), tb = h('table', { class: 'dy-t' }), cg = h('colgroup');
-    [70, 86, 60, 204, 176].concat(DY_COLS.map(function () { return 64; })).concat([70, 334, 124]).forEach(function (w) { add(cg, h('col', { style: 'width:' + w + 'px' })); });
+    [70, 92, 64, 262].concat(DY_COLS.map(function () { return 72; })).concat([80, 544, 136]).forEach(function (w) { add(cg, h('col', { style: 'width:' + w + 'px' })); });
     add(tb, cg);
-    var r1 = h('tr'), r2 = h('tr');
-    [['เขต'], ['รถ'], ['ผลัด'], ['ลูกเรือ'], ['การรายงาน', 'เข้าเวร / ส่งเวร']].forEach(function (x) { add(r1, h('th', { rowspan: 2 }, x[0], x[1] ? h('small', { text: x[1] }) : null)); });
-    var seen = {};
-    DY_COLS.forEach(function (c) {
-      var g = DY_GRP[c[3]];
+    var r1 = h('tr'), r2 = h('tr'), seen = {};
+    ['เขต', 'รถ', 'ผลัด', 'เจ้าหน้าที่'].forEach(function (x) { add(r1, h('th', { rowspan: 2, text: x })); });
+    DY_COLS.forEach(function (cc) {
+      var g = DY_GRP[cc[3]];
       if (g[0]) {
-        if (!seen[c[3]]) { seen[c[3]] = 1; add(r1, h('th', { colspan: DY_COLS.filter(function (x) { return x[3] === c[3]; }).length, class: 'dy-g', style: 'background:' + g[1], text: g[0] })); }
-        add(r2, h('th', { class: 'dy-n', style: 'background:' + g[1] }, c[1], h('br'), c[2]));
-      } else add(r1, h('th', { rowspan: 2, class: 'dy-n', style: 'background:' + g[1] }, c[1], c[2] ? h('br') : null, c[2] || null));
+        if (!seen[cc[3]]) { seen[cc[3]] = 1; add(r1, h('th', { colspan: DY_COLS.filter(function (x) { return x[3] === cc[3]; }).length, class: 'dy-g', style: 'background:' + g[1], text: g[0] })); }
+        add(r2, h('th', { class: 'dy-n', style: 'background:' + g[1] }, cc[1], h('br'), cc[2]));
+      } else add(r1, h('th', { rowspan: 2, class: 'dy-n', style: 'background:' + g[1] }, cc[1], cc[2] ? h('br') : null, cc[2] || null));
     });
-    add(r1, h('th', { rowspan: 2, text: 'รวม' }), h('th', { rowspan: 2, text: 'หมายเหตุ' }), h('th', { rowspan: 2 }, 'สะสมเดือน', h('small', { text: th(d.monthFrom).replace(/\s.*$/, '') + '–' + (+d.date.slice(8)) + ' ' + TH_M[+d.date.slice(5, 7) - 1] })));
+    add(r1, h('th', { rowspan: 2, text: 'รวม' }), h('th', { rowspan: 2, text: 'หมายเหตุ' }), h('th', { rowspan: 2 }, 'สะสมวงรอบ', h('small', { text: cyc })));
     add(tb, h('thead', null, r1, r2));
-    var body = h('tbody'), rows = d.rows;
+    var body = h('tbody'), rows = d.rows, zi = 0;
     function zoneName(z) { var x = (d.zones || []).filter(function (q) { return q.zone === z; })[0]; return x ? String(x.name).replace(/^เขต\s*\d+\s*/, '') : ''; }
-    function repCell(r) {
-      var c = h('td', { class: 'dy-rep nz' }), p = r.report;
-      if (r.carry) { add(c, h('span', { class: 'dy-mu', text: 'ผลงานหลังเที่ยงคืน' }), h('span', { class: 'dy-mu', text: 'ของผลัดคืน ' + th(r.date) })); return c; }
-      if (p.st === 'void') { add(c, h('span', { class: 'dy-mu', text: 'ยกเลิกผลัด' })); return c; }
-      function ln(cls, txt) { return h('span', { class: 'dy-ln ' + cls }, h('i', { class: 'dy-dot' }), txt); }
-      var slow = p.flags.some(function (f) { return f.k === 'slow'; });
-      add(c, p.in ? ln('ok', 'เข้า ' + p.in) : p.phase === 'wait' ? ln('wait', 'ยังไม่ถึงเวลา') : ln('bad', 'ไม่ได้เข้าเวร'));
-      add(c, p.out ? ln(slow ? 'warn' : 'ok', 'ส่ง ' + p.out + (p.outDate && p.outDate > (r.shift === 'N' ? addDays(r.date, 1) : r.date) ? ' (' + th(p.outDate).replace(/\d+$/, '') + ')' : '') + (slow ? ' ช้า' : '') + (p.noResult ? ' · ไม่มีผล' : ''))
-        : p.phase === 'past' ? ln('bad', 'ไม่ได้ส่งเวร') : ln('wait', 'ยังไม่ถึงกำหนด'));
-      p.flags.filter(function (f) { return f.k === 'escort' || f.k === 'escortAuto' || f.k === 'pending' || f.k === 'returned'; }).slice(0, 2).forEach(function (f) {
-        add(c, ln('warn', f.k === 'escort' ? 'ว.42 ไม่กดจบ' : f.k === 'escortAuto' ? 'ว.42 ระบบปิดให้' : f.k === 'returned' ? 'คดีส่งกลับแก้' : 'คดีรออนุมัติ'));
-      });
-      return c;
-    }
-    function numTd(c, v) { return h('td', { class: 'dy-v nz', style: 'background:' + DY_GRP[c[3]][2], text: v ? fmtN(v) : '' }); }
-    // จัดกลุ่ม เขต → รถ
-    var zi = 0;
+    function numTd(cc, v) { return h('td', { class: 'dy-v nz', style: 'background:' + DY_GRP[cc[3]][2], text: v ? fmtN(v) : '' }); }
     rows.forEach(function (r, i) {
-      var tr = h('tr', { class: (opt.me && (r.pids || []).indexOf(opt.me) >= 0 ? 'dy-me' : '') + (i && rows[i - 1].zone !== r.zone ? ' dy-zs' : i && rows[i - 1].car !== r.car ? ' dy-cs' : '') });
-      if (!i || rows[i - 1].zone !== r.zone) {
+      var newZone = !i || rows[i - 1].zone !== r.zone, newShift = !newZone && (rows[i - 1].shift !== r.shift || rows[i - 1].carry !== r.carry);
+      var tr = h('tr', { class: (opt.me && (r.pids || []).indexOf(opt.me) >= 0 ? 'dy-me' : '') + (i && newZone ? ' dy-zs' : newShift ? ' dy-ss' : '') });
+      if (newZone) {
         var nz = rows.filter(function (x) { return x.zone === r.zone; }).length;
         add(tr, h('td', { rowspan: nz, class: 'dy-zone' + (zi++ % 2 ? ' alt' : '') }, h('b', { text: r.zone ? 'เขต ' + r.zone : '-' }), h('small', { text: zoneName(r.zone) })));
       }
-      var first = !i || rows[i - 1].car !== r.car || rows[i - 1].zone !== r.zone, nc = 0;
-      if (first) { for (var j = i; j < rows.length && rows[j].car === r.car && rows[j].zone === r.zone; j++) nc++; add(tr, h('td', { rowspan: nc, class: 'dy-car' }, h('b', { text: r.car }), r.crewType === 'จักรยานยนต์' ? h('small', { text: 'จยย.' }) : null)); }
-      add(tr, h('td', { class: 'dy-sh' }, h('span', { text: r.carry ? '🌙' : SHIFT[r.shift] ? SHIFT[r.shift].icon : '•' }), h('small', { text: r.carry ? 'ต่อ' : r.shift === 'D' ? 'วัน' : r.shift === 'N' ? 'คืน' : '' })));
-      var cw = h('td', { class: 'dy-crew nz' }); r.crew.forEach(function (nm, k) { add(cw, h('span', { class: 'dy-nm', text: nm + (k < r.crew.length - 1 ? ' ·' : '') }), ' '); }); if (!r.crew.length) cw.textContent = '-'; add(tr, cw);
-      add(tr, repCell(r));
-      DY_COLS.forEach(function (c) { add(tr, numTd(c, r.n[c[0]])); });
+      add(tr, h('td', { class: 'dy-car' }, h('b', { text: r.car }), r.crewType === 'จักรยานยนต์' ? h('small', { text: 'จยย.' }) : null));
+      add(tr, h('td', { class: 'dy-sh ' + (r.carry || r.shift === 'N' ? 'n' : 'd') }, h('span', { text: r.carry ? '🌙' : SHIFT[r.shift] ? SHIFT[r.shift].icon : '•' }),
+        h('small', { text: r.carry ? 'คืนก่อน' : r.shift === 'D' ? 'กลางวัน' : r.shift === 'N' ? 'กลางคืน' : '' })));
+      var cw = h('td', { class: 'dy-crew nz' }); r.crew.forEach(function (nm, k) { add(cw, h('span', { class: 'dy-nm', text: nm + (k < r.crew.length - 1 ? ' ·' : '') }), ' '); }); if (!r.crew.length) cw.textContent = '-';
+      if (r.carry) add(cw, h('small', { class: 'dy-mu', text: 'ผลงานหลังเที่ยงคืนของผลัดคืน ' + th(r.date) }));
+      add(tr, cw);
+      DY_COLS.forEach(function (cc) { add(tr, numTd(cc, r.n[cc[0]])); });
       add(tr, h('td', { class: 'dy-tot nz', text: r.n.total ? fmtN(r.n.total) : '' }));
-      var nt = h('td', { class: 'dy-note nz' });
-      r.notes.forEach(function (x, k) { add(nt, dyNote(k, x)); });
-      add(tr, nt);
-      if (first) {
-        var m = d.mtd[r.car] || { total: 0, shifts: 0 };
-        add(tr, h('td', { rowspan: nc, class: 'dy-mtd nz' }, h('b', { text: fmtN(m.total) }), h('small', { text: m.shifts + ' ผลัด' }),
-          h('small', { text: 'ใบสั่ง ' + fmtN(dyTickets(m)) + (m.warrant + m.crime ? ' · จับ ' + (m.warrant + m.crime) : '') })));
-      }
+      var nt = h('td', { class: 'dy-note nz' }); r.notes.forEach(function (x, k) { add(nt, dyNote(k, x)); }); add(tr, nt);
+      var m = (d.ctd || {})[r.car] || { total: 0, shifts: 0 };
+      add(tr, h('td', { class: 'dy-mtd nz' }, h('b', { text: fmtN(m.total) }), h('small', { text: m.shifts + ' ผลัด · ใบสั่ง ' + fmtN(dyTickets(m)) }), m.warrant + m.crime ? h('small', { text: 'จับกุม ' + (m.warrant + m.crime) }) : null));
       add(body, tr);
     });
     if (d.loose && d.loose.length) {
-      var lt = h('tr', { class: 'dy-zs' }); add(lt, h('td', { colspan: 5, class: 'dy-loose', text: 'ภารกิจ/จิตอาสา (ไม่ระบุรถ)' }));
-      DY_COLS.forEach(function (c) { add(lt, numTd(c, d.looseN[c[0]])); });
+      var lt = h('tr', { class: 'dy-zs' }); add(lt, h('td', { colspan: 4, class: 'dy-loose', text: 'ภารกิจ/จิตอาสา (ไม่ระบุรถ)' }));
+      DY_COLS.forEach(function (cc) { add(lt, numTd(cc, d.looseN[cc[0]])); });
       add(lt, h('td', { class: 'dy-tot nz', text: d.looseN.total ? fmtN(d.looseN.total) : '' }));
-      var ln2 = h('td', { class: 'dy-note' }); d.loose.forEach(function (x, k) { add(ln2, dyNote(k, x)); }); add(lt, ln2, h('td'));
+      var ln2 = h('td', { class: 'dy-note nz' }); d.loose.forEach(function (x, k) { add(ln2, dyNote(k, x)); }); add(lt, ln2, h('td'));
       add(body, lt);
     }
-    if (!rows.length) add(body, h('tr', null, h('td', { colspan: 5 + DY_COLS.length + 3, class: 'dy-empty', text: 'ไม่มีรถในตารางเวรและไม่มีรายงานของวันนี้' })));
+    if (!rows.length) add(body, h('tr', null, h('td', { colspan: 4 + DY_COLS.length + 3, class: 'dy-empty', text: 'ไม่มีรถในตารางเวรและไม่มีรายงานของวันนี้' })));
     add(tb, body);
-    // รวมทั้งสถานี + เมื่อวาน + เฉลี่ย 7 วัน
-    var ft = h('tfoot'), tr1 = h('tr', { class: 'dy-sum' }), tr2 = h('tr', { class: 'dy-cmp' }), tr3 = h('tr', { class: 'dy-cmp' });
-    add(tr1, h('td', { colspan: 4, class: 'dy-lab' }, h('b', { text: 'รวมทั้งสถานี' }), h('small', { text: (rp.D.cars ? 'กลางวัน ' + rp.D.cars + ' คัน' : '') + (rp.N.cars ? ' · กลางคืน ' + rp.N.cars + ' คัน' : '') })),
-      h('td', { class: 'dy-rep' }, h('span', { class: 'dy-ln ' + (rp.miss.length ? 'bad' : 'ok') }, h('i', { class: 'dy-dot' }), 'ส่งเวร ' + outs + '/' + cars)));
-    add(tr2, h('td', { colspan: 5, class: 'dy-lab', text: 'เมื่อวาน (' + th(addDays(d.date, -1)) + ')' }));
-    add(tr3, h('td', { colspan: 5, class: 'dy-lab', text: 'เฉลี่ย 7 วันก่อนหน้า' }));
-    DY_COLS.forEach(function (c) {
-      add(tr1, h('td', { class: 'dy-v', style: 'background:' + DY_GRP[c[3]][2] }, h('b', { text: fmtN(t[c[0]]) }), t[c[0]] !== y[c[0]] ? dl(t[c[0]], y[c[0]]) : null));
-      add(tr2, h('td', { class: 'dy-v nz', text: fmtN(y[c[0]]) })); add(tr3, h('td', { class: 'dy-v nz', text: fmtN(a[c[0]]) }));
+    // รวมทั้งสถานี (เทียบเมื่อวาน) + เมื่อวาน + สะสมวงรอบ
+    var ft = h('tfoot'), tr1 = h('tr', { class: 'dy-sum' }), tr2 = h('tr', { class: 'dy-cmp' }), tr3 = h('tr', { class: 'dy-cmp dy-cyc' });
+    var nD = rows.filter(function (r) { return r.shift === 'D' && !r.carry; }).length, nN = rows.filter(function (r) { return r.shift === 'N' && !r.carry; }).length;
+    add(tr1, h('td', { colspan: 4, class: 'dy-lab' }, h('b', { text: 'รวมทั้งสถานี' }), h('small', { text: 'กลางวัน ' + nD + ' คัน · กลางคืน ' + nN + ' คัน' })));
+    add(tr2, h('td', { colspan: 4, class: 'dy-lab', text: 'เมื่อวาน (' + th(addDays(d.date, -1)) + ')' }));
+    add(tr3, h('td', { colspan: 4, class: 'dy-lab', text: 'สะสมวงรอบ ' + cyc }));
+    DY_COLS.forEach(function (cc) {
+      add(tr1, h('td', { class: 'dy-v', style: 'background:' + DY_GRP[cc[3]][2] }, h('b', { text: fmtN(t[cc[0]]) }), t[cc[0]] !== y[cc[0]] ? dl(t[cc[0]], y[cc[0]]) : null));
+      add(tr2, h('td', { class: 'dy-v nz', text: fmtN(y[cc[0]]) })); add(tr3, h('td', { class: 'dy-v nz', text: fmtN(c[cc[0]]) }));
     });
-    add(tr1, h('td', { class: 'dy-tot' }, h('b', { text: fmtN(t.total) }), dl(t.total, y.total)), h('td', { class: 'dy-note dy-mu', text: 'คดีจับร่วมนับครั้งเดียว · จับกุมนับในวันที่จับจริง' }),
-      h('td', { class: 'dy-mtd' }, h('b', { text: fmtN(d.month.total) }), h('small', { text: 'ใบสั่ง ' + fmtN(dyTickets(d.month)) + ' · จับ ' + (d.month.warrant + d.month.crime) })));
-    add(tr2, h('td', { class: 'dy-tot nz', text: fmtN(y.total) }), h('td', { colspan: 2 })); add(tr3, h('td', { class: 'dy-tot nz', text: fmtN(a.total) }), h('td', { colspan: 2 }));
+    add(tr1, h('td', { class: 'dy-tot' }, h('b', { text: fmtN(t.total) }), dl(t.total, y.total)), h('td', { class: 'dy-note', style: 'color:#64748b;font-size:17px', text: 'คดีจับร่วมนับครั้งเดียว · จับกุมนับในวันที่จับจริง' }), h('td'));
+    add(tr2, h('td', { class: 'dy-tot nz', text: fmtN(y.total) }), h('td', { colspan: 2 }));
+    add(tr3, h('td', { class: 'dy-tot nz', text: fmtN(c.total) }), h('td', { colspan: 2 }));
     add(ft, tr1, tr2, tr3); add(tb, ft); add(box, tb);
-    add(box, h('div', { class: 'dy-foot nz' }, 'การรายงาน: ', h('span', { class: 'dy-ln ok', style: 'display:inline' }, h('i', { class: 'dy-dot' }), 'ตามเวลา'), '  ',
-      h('span', { class: 'dy-ln warn', style: 'display:inline;margin-left:14px' }, h('i', { class: 'dy-dot' }), 'ส่งเวรช้า (เกิน 2 ชม. หลังจบผลัด) / ว.42 ไม่กดจบ / คดีรออนุมัติ'), '  ',
-      h('span', { class: 'dy-ln bad', style: 'display:inline;margin-left:14px' }, h('i', { class: 'dy-dot' }), 'ไม่ได้เข้าเวร/ส่งเวร'),
-      '   |   ช่องว่าง = ไม่มีผล · หมายเหตุแสดงข้อหาใบสั่ง คดี ขบวน ว.42 และจุดช่วยเหลือ · สะสมเดือนนับคดีจับร่วมให้ทุกคันที่ร่วม · ไม่ใช้คะแนน'));
+    add(box, h('div', { class: 'dy-foot nz', text: 'ในแต่ละเขตเรียงผลัดกลางวันก่อนกลางคืน · ช่องว่าง = ไม่มีผล · หมายเหตุแสดงข้อหาใบสั่ง คดี ขบวน ว.42 จุดช่วยเหลือ และภารกิจ · สะสมวงรอบรายรถรวมทุกผลัดของรถคันนั้น (คดีจับร่วมนับให้ทุกคันที่ร่วม) · ไม่ใช้คะแนน' }));
     add(st, box);
     return markZeros(st);
   }
@@ -3152,7 +3130,7 @@
     }
     dateIn.onchange = function () { if (dateIn.value) { sel = dateIn.value; rc(); load(); } };
     rc();
-    add($app, h('div', { class: 'card' }, chips, h('p', { class: 'muted small', style: 'margin:6px 0 0', text: 'ตารางรายรถแยกผลัด: การรายงาน ผลการปฏิบัติทุกประเภท หมายเหตุ และยอดสะสมเดือน (ไม่ใช้คะแนน) · แถวของท่านเป็นพื้นสีเหลืองเฉพาะในแอป' })), out);
+    add($app, h('div', { class: 'card' }, chips, h('p', { class: 'muted small', style: 'margin:6px 0 0', text: 'ตารางรายรถ (ในเขตเรียงกลางวันก่อนกลางคืน): ผลการปฏิบัติ หมายเหตุ และยอดสะสมวงรอบ (ไม่ใช้คะแนน) · แถวของท่านเป็นพื้นสีเหลืองเฉพาะในแอป · การเข้าเวร/ส่งเวรดูที่ "ย้อนหลัง 7 วัน" ในหน้ารายงาน' })), out);
     function load() {
       var my = ++seq; made = null; clear(out); add(out, h('div', { class: 'loading' }, spinner(), h('p', { text: 'กำลังรวมผล ' + th(sel) + '…' })));
       api('daily.report', { date: sel }, { fresh: true }).then(function (d) { if (my !== seq) return; data = d; draw(); }, function (e) { if (my === seq) { clear(out); add(out, errorBox(e.message)); } });

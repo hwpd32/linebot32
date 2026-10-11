@@ -602,3 +602,8 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .dy-big-in { position: relative; overflow: hidden; }
 .dsh .dy-nm { white-space: nowrap; display: inline-block; }
 .dsh .dy-nw { white-space: nowrap; }
+.dsh .dy-t tr.dy-ss > td:not(.dy-zone) { border-top: 2px dashed #c9d5e6; }
+.dsh .dy-sh.n { background: #f1f3fb; } .dsh .dy-sh.d { background: #fffbeb; }
+.dsh .dy-crew .dy-mu { display: block; font-size: 15px; margin-top: 2px; }
+.dsh .dy-t tr.dy-cyc > td { color: #0f2744; }
+.dsh .dy-t tr.dy-cyc .dy-v, .dsh .dy-t tr.dy-cyc .dy-tot { color: #0f2744; background: #eef2f8; }

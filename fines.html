@@ -1575,6 +1575,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         j = await r.json();
       } finally { if (to) clearTimeout(to); }
     } catch (e) { throw new Error('เชื่อมต่อระบบรายงานผลไม่ได้ชั่วคราว (อินเทอร์เน็ตหรือเซิร์ฟเวอร์)'); }
+    // คำขอถูกเปลี่ยนเป็น GET ระหว่างทาง (ได้คำตอบ health) = ระบบยังไม่ได้รับข้อมูล → ถือว่าเชื่อมต่อสะดุด (เก็บคิวไว้ส่งใหม่)
+    if (j && j.app && j.version && !('data' in j) && !j.error) throw new Error('เชื่อมต่อระบบรายงานผลไม่ได้ชั่วคราว (อินเทอร์เน็ตหรือเซิร์ฟเวอร์)');
     if (!j.ok) { const e = new Error(j.error || 'ส่งไม่สำเร็จ'); e.code = j.code; throw e; }
     return j.data;
   }
