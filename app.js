@@ -261,7 +261,7 @@
   var BOOT_KEY = 'boot:' + (CFG.LIFF_ID || ''), BOOT_MAX_AGE = 12 * 3600000;
   function bootCacheGet(uid) { try { var j = JSON.parse(localStorage.getItem(BOOT_KEY) || 'null'); return j && j.uid === uid && Date.now() - j.at < BOOT_MAX_AGE && j.b && j.b.registered ? j.b : null; } catch (e) { return null; } }
   function bootCachePut(uid, b) { try { if (b && b.registered) localStorage.setItem(BOOT_KEY, JSON.stringify({ uid: uid, at: Date.now(), b: b })); else localStorage.removeItem(BOOT_KEY); } catch (e) { } }
-  function applyBoot(b) { S.boot = b; S._bootAt = Date.now(); setTitle('รายงานผล ' + (b.station || '').split(' ')[0], b.me ? b.me.name + ' · ' + (b.perms.roleLabel || '') : ''); }
+  function applyBoot(b) { S.boot = b; S._bootAt = Date.now(); if (S.view && S.view !== 'home') return; setTitle('รายงานผล ' + (b.station || '').split(' ')[0], b.me ? b.me.name + ' · ' + (b.perms.roleLabel || '') : ''); }
   function boot() { return api('bootstrap').then(function (b) { applyBoot(b); if (!S.viewAs) bootCachePut(S.uid, b); viewBanner(); return b; }); }
   // ---------- โหมดจำลองมุมมอง (แอดมิน) ----------
   try { S.viewAs = JSON.parse(sessionStorage.getItem('viewAs') || 'null'); } catch (e) { S.viewAs = null; }
