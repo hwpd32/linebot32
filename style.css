@@ -633,3 +633,18 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .iss-row div { flex: 1; min-width: 92px; background: #f8fafc; border-radius: 12px; padding: 8px 10px; text-align: center; }
 .iss-row b { display: block; font-size: 20px; } .iss-row small { color: var(--muted); font-size: 12px; }
 .xl-btn { white-space: nowrap; }
+
+/* v1.12 นำเข้าไฟล์ / คลังเอกสาร */
+.drop { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; border: 2px dashed #94a3b8; border-radius: 16px; padding: 22px 12px; background: #f8fafc; cursor: pointer; min-height: 120px; justify-content: center; }
+.drop:active, .drop:focus-within { border-color: var(--navy); background: #eef2ff; }
+.drop .drop-ic { font-size: 34px; line-height: 1; }
+.drop b { font-size: 17px; } .drop small { color: var(--muted); font-size: 13px; }
+.drop-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.up-line { display: flex; align-items: center; gap: 8px; padding: 8px 2px; font-size: 14px; border-bottom: 1px solid #eef2f7; word-break: break-word; }
+.up-line .spin { width: 18px; height: 18px; margin: 0; border-width: 3px; flex: none; }
+.up-line.bad { color: #991b1b; }
+.file-card.hl { box-shadow: 0 0 0 2px #f59e0b; }
+.pv-lines { border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px 10px; max-height: 52vh; overflow: auto; background: #fff; }
+.pv-line { font-size: 14px; padding: 5px 0; border-bottom: 1px dashed #e2e8f0; word-break: break-word; }
+.pv-line:last-child { border-bottom: 0; }
+.pv-line.warn { color: #92400e; background: #fffbeb; margin: 0 -10px; padding: 5px 10px; }
