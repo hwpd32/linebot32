@@ -543,13 +543,13 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 
 /* ===== v1.10 ภาพสรุปผลการปฏิบัติประจำวัน ===== */
 .dsh.dy { height: auto; }
-.dsh .dy-k { padding: 12px 20px 10px; display: flex; flex-direction: column; justify-content: space-between; border-radius: 22px; }
-.dsh .dy-kl { font-size: 23px; font-weight: 600; color: #334155; white-space: nowrap; }
+.dsh .dy-k { padding: 14px 22px 16px; display: flex; flex-direction: column; justify-content: space-between; border-radius: 22px; overflow: visible; }
+.dsh .dy-kl { font-size: 23px; line-height: 1.35; font-weight: 600; color: #334155; white-space: nowrap; }
 .dsh .dy-kv { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
-.dsh .dy-kv b { font-size: 50px; font-weight: 700; color: #0f2744; line-height: 1.05; }
+.dsh .dy-kv b { font-size: 50px; font-weight: 700; color: #0f2744; line-height: 1.15; }
 .dsh .dy-kv i { font-style: normal; font-size: 22px; font-weight: 700; }
 .dsh .dy-kv small { font-size: 18px; color: #64748b; margin-left: auto; }
-.dsh .dy-ks { font-size: 19px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dsh .dy-ks { font-size: 19px; line-height: 1.5; padding-bottom: 2px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dsh .dy-box { background: #fff; border: 2px solid #c9d5e6; border-radius: 22px; overflow: hidden; }
 .dsh .dy-t { width: 1824px; border-collapse: collapse; table-layout: fixed; font-size: 20px; color: #1e293b; }
 .dsh .dy-t th { background: #0f2744; color: #fff; font-weight: 600; font-size: 19px; line-height: 1.2; padding: 8px 4px; border-left: 1px solid #24466f; text-align: center; vertical-align: middle; }

@@ -3045,13 +3045,13 @@
       ['ภารกิจ/จิตอาสา', t.mission, y.mission, 'สะสมวงรอบ ' + fmtN(c.mission) + ' ครั้ง', '#7c3aed']];
     var kw = (1828 - 4 * 22) / 5;
     K.forEach(function (k, i) {
-      var cd = ab('d-card dy-k', 46 + i * (kw + 22), 222, kw, 128, 'border-top:8px solid ' + k[4]);
+      var cd = ab('d-card dy-k', 46 + i * (kw + 22), 222, kw, 158, 'border-top:8px solid ' + k[4]);
       add(cd, h('span', { class: 'dy-kl', text: k[0] }), h('div', { class: 'dy-kv' }, h('b', { text: fmtN(k[1]) }), dl(k[1], k[2]), h('small', { class: 'nz', text: 'เมื่อวาน ' + fmtN(k[2]) })),
         h('span', { class: 'dy-ks', text: k[3] }));
       add(st, cd);
     });
     // ---- ตาราง: เขต → กลางวัน → กลางคืน ----
-    var box = ab('dy-box', 46, 374, 1828, null), tb = h('table', { class: 'dy-t' }), cg = h('colgroup');
+    var box = ab('dy-box', 46, 406, 1828, null), tb = h('table', { class: 'dy-t' }), cg = h('colgroup');
     [70, 92, 64, 262].concat(DY_COLS.map(function () { return 72; })).concat([80, 544, 136]).forEach(function (w) { add(cg, h('col', { style: 'width:' + w + 'px' })); });
     add(tb, cg);
     var r1 = h('tr'), r2 = h('tr'), seen = {};
