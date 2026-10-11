@@ -83,22 +83,52 @@
       if (inflight[k]) return inflight[k];
     }
     if (!ttl) apiInvalidate(); // คำขอเขียน → ข้อมูลที่จำไว้อาจเก่า
-    var p = apiRaw(action, data).then(function (v) { if (ttl) apiCache[k] = { at: Date.now(), v: v }; delete inflight[k]; return v; }, function (e) { delete inflight[k]; throw e; });
+    var p = apiRaw(action, data).then(function (v) { if (ttl) apiCache[k] = { at: Date.now(), v: v }; delete inflight[k]; return v; }, function (e) {
+      delete inflight[k];
+      // ระบบพบรายการที่อาจซ้ำ → แสดงรายการเดิมให้ตรวจ แล้วให้ผู้ใช้ยืนยันก่อนบันทึก
+      if (e.code === 'DUP' && e.dup && !(data && data.confirmDup)) return dupConfirm(e).then(function (yes) {
+        if (!yes) { var x = new Error('ยกเลิกการบันทึก'); x.code = 'CANCEL'; throw x; }
+        return api(action, Object.assign({}, data, { confirmDup: true }), opts);
+      });
+      throw e;
+    });
     if (ttl) inflight[k] = p;
     return p;
   }
+  // คำสั่งที่ประมวลผลนาน (รวบรวมข้อมูลหลายเดือน/สร้างไฟล์) รอได้นานกว่าปกติ
+  var LONG_MS = { 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000 };
   function apiRaw(action, data) {
     var ctl = window.AbortController ? new AbortController() : null;
     var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken, viewAs: S.viewAs || undefined }), signal: ctl ? ctl.signal : undefined });
-    return withTimeout(req, CFG.API_TIMEOUT_MS || 30000, 'ระบบตอบช้าเกินไป (เกิน 30 วินาที) กรุณากดลองใหม่').then(null, function (e) { if (ctl && e.code === 'TIMEOUT') ctl.abort(); throw e; })
+    var ms = LONG_MS[action] || CFG.API_TIMEOUT_MS || 30000;
+    return withTimeout(req, ms, 'ระบบตอบช้าเกินไป (เกิน ' + Math.round(ms / 1000) + ' วินาที) กรุณากดลองใหม่').then(null, function (e) { if (ctl && e.code === 'TIMEOUT') ctl.abort(); throw e; })
       .then(function (r) { return r.json().catch(function () { throw new Error('ระบบตอบกลับผิดรูปแบบ (HTTP ' + r.status + ') กรุณาลองใหม่'); }); }, function (e) { if (e.code === 'TIMEOUT') throw e; throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสัญญาณแล้วลองใหม่'); })
       .then(function (j) {
         // คำขอถูกเปลี่ยนเป็น GET ระหว่างทาง (ได้คำตอบ health แทน) = ระบบยังไม่ได้ทำรายการ → แจ้งให้ลองใหม่ ไม่ถือว่าสำเร็จ
         if (j && j.app && j.version && !('data' in j) && !j.error) throw new Error('การเชื่อมต่อสะดุด ระบบยังไม่ได้รับรายการ กรุณากดลองใหม่');
         if (j.ok) return j.data;
         if (j.code === 'AUTH' && window.liff && liff.isLoggedIn()) { try { liff.logout(); if (!liff.isInClient()) liff.login({ redirectUri: location.href }); } catch (x) { } }
-        var e = new Error(j.error || 'เกิดข้อผิดพลาด'); e.code = j.code; throw e;
+        var e = new Error(j.error || 'เกิดข้อผิดพลาด'); e.code = j.code; if (j.dup) e.dup = j.dup; throw e;
       });
+  }
+  var DUP_KIND = { shift: '🚓', escort: '🚔', assist: '🤝', arrest: '🚨', mission: '🎖️' };
+  function dupConfirm(e) {
+    return new Promise(function (res) {
+      var m = document.getElementById('modal'); clear(m); m.hidden = false;
+      var list = h('div', { class: 'dup-list' });
+      e.dup.forEach(function (x) {
+        add(list, h('div', { class: 'dup-it' }, h('b', { text: (DUP_KIND[x.kind] || '•') + ' ' + x.title }),
+          h('small', { text: [x.car ? 'รถ ' + x.car : '', x.date ? th(x.date) + (x.shift && SHIFT[x.shift] ? ' ' + SHIFT[x.shift].label : '') : '', x.at && x.at.length > 12 ? hm(x.at) + ' น.' : '', x.by ? 'บันทึกโดย ' + x.by : ''].filter(String).join(' · ') }),
+          x.why ? h('div', { class: 'dup-why', text: '⚠️ ' + x.why }) : null));
+      });
+      function fin(v) { m.hidden = true; clear(m); res(v); }
+      add(m, h('div', { class: 'sheet' }, h('h3', { text: '⚠️ อาจเป็นการบันทึกซ้ำ' }),
+        h('p', { class: 'muted small', style: 'margin:0 0 8px', text: 'มีรายการที่บันทึกไว้แล้วซึ่งคล้ายกัน — ตรวจก่อนว่าเป็นเรื่องเดียวกันหรือไม่' }), list,
+        h('div', { class: 'row', style: 'margin-top:12px' }, h('button', { class: 'btn gray grow', onclick: function () { fin(false); }, text: '✋ ไม่บันทึก' }),
+          h('button', { class: 'btn amber grow', onclick: function () { fin(true); }, text: 'ไม่ซ้ำ บันทึกต่อ' })),
+        h('button', { class: 'btn ghost block', style: 'margin-top:8px', onclick: function () { fin(false); go('history'); }, text: '📝 ดูรายการที่ส่งแล้ว' })));
+      m.onclick = function (ev) { if (ev.target === m) fin(false); };
+    });
   }
   function can(cap) { return !!(S.boot && S.boot.perms && S.boot.perms.caps[cap]); }
   function person(pid) { var ps = S.boot.people; for (var i = 0; i < ps.length; i++) if (ps[i].pid === pid) return ps[i]; return { pid: pid, short: pid, name: pid }; }
@@ -357,11 +387,14 @@
         h('div', { class: 'row' }, h('button', { class: 'btn green grow', onclick: function () { go('checkin'); }, text: '🟢 เข้าเวร' }), h('button', { class: 'btn grow', onclick: function () { go('checkout'); }, text: '✅ ส่งเวร' })));
     }
     if (p) add($app, p);
-    // ขบวนที่กำลังนำ
-    var myCars = mine.map(function (m) { return String(m.car); });
-    (S.boot.activeEscorts || []).filter(function (e) { return myCars.indexOf(String(e.car)) >= 0; }).forEach(function (e) {
-      add($app, h('button', { class: 'alert amber', onclick: function () { go('escort'); } }, h('b', { text: '🚔 กำลังนำขบวน ' + e.car + ' — แตะเพื่อจบขบวน' }), h('small', { text: e.sub + (e.payload.name ? ' · ' + e.payload.name : '') + ' · เริ่ม ' + hm(e.payload.start) + ' น.' })));
-    });
+    // ว.42 ที่รออยู่: นัดไว้ · กำลังนำ · รอรับกลับ (ผู้เห็นภาพรวมเห็นทั้งสถานี เจ้าหน้าที่เห็นของตน) — ของตนเองขึ้นก่อน
+    var escs = (S.boot.escorts || []).slice().sort(function (a, b) { return (escMine(b) ? 1 : 0) - (escMine(a) ? 1 : 0); });
+    if (escs.length) {
+      var ecard = card('🚔 ว.42 ที่รออยู่', escs.length + ' ขบวน');
+      escs.slice(0, 8).forEach(function (e) { add(ecard, escRow(e)); });
+      if (escs.length > 8) add(ecard, h('button', { class: 'btn ghost sm', onclick: function () { go('escort'); }, text: 'ดูทั้งหมด ' + escs.length + ' ขบวน ›' }));
+      add($app, ecard);
+    }
     // งานรอดำเนินการของผู้ตรวจ/ผู้ดูแล
     var pend = S.boot.pending || {};
     if (can('case.approve') && pend.arrest) add($app, h('button', { class: 'alert red', onclick: function () { go('cases'); } }, h('b', { text: '📥 คดีจับกุมรอตรวจ ' + pend.arrest + ' คดี' }), h('small', { text: 'แตะเพื่อตรวจและอนุมัติ (คดีที่ท่านอยู่ในชุดจับกุมอนุมัติเองไม่ได้)' })));
@@ -478,6 +511,20 @@
   function wd(iso) { var p = iso.split('-'); return WD[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()]; }
   var WK_N = [['T', 'ขส'], ['C', 'รย'], ['R', 'จร'], ['warning', 'ตักเตือน'], ['truck_check', 'รถบรรทุก'], ['suspect_check', 'รถต้องสงสัย'], ['assist', 'ช่วยเหลือ'],
     ['warrant', 'หมายจับ'], ['crime', 'อาญา'], ['escort', 'ว.42'], ['mission', 'ภารกิจ']];
+  var WK_TXT = { ok: '✅ ครบ', miss: '🔴 ไม่ได้รายงาน', warn: '🟠 ไม่สมบูรณ์/ช้า', live: '🔵 กำลังปฏิบัติ', wait: '⚪ ยังไม่ถึงเวลา', void: '➖ ยกเลิก' };
+  function weekXlsx(w) {
+    var rows = w.rows.slice().sort(function (a, b) { return (a.shift === b.shift ? 0 : a.shift === 'D' ? -1 : 1) || (a.zone || 99) - (b.zone || 99) || String(a.car).localeCompare(String(b.car), 'th', { numeric: true }); });
+    var grid = rows.map(function (r) { return [r.car, r.zone || 'นอกตาราง', SHIFT[r.shift].label].concat(w.days.map(function (d) { var c = r.cells[d]; return c ? (WK_TXT[c.st] || c.st) + (c.n && c.n.total ? ' (' + c.n.total + ')' : '') : ''; })); });
+    var fix = [];
+    rows.forEach(function (r) { w.days.forEach(function (d) { var c = r.cells[d]; if (c) c.flags.forEach(function (f) { fix.push([d, SHIFT[r.shift].label, r.car, r.zone || '', f.lv === 'miss' ? 'ไม่ได้รายงาน' : 'ไม่สมบูรณ์', f.text, (c.crew || []).join(', ')]); }); }); });
+    var res = [];
+    rows.forEach(function (r) { w.days.forEach(function (d) { var c = r.cells[d]; if (c && c.n && c.n.total) res.push([d, SHIFT[r.shift].label, r.car, r.zone || ''].concat(WK_N.map(function (x) { return c.n[x[0]] || 0; })).concat([c.n.total, (c.crew || []).join(', ')])); }); });
+    xlsxDownload('ตรวจการรายงาน7วัน_' + w.from + '_' + w.to + '.xlsx', [
+      { name: 'ตาราง 7 วัน', head: ['รถ', 'เขต', 'ผลัด'].concat(w.days.map(function (d) { return wd(d) + ' ' + th(d); })), rows: grid },
+      { name: 'รายการที่ต้องแก้', head: ['วันที่', 'ผลัด', 'รถ', 'เขต', 'ระดับ', 'ปัญหา', 'เจ้าหน้าที่'], rows: fix },
+      { name: 'ผลที่รายงาน', head: ['วันที่', 'ผลัด', 'รถ', 'เขต'].concat(WK_N.map(function (x) { return x[1]; })).concat(['รวม', 'เจ้าหน้าที่']), rows: res }],
+      [['ช่วงวันที่', th(w.from) + ' – ' + th(w.to)], ['สรุป', 'ไม่ได้รายงาน ' + w.sum.miss + ' · ไม่สมบูรณ์/ช้า ' + w.sum.warn + ' · ครบ ' + w.sum.ok + ' ผลัด']]);
+  }
   function weekBoardCard(container) {
     var cur = S.boot.current || {}, sh = cur.shift === 'N' ? 'N' : 'D', only = '', data = null;
     var seg = h('div', { class: 'seg' }), filt = h('div', { class: 'chips', style: 'margin-top:8px' }), sum = h('div', { class: 'wk-sum' }), body = h('div');
@@ -536,7 +583,7 @@
         if (c.can) {
           if (f.k === 'noin' && c.canBack) act = ['เข้าเวร ›', 'checkin', q];
           else if (f.k === 'noout' && c.canBack) act = ['ส่งเวร ›', 'checkout', q];
-          else if (f.k === 'escort') act = ['จบขบวน ›', 'escort'];
+          else if (f.k === 'escort' || f.k === 'escortPlan' || f.k === 'escortWait') act = [f.k === 'escort' ? 'จบขบวน ›' : 'เปิด ว.42 ›', 'escort', { id: f.id }];
           else if (f.k === 'returned') act = ['แก้คดี ›', 'arrest', { id: f.id }];
           else if (f.k === 'pending') act = ['เปิดคดี ›', 'case', { id: f.id }];
           else if (f.k === 'escortAuto') act = ['ตรวจ/แก้ ›', 'history'];
@@ -556,10 +603,10 @@
     api('duty.week', {}, { fresh: true }).then(function (w) {
       data = w; var s = w.sum; clear(sum);
       add(sum, h('span', { class: 'wk-miss', text: '🔴 ไม่ได้รายงาน ' + s.miss }), h('span', { class: 'wk-warn', text: '🟠 ไม่สมบูรณ์/ช้า ' + s.warn }), h('span', { class: 'wk-ok', text: '✅ ครบ ' + s.ok }),
-        h('small', { class: 'muted', text: 'ผลัด · ' + th(w.from) + '–' + th(w.to) }));
+        h('small', { class: 'muted', text: 'ผลัด · ' + th(w.from) + '–' + th(w.to) }), xlBtn('.xlsx', function () { weekXlsx(w); }));
       rf(); draw();
       add(body.parentNode, h('details', { class: 'note db-legend' }, h('summary', { text: 'ℹ️ ความหมาย' }),
-        h('div', { text: '✅ เข้าเวรและส่งเวรครบตามเวลา · 🔴 ไม่ได้เข้าเวร/ไม่ได้ส่งเวร · 🟠 ไม่สมบูรณ์: ส่งเวรช้า (เกิน ' + (w.rules.checkout / 60) + ' ชม. หลังจบผลัด) ว.42 ไม่กดจบ หรือคดีรออนุมัติ/ถูกส่งกลับ · 🔵 กำลังปฏิบัติ · ⚪ ยังไม่ถึงเวลา · ➖ ยกเลิกผลัด' }),
+        h('div', { text: '✅ เข้าเวรและส่งเวรครบตามเวลา · 🔴 ไม่ได้เข้าเวร/ไม่ได้ส่งเวร · 🟠 ไม่สมบูรณ์: ส่งเวรช้า (เกิน ' + (w.rules.checkout / 60) + ' ชม. หลังจบผลัด) ว.42 ไม่กดจบ/นัดหรือรอรับกลับค้างเกิน 24 ชม. หรือคดีรออนุมัติ/ถูกส่งกลับ · 🔵 กำลังปฏิบัติ · ⚪ ยังไม่ถึงเวลา · ➖ ยกเลิกผลัด' }),
         h('div', { text: 'ตัวเลขในช่อง = ผลรวมที่รายงานในผลัดนั้น (ใบสั่ง ตักเตือน ตรวจรถ ช่วยเหลือ จับกุม ว.42 ภารกิจ) · แตะช่องเพื่อดูรายละเอียด' }),
         h('div', { text: 'เจ้าหน้าที่ส่งเข้าเวร/ส่งเวรย้อนหลังเองได้ภายใน ' + w.backDays + ' วัน (ระบบบันทึกว่าส่งช้า) · เกินนั้นหรือผลัดของผู้อื่นให้ธุรการบันทึกแทน' })));
     }, function (e) { clear(body); add(body, errorBox(e.message)); });
@@ -574,7 +621,7 @@
       add($app, h('div', { class: 'section-label', text: 'ประจำผลัด' }), h('div', { class: 'tiles' },
         tile('▶', 'var(--green)', 'เข้าเวร', 'ยืนยันเจ้าหน้าที่/อุปกรณ์', 'checkin'),
         tile('✓', 'var(--blue)', 'ส่งเวร', 'ใบสั่งและผลการปฏิบัติ', 'checkout'),
-        tile('🚔', 'var(--amber)', 'ว.42', 'นำขบวน เริ่ม/จบ', 'escort'),
+        tile('🚔', 'var(--amber)', 'ว.42', 'ลงนัด · เริ่ม/จบ · รอรับกลับ', 'escort'),
         tile('🤝', 'var(--teal)', 'ช่วยเหลือ', 'ว.18 ว.40 เหตุการณ์', 'assist'),
         tile('🚨', 'var(--red)', 'จับกุม', 'แบบ CCOC', 'arrest'),
         tile('🎖️', 'var(--violet)', 'ภารกิจ', 'จิตอาสา/ปฏิบัติการ', 'mission')));
@@ -674,8 +721,39 @@
       else if (tab === 'people') finePeople(out, data, rg);
       else if (tab === 'rate') fineRate(out, data, rg);
       else fineLedger(out, data);
+      add(out, h('div', { class: 'center', style: 'margin:4px 0 12px' }, xlBtn('ภาพรวมค่าปรับเป็น .xlsx', function () { fineXlsx(data, rg); })));
     }
   };
+  function fineXlsx(d, rg) {
+    var sh = [], r = d.received;
+    if (r) {
+      sh.push({ name: 'รับชำระรายวัน', head: ['วันที่', 'ใบสั่งที่ชำระ', 'ยอดรับชำระ (PTM)', 'เงินเข้า KTB', 'ลงทะเบียน'], rows: r.byDay.map(function (x) { return [x.date, x.n, x.amt, x.ktb, x.booked]; }) });
+      sh.push({ name: 'แยก พ.ร.บ.', head: ['พ.ร.บ.', 'ใบสั่ง', 'บาท'], rows: Object.keys(r.byAct).map(function (a) { return [a, r.byAct[a].n, r.byAct[a].amt]; }) });
+      sh.push({ name: 'แยกช่องทาง', head: ['ช่องทาง', 'ใบสั่ง', 'บาท'], rows: Object.keys(r.byGroup).map(function (g) { return [d.groups[g] || g, r.byGroup[g].n, r.byGroup[g].amt]; }) });
+    }
+    sh.push({ name: 'รายคน', head: ['ชื่อ', 'รายงาน (ออกเอง)', 'ชำระแล้ว', 'อัตรา %', 'บาท', 'ใบสั่งกล้อง'], rows: (d.officers || []).map(function (p) { return [p.name, p.reported, p.paid, p.rate == null ? '' : p.rate, p.paidAmt, p.cam || 0]; }) });
+    if (d.cars) sh.push({ name: 'รายรถ', head: ['รถ', 'รายงาน', 'ชำระแล้ว', 'อัตรา %', 'บาท'], rows: d.cars.map(function (x) { return [x.car, x.reported, x.paid, x.rate == null ? '' : x.rate, x.paidAmt]; }) });
+    if (d.unmatched) sh.push({ name: 'ยังไม่ทราบผู้ออก', head: ['รหัสหมวก', 'ชื่อใน PTM', 'ใบ', 'ใบสั่งกล้อง', 'บาท'], rows: d.unmatched.map(function (u) { return [u.badge || '', u.name || '', u.n, u.cam || 0, u.amt]; }) });
+    if (d.rate) sh.push({ name: 'อัตราชำระ', head: ['พ.ร.บ.', 'รายงาน', 'ชำระแล้ว', 'อัตรา %'], rows: d.rate.byAct.map(function (x) { return [x.act, x.reported, x.paid, x.rate == null ? '' : x.rate]; }).concat([['รวม', d.rate.reported, d.rate.paid, d.rate.rate == null ? '' : d.rate.rate]]) });
+    var info = [['ช่วงวันที่', rg]];
+    if (d.issuers) info.push(['ผู้ออกใบสั่ง', 'รายงาน ' + d.issuers.tickets + ' ใบ · ปรับตาม PTM ' + d.issuers.ptm + ' · รอเทียบ PTM ' + d.issuers.unknown]);
+    xlsxDownload('ค่าปรับ_' + d.from + '_' + d.to + '.xlsx', sh, info);
+  }
+  /** เทียบผู้ออกใบสั่งกับ PTM ทีละเดือน (ตั้งแต่ ส.ค. 69 ที่เริ่มมีข้อมูล) */
+  function fineMatchAll(btn, done2) {
+    var months = [], d = '2026-08-01', end = today();
+    while (d <= end) { // ครึ่งเดือนต่อครั้ง (1–15, 16–สิ้นเดือน) กันเกินเวลารอ
+      var last = +d.slice(8) <= 15 ? d.slice(0, 8) + '15' : addDays(addDays(d.slice(0, 8) + '28', 4).slice(0, 8) + '01', -1);
+      months.push([d, last > end ? end : last]); d = addDays(last, 1);
+    }
+    var sum = { changed: 0, moved: 0, unknown: 0 }, i = 0;
+    function next() {
+      if (i >= months.length) return Promise.resolve(sum);
+      var m = months[i++]; btn.textContent = 'กำลังเทียบ ' + th(m[0]) + '–' + th(m[1]) + '… (' + i + '/' + months.length + ')';
+      return api('fine.match', { from: m[0], to: m[1] }).then(function (r) { sum.changed += r.changed; sum.moved += r.moved; sum.unknown += r.unknown; return next(); });
+    }
+    return next().then(function (r) { toast('✅ เทียบเสร็จ: ปรับ ' + r.changed + ' ผลัด (' + r.moved + ' ใบ) · ยังรอเทียบ ' + r.unknown + ' ใบ', 6000); if (done2) done2(); });
+  }
   function kpiBox(items) { var k = h('div', { class: 'kpis' }); items.forEach(function (x) { add(k, h('div', { class: 'kpi', style: 'border-top:3px solid ' + (x[2] || '#94a3b8') }, h('div', { class: 'n', text: x[0] }), h('div', { class: 't', text: x[1] }))); }); return k; }
   function fineTable(head, rows) {
     var t = h('table', { class: 't' }), hr = h('tr'); head.forEach(function (x) { add(hr, h('th', { text: x })); }); add(t, h('thead', null, hr));
@@ -697,6 +775,14 @@
     add(out, ca, cg, h('p', { class: 'small muted center', text: 'ยอดรับชำระตามวันที่ชำระ (รายงาน PTM) · เงินเข้า KTB/ลงทะเบียน จากโปรแกรมทะเบียนค่าปรับ' }));
   }
   function finePeople(out, d, rg) {
+    if (d.issuers) {
+      var iss = d.issuers, ic = card('🧾 ผู้ออกใบสั่ง (เทียบ PTM)', rg);
+      add(ic, h('div', { class: 'iss-row' }, h('div', null, h('b', { text: fmtN(iss.tickets) }), h('small', { text: 'ใบสั่งที่รายงาน' })),
+        h('div', null, h('b', { text: fmtN(iss.ptm) }), h('small', { text: 'ปรับผู้ออกตาม PTM' })), h('div', null, h('b', { text: fmtN(iss.unknown), style: iss.unknown ? 'color:#6d28d9' : '' }), h('small', { text: '❓ รอเทียบ PTM' }))),
+        h('p', { class: 'small muted', style: 'margin:0', text: 'เมื่อบันทึกวันในโปรแกรมทะเบียน ระบบเทียบผู้ออกใบสั่งตาม PTM อัตโนมัติ (ไฟล์ทางการที่สุด) · ใบที่ยังไม่ชำระคง "รอเทียบ" จนกว่าจะพบใน PTM · ยอดรถ/สถานีไม่เปลี่ยน' }));
+      if (iss.canMatch) { var mb = submitBtn('🔄 เทียบย้อนหลังทั้งหมดตอนนี้', 'ghost block', function () { return fineMatchAll(mb, function () { VIEWS.fines({ tab: 'people' }); }); }); add(ic, h('div', { style: 'margin-top:8px' }, mb)); }
+      add(out, ic);
+    }
     var c = card('👮 รายคน: รายงาน vs ชำระแล้ว', rg);
     var ppl = d.officers || [];
     add(c, ppl.length ? fineTable(['ชื่อ', 'รายงาน', 'ชำระ', '%', 'บาท', '📷'], ppl.map(function (p) { return [p.name, fmtN(p.reported), fmtN(p.paid), rateChip(p.rate), baht(p.paidAmt), p.cam ? fmtN(p.cam) : '']; }))
@@ -901,7 +987,7 @@
     var b = h('button', { class: 'btn ' + (cls || ''), text: text });
     b.onclick = function () {
       if (b.disabled) return; b.disabled = true; var old = b.textContent; b.textContent = 'กำลังบันทึก…';
-      Promise.resolve().then(fn).then(function () { b.disabled = false; b.textContent = old; }, function (e) { b.disabled = false; b.textContent = old; toast('⚠️ ' + e.message, 5000); });
+      Promise.resolve().then(fn).then(function () { b.disabled = false; b.textContent = old; }, function (e) { b.disabled = false; b.textContent = old; toast(e.code === 'CANCEL' ? 'ไม่ได้บันทึก (ยกเลิกเพราะซ้ำ)' : '⚠️ ' + e.message, 5000); });
     };
     return b;
   }
@@ -960,7 +1046,7 @@
       api('shift.get', { dutyDate: sel.dutyDate, shift: sel.shift, car: sel.car }).then(function (g) {
         rec = g.record; state.tickets = {}; state.warnings = state.truckChecks = state.suspectChecks = 0;
         g.events.forEach(function (e) {
-          if (e.type === 'ticket') { state.tickets[e.issuerId] = state.tickets[e.issuerId] || {}; state.tickets[e.issuerId][e.sub] = (state.tickets[e.issuerId][e.sub] || 0) + e.count; }
+          if (e.type === 'ticket') { var ik = e.issuerId || '?'; state.tickets[ik] = state.tickets[ik] || {}; state.tickets[ik][e.sub] = (state.tickets[ik][e.sub] || 0) + e.count; }
           if (e.type === 'warning') state.warnings += e.count;
           if (e.type === 'truck_check') state.truckChecks += e.count;
           if (e.type === 'suspect_check') state.suspectChecks += e.count;
@@ -978,7 +1064,7 @@
       var during = g.events.filter(function (e) { return e.type === 'escort' || e.type === 'assist' || e.type === 'arrest'; });
       if (during.length) {
         var c = card('📌 รายการระหว่างผลัด (บันทึกไว้แล้ว)');
-        during.forEach(function (e) { add(c, h('div', { class: 'list-item' }, h('span', { text: e.type === 'escort' ? '🚔' : e.type === 'assist' ? '🤝' : '🚨' }), h('div', { class: 'grow', text: e.sub + (e.payload && e.payload.name ? ' · ' + e.payload.name : '') }), e.status === 'active' ? h('span', { class: 'badge amber', text: 'ยังไม่จบ' }) : null)); });
+        during.forEach(function (e) { add(c, h('div', { class: 'list-item' }, h('span', { text: e.type === 'escort' ? '🚔' : e.type === 'assist' ? '🤝' : '🚨' }), h('div', { class: 'grow', text: e.sub + (e.payload && e.payload.name ? ' · ' + e.payload.name : '') }), e.status === 'active' ? h('span', { class: 'badge amber', text: 'ยังไม่จบ' }) : e.status === 'waiting' ? h('span', { class: 'badge purple', text: 'รอรับกลับ' }) : null)); });
         add(body, c);
       }
       add(body, ticketsCard);
@@ -999,15 +1085,20 @@
       clear(ticketsCard); add(ticketsCard, h('h3', null, '🧾 ใบสั่ง', h('span', { class: 'right', text: 'เลือกผู้ออก แล้วกด + ตามความผิด' })));
       var crew = crewBox ? crewBox.getCrew() : [];
       if (!crew.length) { add(ticketsCard, h('p', { class: 'muted', text: 'ติ๊กเจ้าหน้าที่ก่อน' })); updateBar(); return; }
-      if (!issuer || !crew.some(function (c) { return c.pid === issuer; })) issuer = crew[0].pid;
+      // "ยังไม่ระบุผู้ออก (รอเทียบ PTM)" — เฉพาะผู้บันทึกแทน (เจ้าหน้าที่เห็นเมื่อธุรการลงไว้แล้ว: คงไว้/ลดได้)
+      var unkOk = can('report.editOthers') || sumObj(state.tickets['?']) > 0;
+      if (!issuer || (issuer === '?' ? !unkOk : !crew.some(function (c) { return c.pid === issuer; }))) issuer = crew[0].pid;
       var who = h('div', { class: 'chips', style: 'margin-bottom:10px' });
       crew.forEach(function (c) {
         var n = sumObj(state.tickets[c.pid]);
         add(who, h('button', { class: 'chip' + (c.pid === issuer ? ' on' : ''), onclick: function () { issuer = c.pid; renderTickets(); }, text: '👮 ' + person(c.pid).short + (n ? ' (' + n + ')' : '') }));
       });
+      if (unkOk) { var nu = sumObj(state.tickets['?']); add(who, h('button', { class: 'chip unk' + (issuer === '?' ? ' on' : ''), onclick: function () { issuer = '?'; renderTickets(); }, text: '❓ ยังไม่ระบุผู้ออก (รอเทียบ PTM)' + (nu ? ' (' + nu + ')' : '') })); }
       var seg = h('div', { class: 'seg', style: 'margin-bottom:6px' });
       Object.keys(S.boot.groups).forEach(function (g) { add(seg, h('button', { class: g === group ? 'on' : '', onclick: function () { group = g; renderTickets(); }, text: S.boot.groups[g] })); });
-      add(ticketsCard, who, seg);
+      add(ticketsCard, who);
+      if (issuer === '?') add(ticketsCard, h('p', { class: 'note small', style: 'margin:0 0 8px', text: '❓ ใช้เมื่อไม่ทราบว่าใครออก — นับเข้ารถ/สถานีทันที ระบบจะเปลี่ยนเป็นผู้ออกตามไฟล์ PTM อัตโนมัติเมื่อเจ้าหน้าที่การเงินอัปเดต (ใบที่ยังไม่ชำระคง "รอเทียบ")' + (can('report.editOthers') ? '' : ' · เจ้าหน้าที่เพิ่มเองไม่ได้ ลดหรือย้ายไปที่ชื่อผู้ออกได้') }));
+      add(ticketsCard, seg);
       var mine = state.tickets[issuer] = state.tickets[issuer] || {};
       S.boot.violations.filter(function (v) { return v.group === group; }).forEach(function (v) {
         var row = h('div', { class: 'vrow' + (mine[v.code] ? ' has' : '') }, h('div', { class: 'lbl' }, v.label, h('small', { text: 'พ.ร.บ.' + v.act })),
@@ -1019,7 +1110,7 @@
       function summaryLine() {
         clear(sumBox);
         var lines = [];
-        Object.keys(state.tickets).forEach(function (pid) { Object.keys(state.tickets[pid]).forEach(function (code) { var v = S.boot.violations.filter(function (x) { return x.code === code; })[0]; lines.push((v ? v.short : code) + ' ' + state.tickets[pid][code] + ' — ' + person(pid).short); }); });
+        Object.keys(state.tickets).forEach(function (pid) { Object.keys(state.tickets[pid]).forEach(function (code) { var v = S.boot.violations.filter(function (x) { return x.code === code; })[0]; lines.push((v ? v.short : code) + ' ' + state.tickets[pid][code] + ' — ' + (pid === '?' ? 'ยังไม่ระบุ' : person(pid).short)); }); });
         if (lines.length) add(sumBox, h('b', { text: 'รวม: ' }), lines.join(' · '));
       }
       summaryLine(); updateBar();
@@ -1039,7 +1130,7 @@
       var crew = crewBox.getCrew(), tickets = [];
       Object.keys(state.tickets).forEach(function (pid) {
         Object.keys(state.tickets[pid]).forEach(function (code) {
-          if (!crew.some(function (c) { return c.pid === pid; })) throw new Error(person(pid).short + ' ไม่ได้อยู่ในเจ้าหน้าที่ แต่มีใบสั่ง — ติ๊กชื่อหรือลบใบสั่ง');
+          if (pid !== '?' && !crew.some(function (c) { return c.pid === pid; })) throw new Error(person(pid).short + ' ไม่ได้อยู่ในเจ้าหน้าที่ แต่มีใบสั่ง — ติ๊กชื่อหรือลบใบสั่ง');
           tickets.push({ pid: pid, code: code, count: state.tickets[pid][code] });
         });
       });
@@ -1051,40 +1142,193 @@
   };
 
   // ======================= ว.42 =======================
-  VIEWS.escort = function (params) {
-    setTitle('🚔 นำขบวน ว.42', 'กดเริ่มเมื่อรับขบวน กดจบเมื่อส่งต่อ/ถึงปลายทาง');
-    clear($app);
-    var active = (S.boot.activeEscorts || []);
-    var mine = S.boot.myShifts || [];
-    var myCars = mine.map(function (m) { return String(m.car); });
-    var act = active.filter(function (e) { return can('report.editOthers') || myCars.indexOf(String(e.car)) >= 0 || (e.crew || []).indexOf(S.boot.me.pid) >= 0; });
-    if (act.length) {
-      var c = card('⏱ ขบวนที่กำลังนำ');
-      act.forEach(function (e) {
-        var rt = h('input', { type: 'checkbox' }), ho = h('input', { placeholder: 'ส่งต่อให้ (เช่น ส.ทล.3)' }), res = h('input', { placeholder: 'ผล/หมายเหตุ เช่น ถึงปลายทางปลอดภัย (ไม่บังคับ)' });
-        add(c, h('div', { class: 'list-item', style: 'display:block' }, h('b', { text: '🚔 ' + e.car + ' · ' + e.sub + (e.payload.name ? ' · ' + e.payload.name : '') }),
-          h('div', { class: 'muted small', text: 'เริ่ม ' + (e.payload.start ? th(e.payload.start.slice(0, 10)) + ' ' + hm(e.payload.start) + ' น.' : '') + (myCars.indexOf(String(e.car)) < 0 ? ' · กดจบแทนเจ้าหน้าที่ได้ (ผู้ดูแล)' : '') }), h('label', { class: 'cap' }, rt, 'ไป-กลับ (นับ 2 ขบวน)'), ho, res,
-          h('div', { style: 'margin-top:8px' }, submitBtn('🏁 จบขบวน', 'amber block', function () {
-            return api('escort.end', { eventId: e.id, roundTrip: rt.checked, handoverTo: ho.value, result: res.value }).then(function (r) { S.boot.activeEscorts = S.boot.activeEscorts.filter(function (x) { return x.id !== e.id; }); done('จบขบวนแล้ว', r.message, { next: 'escort' }); });
-          }))));
-      });
-      add($app, c);
+  // ======================= ว.42: ลงนัด → ขาไป → รอรับกลับ → ขากลับ → จบ (ปุ่มเดียวตามขั้น) =======================
+  var ESC_CANCEL = ['ขบวนยกเลิก', 'เปลี่ยนภารกิจ', 'หน่วยอื่นรับแทน', 'ลงนัดผิด'];
+  function nowLocal() { var t = bkkNow(); return isoOf(t) + 'T' + pad(t.getHours()) + ':' + pad(t.getMinutes()); }
+  function minsBetween(a, b) { var x = Date.parse(String(a).slice(0, 16) + ':00+07:00'), y = Date.parse(String(b).slice(0, 16) + ':00+07:00'); return isNaN(x) || isNaN(y) ? 0 : Math.round((y - x) / 60000); }
+  function durTxt(m) { m = Math.abs(m); return m < 60 ? m + ' น.' : Math.floor(m / 60) + ' ชม.' + (m % 60 ? ' ' + (m % 60) + ' น.' : ''); }
+  function addMin(iso, m) { var t = new Date(Date.parse(String(iso).slice(0, 16) + ':00+07:00') + m * 60000 + (7 * 60 + new Date().getTimezoneOffset()) * 60000); return isoOf(t) + 'T' + pad(t.getHours()) + ':' + pad(t.getMinutes()); }
+  function whenTxt(iso) { if (!iso) return ''; return (iso.slice(0, 10) !== today() ? th(iso.slice(0, 10)) + ' ' : '') + hm(iso).replace(':', '.') + ' น.'; }
+  function escMine(e) {
+    var me = S.boot.me.pid, cars = (S.boot.myShifts || []).map(function (m) { return String(m.car); });
+    return can('report.editOthers') || e.resp === me || e.schedBy === me || (e.crew || []).indexOf(me) >= 0 || cars.indexOf(e.car) >= 0 || cars.indexOf(e.curCar) >= 0;
+  }
+  function escState(e) {
+    if (e.status === 'scheduled') { var late = minsBetween(e.plan, nowLocal()); return { ic: '🕒', cls: late > 0 ? 'late' : 'plan', txt: 'นัด ' + whenTxt(e.plan) + (late > 0 ? ' · เลยเวลานัด ' + durTxt(late) : '') }; }
+    if (e.status === 'waiting') return { ic: '🟣', cls: 'wait', txt: 'รอรับกลับ · ส่งถึง ' + whenTxt(e.outEnd) };
+    if (e.leg === 2) return { ic: '🔵', cls: 'live', txt: 'กำลังนำขากลับ · เริ่ม ' + whenTxt(e.retStart) + (e.retCar && e.retCar !== e.car ? ' · รถ ' + e.retCar : '') };
+    return { ic: '🔵', cls: 'live', txt: 'กำลังนำ' + (e.legs === 2 ? 'ขาไป' : '') + ' · เริ่ม ' + whenTxt(e.start) };
+  }
+  function escSteps(e) {
+    var st = e.status === 'scheduled' ? 0 : e.status === 'waiting' ? 2 : e.leg === 2 ? 3 : 1;
+    var L = e.legs === 2 ? [['นัด', 0], ['ขาไป', 1], ['รอรับกลับ', 2], ['ขากลับ', 3], ['จบ', 4]] : [['นัด', 0], ['นำขบวน', 1], ['จบ', 4]];
+    return h('div', { class: 'esc-steps' }, L.map(function (x) { return h('span', { class: x[1] < st ? 'done' : x[1] === st ? 'on' : '', text: x[0] }); }));
+  }
+  /** แถวสรุปขบวน (หน้าแรก/หน้าตอนนี้) — แตะไปหน้า ว.42 */
+  function escRow(e) {
+    var s = escState(e);
+    return h('button', { class: 'esc-row ' + s.cls, onclick: function () { go('escort', { id: e.id }); } }, h('span', { class: 'esc-ic', text: s.ic }),
+      h('span', { class: 'grow' }, h('b', { text: e.curCar + ' · ' + e.name + (e.legs === 2 ? ' (ไป-กลับ)' : '') }), h('small', { text: s.txt + (e.respName ? ' · ' + e.respName : '') })), h('span', { class: 'esc-go', text: '›' }));
+  }
+  function escReload(then) {
+    return api('escort.open', {}, { fresh: true }).then(function (list) {
+      S.boot.escorts = list;
+      S.boot.activeEscorts = list.filter(function (x) { return x.status === 'active'; }).map(function (x) { return { id: x.id, car: x.curCar, sub: x.sub, payload: x.payload, crew: x.crew }; });
+      if (then) then();
+    });
+  }
+  function timeAsk(title, def, cb) {
+    var inp = h('input', { type: 'datetime-local', value: def || nowLocal(), max: nowLocal() });
+    modal(title, [h('p', { class: 'muted small', text: 'ใช้เมื่อกดช้ากว่าเวลาจริง (ย้อนได้ไม่เกิน 24 ชม.)' }), inp], 'ตกลง', function () { if (!inp.value) throw new Error('กรุณาระบุเวลา'); return cb(inp.value.slice(0, 16)); });
+  }
+  function escCancelAsk(e, waiting) {
+    var why = waiting ? ESC_CANCEL.slice(0, 3).concat(['กลับเอง/ไม่ต้องนำกลับ']) : ESC_CANCEL, pick = '', chips = h('div', { class: 'chips' }), other = h('input', { placeholder: 'เหตุผลอื่น (ถ้ามี)' });
+    function rc() { clear(chips); why.forEach(function (w) { add(chips, h('button', { class: 'chip' + (pick === w ? ' on' : ''), onclick: function () { pick = w; rc(); }, text: w })); }); }
+    rc();
+    modal(waiting ? '✖ ไม่มีขากลับ — จบขบวน 1 ขา' : '✖ ยกเลิกขบวน ' + e.name, [h('p', { class: 'muted small', text: waiting ? 'นับ 1 ขบวน (ขาไป) จบที่เวลาส่งถึงปลายทาง' : 'รายการนี้จะไม่นับในสถิติ (เก็บประวัติไว้)' }), chips, other], waiting ? 'จบขบวน' : 'ยกเลิกขบวน', function () {
+      var reason = [pick, other.value.trim()].filter(String).join(' · ');
+      if (!reason) throw new Error('กรุณาเลือกเหตุผล');
+      return api('escort.cancel', { eventId: e.id, reason: reason }).then(function (r) { toast(waiting ? '🏁 จบขบวนแล้ว (ไม่มีขากลับ)' : '✖ ยกเลิกแล้ว'); return escReload(function () { VIEWS.escort({ _fresh: 1 }); }); });
+    });
+  }
+  function escEdit(e) {
+    var editor = can('report.editOthers'), kind = e.sub, kinds = h('div', { class: 'chips' });
+    function rk() { clear(kinds); S.boot.escortTypes.forEach(function (k) { add(kinds, h('button', { class: 'chip' + (k === kind ? ' on' : ''), onclick: function () { kind = k; rk(); }, text: k })); }); }
+    rk();
+    var name = h('input', { value: e.name }), from = h('input', { value: e.from, placeholder: 'ต้นทาง' }), to = h('input', { value: e.to, placeholder: 'ปลายทาง' });
+    var rt = h('input', { type: 'checkbox', checked: e.legs === 2, disabled: e.leg === 2 }), resp = e.resp, rb = h('button', { class: 'chip', text: '👤 ' + (e.respName || 'เลือก') });
+    rb.onclick = function () { pickPerson('ผู้รับผิดชอบขบวน', function (p) { resp = p.pid; rb.textContent = '👤 ' + p.short; }); };
+    var body = [h('label', { class: 'f', text: 'ประเภท' }), kinds, h('label', { class: 'f', text: 'ชื่อขบวน' }), name, h('div', { class: 'row2' }, from, to),
+      h('label', { class: 'cap' }, rt, ' ไป-กลับ (ส่งถึงแล้วรอรับกลับ) — เปลี่ยนได้ทุกขั้น นับ 1 ขบวนเสมอ')];
+    var dt = null, car = null;
+    if (e.status === 'scheduled') {
+      dt = h('input', { type: 'datetime-local', value: e.plan.slice(0, 16) }); car = h('input', { value: e.car, placeholder: 'เลขรถ' });
+      body.push(h('div', { class: 'row2' }, h('div', null, h('label', { class: 'f', text: 'วัน-เวลานัด (โดยประมาณ)' }), dt), h('div', null, h('label', { class: 'f', text: 'รถ' }), car)));
     }
-    var cur = null, kind = (S.boot.escortTypes || [])[0] || 'ขบวนทั่วไป';
-    var name = h('input', { placeholder: 'เช่น นำส่งอวัยวะ / มศว. / รถอ่อนนุช' }), origin = h('input', { placeholder: 'ต้นทาง เช่น รพ.ชลบุรี' }), dest = h('input', { placeholder: 'ปลายทาง เช่น รพ.ศิริราช' }), from = h('input', { placeholder: 'รับช่วงจาก (ถ้ามี) เช่น ส.ทล.1 / 81' });
-    var kinds = h('div', { class: 'chips' });
+    if (editor) body.push(h('label', { class: 'f', text: 'ผู้รับผิดชอบ' }), rb);
+    modal('✏️ แก้ไขขบวน', body, 'บันทึก', function () {
+      var f = { kind: kind, name: name.value, from: from.value, to: to.value, legs: rt.checked ? 2 : 1 };
+      if (dt) { f.plan = dt.value.slice(0, 16); f.car = car.value.trim(); }
+      if (editor && resp !== e.resp) f.resp = resp;
+      return api('escort.edit', { eventId: e.id, fields: f }).then(function (r) { toast(r.status === 'ok' ? '🏁 จบขบวนแล้ว (1 ขา)' : '✅ บันทึกแล้ว'); return escReload(function () { VIEWS.escort({ id: e.id, _fresh: 1 }); }); });
+    });
+  }
+  function escCard(e, focus) {
+    var s = escState(e), mine = escMine(e), c = h('div', { class: 'card esc-card esc-' + s.cls + (focus ? ' esc-focus' : '') });
+    add(c, h('div', { class: 'esc-h' }, h('b', { text: '🚔 ' + e.curCar + ' · ' + e.name }), h('span', { class: 'badge ' + (s.cls === 'late' ? 'amber' : s.cls === 'wait' ? 'purple' : s.cls === 'live' ? 'blue' : 'gray'), text: s.ic + ' ' + (e.status === 'scheduled' ? 'รอเริ่ม' : e.status === 'waiting' ? 'รอรับกลับ' : 'กำลังนำ') })),
+      escSteps(e), h('div', { class: 'small', text: s.txt }),
+      h('div', { class: 'muted small', text: [e.sub, e.from || e.to ? [e.from, e.to].filter(String).join(' → ') : '', e.legs === 2 ? 'ไป-กลับ' : 'ไปอย่างเดียว', e.respName ? 'ผู้รับผิดชอบ ' + e.respName : ''].filter(String).join(' · ') }));
+    if (!mine) { add(c, h('p', { class: 'muted small', style: 'margin:6px 0 0', text: 'ดูได้อย่างเดียว — ผู้รับผิดชอบ/เจ้าหน้าที่ในรถหรือธุรการเป็นผู้กด' })); return c; }
+    var acts = h('div', { class: 'esc-acts' }), more = h('div', { class: 'chips', style: 'margin-top:8px' });
+    var ho = h('input', { placeholder: 'ส่งต่อให้ (ถ้ามี) เช่น ส.ทล.3' }), res = h('input', { placeholder: 'ผล/หมายเหตุ (ไม่บังคับ)' });
+    function startAt(at) {
+      return api('escort.start', { eventId: e.id, at: at || undefined }).then(function (r) { return escReload(function () { done(e.status === 'waiting' ? 'เริ่มขากลับแล้ว' : 'เริ่ม ว.42 แล้ว', r.message, { next: 'escort' }); }); });
+    }
+    function endAt(wait, at) {
+      return api('escort.end', { eventId: e.id, wait: !!wait, at: at || undefined, handoverTo: ho.value, result: res.value }).then(function (r) {
+        return escReload(function () { done(wait ? 'ส่งถึงปลายทาง · รอรับกลับ' : 'จบขบวนแล้ว', r.message, { next: 'escort' }); });
+      });
+    }
+    var big = function (t, cls, fn) { var b = submitBtn(t, cls + ' block xl', fn); return b; };
+    if (e.status === 'scheduled') {
+      add(acts, big('▶ รับขบวนแล้ว เริ่มนำขบวน', 'green', function () { return startAt(); }));
+      [['⏰ +30 น.', 30], ['⏰ +1 ชม.', 60]].forEach(function (x) {
+        add(more, submitBtn(x[0], 'ghost sm', function () { var base = minsBetween(e.plan, nowLocal()) > 0 ? nowLocal() : e.plan; return api('escort.edit', { eventId: e.id, fields: { plan: addMin(base, x[1]) } }).then(function () { toast('⏰ เลื่อนนัดแล้ว'); return escReload(function () { VIEWS.escort({ id: e.id, _fresh: 1 }); }); }); }));
+      });
+      add(more, h('button', { class: 'btn ghost sm', onclick: function () { timeAsk('🕘 เริ่มไปแล้วเมื่อ', nowLocal(), startAt); }, text: '🕘 เริ่มไปแล้วเมื่อ…' }));
+    } else if (e.status === 'waiting') {
+      add(acts, big('▶ เริ่มขากลับ', 'green', function () { return startAt(); }));
+      add(more, h('button', { class: 'btn ghost sm', onclick: function () { timeAsk('🕘 เริ่มขากลับไปแล้วเมื่อ', nowLocal(), startAt); }, text: '🕘 เริ่มไปแล้วเมื่อ…' }),
+        h('button', { class: 'btn ghost sm', onclick: function () {
+          var cin = h('input', { placeholder: 'เลขรถ เช่น 3216', value: e.retCar || e.car });
+          modal('🚓 ขากลับใช้รถคันอื่น', [cin], '▶ เริ่มขากลับ', function () { if (!cin.value.trim()) throw new Error('กรุณาใส่เลขรถ'); return api('escort.start', { eventId: e.id, car: cin.value.trim() }).then(function (r) { return escReload(function () { done('เริ่มขากลับแล้ว', r.message, { next: 'escort' }); }); }); });
+        }, text: '🚓 ใช้รถคันอื่น' }));
+    } else {
+      if (e.legs === 2 && e.leg !== 2) {
+        add(acts, big('🏁 ส่งถึงปลายทาง · รอรับกลับ', 'amber', function () { return endAt(true); }));
+        add(acts, h('div', { style: 'margin-top:8px' }, submitBtn('🏁 จบขบวน (ไม่มีขากลับ)', 'ghost block', function () { return endAt(false); })));
+      } else {
+        add(acts, big('🏁 จบขบวน', 'amber', function () { return endAt(false); }));
+        if (e.leg !== 2) add(more, submitBtn('↩️ มีขากลับ: ส่งถึงแล้วรอรับกลับ', 'ghost sm', function () { return endAt(true); }));
+      }
+      add(more, h('button', { class: 'btn ghost sm', onclick: function () { timeAsk('🕘 ถึงปลายทาง/จบไปแล้วเมื่อ', nowLocal(), function (t) { return endAt(e.legs === 2 && e.leg !== 2, t); }); }, text: '🕘 จบไปแล้วเมื่อ…' }));
+      add(acts, h('details', { class: 'esc-more' }, h('summary', { text: 'ส่งต่อ / ผล (ไม่บังคับ)' }), ho, res));
+    }
+    add(more, h('button', { class: 'btn ghost sm', onclick: function () { escEdit(e); }, text: '✏️ แก้ไข/เปลี่ยนเส้นทาง' }),
+      h('button', { class: 'btn ghost sm red-t', onclick: function () { escCancelAsk(e, e.status === 'waiting'); }, text: e.status === 'waiting' ? '✖ ไม่มีขากลับ' : '✖ ยกเลิก' }));
+    add(c, acts, more);
+    if (e.status === 'scheduled' && minsBetween(e.plan, nowLocal()) > 0) add(c, h('p', { class: 'muted small', style: 'margin:8px 0 0', text: 'เวลานัดเป็นเวลาโดยประมาณ — ขบวนมาช้าไม่ถือว่าผิด กดเริ่มเมื่อรับขบวนจริง หรือเลื่อนนัด' }));
+    return c;
+  }
+  VIEWS.escort = function (params) {
+    params = params || {};
+    setTitle('🚔 นำขบวน ว.42', 'ลงนัดล่วงหน้า · เริ่ม/จบ · รอรับกลับ');
+    clear($app);
+    var list = S.boot.escorts || [], mine = list.filter(escMine), others = list.filter(function (e) { return !escMine(e); });
+    var top = h('div');
+    function drawList() {
+      clear(top);
+      if (mine.length) {
+        add(top, h('div', { class: 'section-label', text: 'ขบวนที่รออยู่/กำลังนำ (' + mine.length + ')' }));
+        mine.forEach(function (e) { var el = escCard(e, e.id === params.id); add(top, el); if (e.id === params.id) setTimeout(function () { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 60); });
+      }
+      if (others.length) {
+        var oc = card('🚔 ขบวนอื่นในสถานี', others.length + ' รายการ');
+        others.forEach(function (e) { add(oc, escRow(e)); });
+        add(top, oc);
+      }
+      if (top.childNodes.length && !top.parentNode && f.parentNode) $app.insertBefore(top, f); // แสดงเฉพาะเมื่อมีขบวน
+    }
+    // ---- ฟอร์ม: ลงนัดล่วงหน้า / เริ่มเลย ----
+    var mode = params.mode || 'plan', seg = h('div', { class: 'seg' }), planBox = h('div'), nowBox = h('div');
+    var kind = (S.boot.escortTypes || [])[0] || 'ขบวนทั่วไป', kinds = h('div', { class: 'chips' });
+    var name = h('input', { placeholder: 'เช่น นำส่งอวัยวะ / คณะดูงาน มศว.' }), origin = h('input', { placeholder: 'ต้นทาง เช่น รพ.ชลบุรี' }), dest = h('input', { placeholder: 'ปลายทาง เช่น รพ.ศิริราช' });
+    var hfrom = h('input', { placeholder: 'รับช่วงจาก (ถ้ามี) เช่น ส.ทล.1' }), note = h('input', { placeholder: 'หมายเหตุ เช่น เบอร์ผู้ประสาน (ไม่บังคับ)' }), rt = h('input', { type: 'checkbox' });
     function rk() { clear(kinds); S.boot.escortTypes.forEach(function (k) { add(kinds, h('button', { class: 'chip' + (k === kind ? ' on' : ''), onclick: function () { kind = k; if (!name.value || S.boot.escortTypes.indexOf(name.value) >= 0) name.value = k; rk(); }, text: k === 'ขบวนเสด็จ' ? 'ขบวนเสด็จ (ถปภ.)' : k })); }); }
     rk(); name.value = kind;
-    var f = card('▶ เริ่มนำขบวนใหม่'); add(f, h('label', { class: 'f', text: 'ประเภทขบวน' }), kinds, h('label', { class: 'f', text: 'ชื่อขบวน (จะขึ้นในรายงาน)' }), name,
-      h('div', { class: 'row2' }, origin, dest), h('label', { class: 'f', text: 'รับช่วง' }), from);
-    add($app, shiftPicker('checkin', params, function (s) { cur = s; }), f, bar(submitBtn('▶ เริ่ม ว.42', 'amber', function () {
-      if (!cur) throw new Error('กรุณาเลือกผลัดและรถ');
-      if (!name.value.trim()) throw new Error('กรุณาระบุชื่อขบวน');
-      return api('escort.start', { dutyDate: cur.dutyDate, shift: cur.shift, car: cur.car, kind: kind, name: name.value, from: origin.value, to: dest.value, handoverFrom: from.value }).then(function (r) {
-        var t0 = bkkNow(); S.boot.activeEscorts.push({ id: r.eventId, car: cur.car, sub: kind, payload: { name: name.value, start: isoOf(t0) + 'T' + pad(t0.getHours()) + ':' + pad(t0.getMinutes()) } });
-        done('เริ่ม ว.42 แล้ว', r.message, { next: 'escort' });
-      });
-    })));
+    var t0 = bkkNow(); t0.setMinutes(0); t0.setHours(t0.getHours() + 1);
+    var pDate = h('input', { type: 'date', value: isoOf(t0), min: addDays(today(), -1) }), pTime = h('input', { type: 'time', value: pad(t0.getHours()) + ':00' });
+    var carIn = h('input', { placeholder: 'เลขรถ เช่น 3215', list: 'esc-cars' }), dl = h('datalist', { id: 'esc-cars' });
+    var myCar = (S.boot.myShifts || []).filter(function (m) { return m.dutyDate >= S.boot.current.dutyDate; })[0]; if (myCar) carIn.value = myCar.car;
+    function loadCars() {
+      var hh = +String(pTime.value || '12').slice(0, 2), sh = hh >= 6 && hh < 18 ? 'D' : 'N', dd = hh < 6 ? addDays(pDate.value, -1) : pDate.value;
+      api('shift.list', { dutyDate: dd, shift: sh }).then(function (l) { clear(dl); l.forEach(function (c) { add(dl, h('option', { value: c.car, label: 'เขต ' + c.zone + ' · ' + c.crew.map(function (m) { return person(m.pid).short; }).join(',') })); }); }, function () { });
+    }
+    pDate.onchange = loadCars; pTime.onchange = loadCars; loadCars();
+    var resp = S.boot.me.pid, rb = h('button', { class: 'chip on', text: '👤 ' + S.boot.me.short + ' (ท่านเอง)' });
+    rb.onclick = function () { pickPerson('ผู้รับผิดชอบขบวน', function (p) { resp = p.pid; rb.textContent = '👤 ' + p.short; }); };
+    add(planBox, h('div', { class: 'row2' }, h('div', null, h('label', { class: 'f', text: 'วันที่นัด' }), pDate), h('div', null, h('label', { class: 'f', text: 'เวลา (โดยประมาณ)' }), pTime)),
+      h('label', { class: 'f', text: 'รถที่จะนำขบวน' }), carIn, dl);
+    if (can('report.editOthers')) add(planBox, h('label', { class: 'f', text: 'ผู้รับผิดชอบ (ลงแทนได้)' }), rb);
+    add(planBox, h('p', { class: 'muted small', style: 'margin:8px 0 0', text: 'ผู้บังคับบัญชาจะเห็นนัดนี้ในหน้าแรกและหน้า "ตอนนี้" · ถึงเวลาแล้วกด "เริ่ม" — ขบวนมาช้าก็กดเริ่มตอนรับขบวนจริง ไม่ถือว่าผิด' }));
+    var cur = null;
+    add(nowBox, shiftPicker('checkin', params, function (x) { cur = x; }));
+    var details = card('📝 รายละเอียดขบวน');
+    add(details, h('label', { class: 'f', text: 'ประเภทขบวน' }), kinds, h('label', { class: 'f', text: 'ชื่อขบวน (จะขึ้นในรายงาน)' }), name, h('div', { class: 'row2' }, origin, dest),
+      h('label', { class: 'cap', style: 'margin-top:8px' }, rt, ' ไป-กลับ (ส่งถึงแล้วรอรับกลับ) — เปลี่ยนภายหลังได้ นับ 1 ขบวน'), h('label', { class: 'f', text: 'รับช่วง / หมายเหตุ' }), hfrom, note);
+    var btn = h('div');
+    function rs() {
+      clear(seg); [['plan', '📅 ลงนัดล่วงหน้า'], ['now', '▶ เริ่มนำขบวนเลย']].forEach(function (m) { add(seg, h('button', { class: m[0] === mode ? 'on' : '', onclick: function () { mode = m[0]; rs(); }, text: m[1] })); });
+      planBox.hidden = mode !== 'plan'; nowBox.hidden = mode !== 'now';
+      clear(btn); add(btn, bar(mode === 'plan' ? submitBtn('📅 บันทึกนัด', 'green', function () {
+        if (!pDate.value || !pTime.value) throw new Error('กรุณาระบุวันและเวลานัด');
+        if (!carIn.value.trim()) throw new Error('กรุณาระบุรถ');
+        if (!name.value.trim()) throw new Error('กรุณาระบุชื่อขบวน');
+        return api('escort.schedule', { plan: pDate.value + 'T' + pTime.value.slice(0, 5), car: carIn.value.trim(), resp: resp, kind: kind, name: name.value, from: origin.value, to: dest.value, legs: rt.checked ? 2 : 1, handoverFrom: hfrom.value, note: note.value })
+          .then(function (r) { toast('📅 ลงนัดแล้ว — ผู้บังคับบัญชาเห็นในหน้าแรก', 4000); return escReload(function () { VIEWS.escort({ id: r.eventId, _fresh: 1 }); }); });
+      }) : submitBtn('▶ เริ่ม ว.42', 'amber', function () {
+        if (!cur) throw new Error('กรุณาเลือกผลัดและรถ');
+        if (!name.value.trim()) throw new Error('กรุณาระบุชื่อขบวน');
+        return api('escort.start', { dutyDate: cur.dutyDate, shift: cur.shift, car: cur.car, kind: kind, name: name.value, from: origin.value, to: dest.value, legs: rt.checked ? 2 : 1, handoverFrom: hfrom.value, note: note.value })
+          .then(function (r) { return escReload(function () { done('เริ่ม ว.42 แล้ว', r.message, { next: 'escort' }); }); });
+      })));
+    }
+    var f = card('➕ ขบวนใหม่');
+    add(f, seg, planBox, nowBox);
+    rs();
+    add($app, f, details, btn);
+    drawList();
+    if (!params._fresh) escReload(function () { if (S.view === 'escort') { list = S.boot.escorts; mine = list.filter(escMine); others = list.filter(function (e) { return !escMine(e); }); drawList(); } }).catch(function () { });
   };
 
   // ======================= ช่วยเหลือ/เหตุการณ์ =======================
@@ -1514,10 +1758,15 @@
           var mayEnd = can('report.editOthers') || myCarsNow.indexOf(e.car) >= 0 || e.crew.indexOf(S.boot.me.pid) >= 0;
           add(ec, h('div', { class: 'list-item' }, h('div', { class: 'grow' }, h('b', { text: 'รถ ' + e.car + ' · ' + e.name }),
             h('div', { class: 'small muted', text: [e.from && e.to ? e.from + ' → ' + e.to : e.from || e.to, e.start ? 'เริ่ม ' + th(e.start.slice(0, 10)) + ' ' + hm(e.start) + ' น.' : ''].filter(Boolean).join(' · ') })),
-            mayEnd ? h('button', { class: 'btn amber sm', onclick: function () { go('escort'); }, text: '🏁 จบขบวน' }) : null));
+            mayEnd ? h('button', { class: 'btn amber sm', onclick: function () { go('escort', { id: e.id }); }, text: e.leg === 2 ? '🏁 จบขากลับ' : '🏁 จบขบวน' }) : null));
         });
         add(ec, h('p', { class: 'muted small', text: 'เจ้าหน้าที่ และหัวหน้าสถานี/จ่ากอง/เจ้าหน้าที่รายงาน/แอดมิน กดจบได้ · ถ้าไม่มีใครกด ระบบปิดเองเมื่อพ้นผลัด 2 ชม.' }));
         add($app, ec);
+      }
+      if ((n.escOpen || []).length) {
+        var eo = card('🕒 ว.42 ที่นัดไว้ / รอรับกลับ', n.escOpen.length + ' ขบวน');
+        n.escOpen.forEach(function (e) { add(eo, escRow(e)); });
+        add($app, eo);
       }
       var zc = card('🚓 รถใน' + SHIFT[n.shift].label + 'นี้', n.cars.filter(function (c) { return c.status === 'done' || c.status === 'noresult'; }).length + '/' + n.cars.length + ' ส่งเวรแล้ว');
       var cars = h('div', { class: 'cars' });
@@ -1526,6 +1775,7 @@
           h('div', { class: 'h' }, h('span', { class: 'st', text: STI[c.status][0] }), h('span', { class: 'grow', text: c.car + (c.crewType === 'จักรยานยนต์' ? ' 🏍' : '') }), h('span', { class: 'badge gray', text: 'เขต ' + c.zone })),
           h('div', { class: 'crew', text: c.crew.map(function (m) { return m.name; }).join(' · ') || '—' }),
           c.escort ? h('div', { class: 'small', text: '🚔 ' + c.escort }) : null,
+          (c.escNext || []).map(function (x) { return h('div', { class: 'esc-tag ' + (x.status === 'waiting' ? 'wait' : 'plan'), text: x.status === 'waiting' ? '🟣 รอรับกลับ ' + x.name : '🕒 นัด ' + whenTxt(x.plan) + ' ' + x.name }); }),
           c.totals && c.totals.ticket ? h('div', { class: 'small', text: '🧾 ' + c.totals.ticket + ' (🚚' + (c.totals.T || 0) + ' 🚗' + (c.totals.C || 0) + ')' }) : null));
       });
       add(zc, cars, h('p', { class: 'muted small', style: 'margin:10px 0 0', text: Object.keys(STI).map(function (s) { return STI[s][0] + ' ' + STI[s][1]; }).join('   ') }));
@@ -1833,6 +2083,14 @@
       api('history.list', { from: p[1], to: p[2] }, { fresh: !!fresh }).then(function (rows) {
         clear(out);
         if (!rows.length) { var e0 = card('ไม่มีรายการ'); add(e0, h('p', { class: 'muted', text: 'ยังไม่มีรายการที่ส่งในช่วงนี้' })); return add(out, e0); }
+        add(out, h('div', { class: 'center', style: 'margin:0 0 8px' }, xlBtn('รายการทั้งหมดเป็น .xlsx', function () {
+          xlsxDownload('รายการที่ส่งแล้ว_' + p[1] + '_' + p[2] + '.xlsx', [{ name: 'รายการที่ส่งแล้ว', head: ['วันที่', 'ผลัด', 'เขต', 'รถ', 'ประเภท', 'รายการ', 'สถานะ', 'ผู้ดำเนินการ', 'แก้ไข (ครั้ง)', 'แก้ไขล่าสุด'],
+            rows: rows.map(function (r) { var au = r.audit || {}, l = au.last;
+              return [r.dutyDate, r.shift === 'N' ? 'กลางคืน' : r.shift === 'D' ? 'กลางวัน' : '', r.zone || '', r.car || '', { shift: 'ผลัด', escort: 'ว.42', assist: 'ช่วยเหลือ', arrest: 'จับกุม', mission: 'ภารกิจ' }[r.kind] || r.kind,
+                r.kind === 'shift' ? 'เจ้าหน้าที่: ' + (r.crew || []).join(', ') + (r.totals && r.totals.ticket ? ' · ใบสั่ง ' + r.totals.ticket : '') : r.title, statusTxt(r).replace(/^\S+\s/, ''),
+                r.kind === 'shift' ? [r.checkinBy && 'เข้าเวร ' + r.checkinBy, r.checkoutBy && 'ส่งเวร ' + r.checkoutBy].filter(Boolean).join(' · ') : [r.reporter && 'บันทึก ' + r.reporter, r.endBy && 'จบ ' + r.endBy].filter(Boolean).join(' · '),
+                au.edits || 0, l ? l.label + ' โดย ' + l.by + ' ' + String(l.at).replace('T', ' ').slice(0, 16) : '']; }) }], [['ช่วงวันที่', th(p[1]) + ' – ' + th(p[2])]]);
+        })));
         var byDay = {}; rows.forEach(function (r) { (byDay[r.dutyDate] = byDay[r.dutyDate] || []).push(r); });
         Object.keys(byDay).sort().reverse().forEach(function (d) {
           var cd = card(th(d)), list = h('div', { class: 'list' });
@@ -1843,7 +2101,7 @@
     }
     function statusTxt(r) {
       if (r.kind === 'shift') return r.status === 'ยกเลิก' ? '🗑 ยกเลิกแล้ว' : r.status === 'ส่งเวร' ? '✅ ส่งเวรแล้ว ' + hm(r.checkoutAt) : r.status === 'ไม่มีผล' ? '⚪ ส่งเวร (ไม่มีผล)' : '🟢 เข้าเวรแล้ว ' + hm(r.checkinAt) + ' (ยังไม่ส่งเวร)';
-      var m = { void: '🗑 ยกเลิกแล้ว', active: '⏱ กำลังนำขบวน', pending: '⏳ รอตรวจ', approved: '✅ อนุมัติแล้ว', returned: '↩️ ส่งกลับแก้', ok: '✅ บันทึกแล้ว' };
+      var m = { void: '🗑 ยกเลิกแล้ว', active: '⏱ กำลังนำขบวน', waiting: '🟣 รอรับกลับ', scheduled: '🕒 ลงนัดไว้', pending: '⏳ รอตรวจ', approved: '✅ อนุมัติแล้ว', returned: '↩️ ส่งกลับแก้', ok: '✅ บันทึกแล้ว' };
       return (m[r.status] || r.status) + (r.at ? ' ' + hm(r.at) : '');
     }
     function row(r) {
@@ -1891,6 +2149,7 @@
           h('button', { class: 'btn green block', onclick: function () { closeModal(); go('checkout', q); }, text: '✅ ส่งเวร/แก้ผลการปฏิบัติ' })]);
       }
       if (r.kind === 'arrest') return go('arrest', { id: r.id });
+      if (r.kind === 'escort' && /^(scheduled|active|waiting)$/.test(r.status)) return go('escort', { id: r.id }); // ขบวนที่ยังไม่จบ แก้ที่หน้า ว.42
       if (r.kind === 'escort') return editEscort(r);
       if (r.kind === 'assist') return editAssist(r);
       toast('รายการประเภทนี้แก้ไขจากหน้านี้ไม่ได้');
@@ -1903,7 +2162,7 @@
       var hf = h('input', { value: p.handoverFrom || '', placeholder: 'รับช่วงจาก' }), ht = h('input', { value: p.handoverTo || '', placeholder: 'ส่งต่อให้' }), res = h('input', { value: p.result || '', placeholder: 'ผล/หมายเหตุ' });
       var rt = h('input', { type: 'checkbox', checked: p.trips === 2 }), reason = reasonBox();
       modal('แก้ไข ว.42', [h('label', { class: 'f', text: 'ชื่อขบวน' }), name, h('div', { class: 'row2' }, from, to), h('div', { class: 'row2' }, hf, ht), res,
-        p.end ? h('label', { class: 'cap' }, rt, 'ไป-กลับ (นับ 2 ขบวน)') : null, h('label', { class: 'f', text: 'เหตุผล' }), reason], 'บันทึกการแก้ไข', function () {
+        p.end ? h('label', { class: 'cap' }, rt, ' ไป-กลับ (นับ 1 ขบวน)') : null, h('label', { class: 'f', text: 'เหตุผล' }), reason], 'บันทึกการแก้ไข', function () {
         return api('event.update', { id: r.id, reason: reason.value, fields: { name: name.value, from: from.value, to: to.value, handoverFrom: hf.value, handoverTo: ht.value, result: res.value, roundTrip: rt.checked } }).then(afterEdit);
       });
     }
@@ -2277,16 +2536,32 @@
         });
       })));
     });
-    var c4 = card('🧾 ข้อมูลดิบ (CSV)', 'ทุกรายการในช่วง — เปิดในเบราว์เซอร์นอกไลน์เพื่อดาวน์โหลด');
-    add(c4, submitBtn('⬇️ ดาวน์โหลด CSV', 'gray block', function () {
+    var c4 = card('🧾 ข้อมูลดิบทุกรายการ (.xlsx)', 'ทุกรายการในช่วง 1 แถวต่อรายการ');
+    add(c4, submitBtn('⬇️ ดาวน์โหลด .xlsx', 'gray block', function () {
       if (!cur) throw new Error('เลือกช่วงวัน');
       return api('export.events', { from: cur[0], to: cur[1] }).then(function (rows) {
-        var head = ['id', 'statDate', 'dutyDate', 'shift', 'zone', 'car', 'type', 'sub', 'act', 'count', 'status', 'issuer', 'reporter', 'detail'];
-        var csv = '﻿' + head.join(',') + '\n' + rows.map(function (r) { return head.map(function (k) { var v = String(r[k] == null ? '' : r[k]); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\n');
-        downloadB64(btoa(unescape(encodeURIComponent(csv))), 'รายการ_' + cur[0] + '_' + cur[1] + '.csv', 'text/csv');
+        var SH = { D: 'กลางวัน', N: 'กลางคืน' }, ST = { ok: 'ปกติ', void: 'ยกเลิก', active: 'กำลังนำ', waiting: 'รอรับกลับ', scheduled: 'นัดไว้', pending: 'รอตรวจ', approved: 'อนุมัติ', returned: 'ส่งกลับ' };
+        xlsxDownload('รายการ_' + cur[0] + '_' + cur[1] + '.xlsx', [{ name: 'รายการทั้งหมด', head: ['รหัส', 'วันที่นับสถิติ', 'วันเข้าเวร', 'ผลัด', 'เขต', 'รถ', 'ประเภท', 'รายการ', 'พ.ร.บ./หมวด', 'จำนวน', 'สถานะ', 'ผู้ออกใบสั่ง', 'ผู้บันทึก', 'รายละเอียด'],
+          rows: rows.map(function (r) { return [r.id, r.statDate, r.dutyDate, SH[r.shift] || '', +r.zone || '', String(r.car || ''), r.type, r.sub, r.act, +r.count || 0, ST[r.status] || r.status, r.issuer || (r.type === 'ใบสั่ง' ? 'ยังไม่ระบุ (รอเทียบ PTM)' : ''), r.reporter, r.detail]; }) }],
+          [['ช่วงวันที่', th(cur[0]) + ' – ' + th(cur[1])]]);
       });
     }));
-    add($app, c, c1, c2, c3, c4);
+    // ไฟล์สำรองรวมทุกหมวด (ธุรการเก็บในคอมพิวเตอร์) — ไม่เกิน 92 วันต่อไฟล์
+    var c0 = card('💾 ไฟล์สำรองข้อมูล (.xlsx)', 'ทุกหมวดในไฟล์เดียว · ดาวน์โหลดลงเครื่องโดยตรง');
+    add(c0, h('p', { class: 'muted small', text: 'สรุปรายรถ · สรุปรายคน · ผลัด · ใบสั่ง (ผู้ออก/รอเทียบ PTM) · ว.42 · ช่วยเหลือ · จับกุม · ภารกิจ · งานอื่นในผลัด · ตารางเวร' +
+      (can('fine.manage') || S.boot.perms.admin || (can('view.people') && S.boot.perms.scope === 'station') ? ' · ค่าปรับรายวัน · ใบสั่งชำระแล้ว' : '') + (can('view.suspect') ? ' · ผู้ต้องหา (ข้อมูลลับ)' : '') +
+      ' — ครั้งละไม่เกิน 92 วัน (แนะนำส่งออกทุกสิ้นวงรอบ/สิ้นเดือน) · ระบบบันทึกประวัติทุกครั้งที่ส่งออก' }),
+      can('view.suspect') ? h('p', { class: 'note small', text: '🔒 ไฟล์ที่มีข้อมูลผู้ต้องหา: เก็บในเครื่องที่ตั้งรหัสผ่าน ห้ามส่งต่อทางไลน์/อีเมล/อัปโหลดขึ้นบริการภายนอก ใช้เฉพาะงานคดี' }) : null,
+      submitBtn('💾 สร้างไฟล์สำรอง .xlsx', 'green block', function () {
+        if (!cur) throw new Error('เลือกช่วงวัน');
+        toast('กำลังรวบรวมข้อมูล… ประมาณ 10–40 วินาที', 8000);
+        return api('export.backup', { from: cur[0], to: cur[1] }).then(function (r) {
+          var n = r.sheets.reduce(function (a, x) { return a + x.rows.length; }, 0);
+          xlsxDownload('สำรองข้อมูล_' + S.boot.station.replace(/[\s.]/g, '') + '_' + r.from + '_' + r.to + '.xlsx', r.sheets,
+            [['ช่วงวันที่', th(r.from) + ' – ' + th(r.to)], ['ขอบเขต', r.scope === 'station' ? 'ทั้งสถานี' : r.scope === 'zone' ? 'เขต ' + r.zone : 'เฉพาะของผู้ส่งออก'], ['จำนวนแถวรวม', n]]);
+        });
+      }));
+    add($app, c0, c, c1, c2, c3, c4);
   };
   /** การ์ดผลลัพธ์ไฟล์ที่เก็บใน Google Drive: เปิด / แชร์เข้าไลน์ / คัดลอกลิงก์ */
   function fileCard(r, label) {
@@ -2308,6 +2583,101 @@
     if (window.html2canvas) return run();
     return new Promise(function (res, rej) { var sc = h('script', { src: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js' }); sc.onload = res; sc.onerror = function () { rej(new Error('โหลดตัวสร้างรูปไม่ได้ กรุณาตรวจสัญญาณ')); }; document.head.appendChild(sc); }).then(run);
   }
+  // ======================= ไฟล์ .xlsx (สร้างในเครื่อง ไม่ใช้ไลบรารีภายนอก — ข้อมูลไม่ออกนอกเครื่อง) =======================
+  var Xlsx = (function () {
+    var enc = new TextEncoder();
+    var CRC = (function () { var t = new Uint32Array(256); for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+    function crc32(b) { var c = 0xFFFFFFFF; for (var i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+    function zip(files) {
+      var parts = [], central = [], off = 0;
+      files.forEach(function (f) {
+        var nm = enc.encode(f.name), d = typeof f.data === 'string' ? enc.encode(f.data) : f.data, c = crc32(d);
+        var lh = new DataView(new ArrayBuffer(30));
+        lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(12, 0x21, true);
+        lh.setUint32(14, c, true); lh.setUint32(18, d.length, true); lh.setUint32(22, d.length, true); lh.setUint16(26, nm.length, true);
+        parts.push(new Uint8Array(lh.buffer), nm, d);
+        var ch = new DataView(new ArrayBuffer(46));
+        ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(14, 0x21, true);
+        ch.setUint32(16, c, true); ch.setUint32(20, d.length, true); ch.setUint32(24, d.length, true); ch.setUint16(28, nm.length, true); ch.setUint32(42, off, true);
+        central.push(new Uint8Array(ch.buffer), nm);
+        off += 30 + nm.length + d.length;
+      });
+      var cd = central.reduce(function (a, b) { return a + b.length; }, 0), end = new DataView(new ArrayBuffer(22));
+      end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, cd, true); end.setUint32(16, off, true);
+      var all = parts.concat(central, [new Uint8Array(end.buffer)]), out = new Uint8Array(all.reduce(function (a, b) { return a + b.length; }, 0)), p = 0;
+      all.forEach(function (b) { out.set(b, p); p += b.length; });
+      return out;
+    }
+    function esc(v) { return String(v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, ''); }
+    function col(i) { var s = ''; i++; while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+    function cell(r, c, v, st) {
+      var ref = col(c) + r, sa = st ? ' s="' + st + '"' : '';
+      if (v === null || v === undefined || v === '') return st ? '<c r="' + ref + '"' + sa + '/>' : '';
+      if (typeof v === 'number' && isFinite(v)) return '<c r="' + ref + '"' + sa + '><v>' + v + '</v></c>';
+      v = String(v); if (v.length > 32000) v = v.slice(0, 32000);
+      return '<c r="' + ref + '" t="inlineStr"' + sa + '><is><t xml:space="preserve">' + esc(v) + '</t></is></c>';
+    }
+    function sname(n, used) { var b = String(n || 'Sheet').replace(/[\[\]:*?\/\\]/g, '-').slice(0, 31) || 'Sheet', x = b, i = 2; while (used[x.toLowerCase()]) x = b.slice(0, 28) + ' ' + i++; used[x.toLowerCase()] = 1; return x; }
+    function sheetXml(sh) {
+      var head = sh.head || [], rows = sh.rows || [], r0 = sh.title ? 2 : 1, ncol = Math.max(head.length, 1);
+      var w = head.map(function (hh, i) { var m = String(hh).length; rows.slice(0, 400).forEach(function (row) { var v = row[i], l = v == null ? 0 : String(v).length; if (l > m) m = l; }); return Math.min(60, Math.max(7, Math.round(m * 1.15) + 2)); });
+      var x = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'];
+      x.push('<sheetViews><sheetView workbookViewId="0"><pane ySplit="' + r0 + '" topLeftCell="A' + (r0 + 1) + '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>');
+      if (w.length) x.push('<cols>' + w.map(function (v, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + v + '" customWidth="1"/>'; }).join('') + '</cols>');
+      x.push('<sheetData>');
+      if (sh.title) x.push('<row r="1">' + cell(1, 0, sh.title, 3) + '</row>');
+      x.push('<row r="' + r0 + '">' + head.map(function (hh, i) { return cell(r0, i, hh, 1); }).join('') + '</row>');
+      rows.forEach(function (row, j) { var r = r0 + 1 + j; x.push('<row r="' + r + '">' + row.map(function (v, i) { return cell(r, i, v, typeof v === 'number' ? 2 : 0); }).join('') + '</row>'); });
+      x.push('</sheetData>');
+      if (rows.length && head.length) x.push('<autoFilter ref="A' + r0 + ':' + col(ncol - 1) + (r0 + rows.length) + '"/>');
+      x.push('<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/></worksheet>');
+      return x.join('');
+    }
+    var STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="3"><font><sz val="11"/><name val="Tahoma"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Tahoma"/></font><font><b/><sz val="14"/><color rgb="FF0F2744"/><name val="Tahoma"/></font></fonts>' +
+      '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F3B63"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+      '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFC9D3DF"/></left><right style="thin"><color rgb="FFC9D3DF"/></right><top style="thin"><color rgb="FFC9D3DF"/></top><bottom style="thin"><color rgb="FFC9D3DF"/></bottom><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    /** sheets = [{ name, head: [], rows: [[]], title? }] → Uint8Array ของไฟล์ .xlsx */
+    function build(sheets) {
+      var used = {}, list = sheets.map(function (sh) { return Object.assign({}, sh, { name: sname(sh.name, used) }); });
+      var files = [{ name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+        list.map(function (_, i) { return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join('') + '</Types>' },
+        { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+        { name: 'xl/workbook.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>' +
+          list.map(function (sh, i) { return '<sheet name="' + esc(sh.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</sheets>' +
+          (function () { var dn = list.map(function (sh, i) { var r0 = sh.title ? 2 : 1, n = (sh.head || []).length; return sh.rows && sh.rows.length && n ? '<definedName name="_xlnm._FilterDatabase" localSheetId="' + i + '" hidden="1">\'' + esc(sh.name.replace(/'/g, "''")) + '\'!$A$' + r0 + ':$' + col(n - 1) + '$' + (r0 + sh.rows.length) + '</definedName>' : ''; }).join(''); return dn ? '<definedNames>' + dn + '</definedNames>' : ''; })() + '</workbook>' },
+        { name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+          list.map(function (_, i) { return '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>'; }).join('') +
+          '<Relationship Id="rId' + (list.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+        { name: 'xl/styles.xml', data: STYLES }];
+      list.forEach(function (sh, i) { files.push({ name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: sheetXml(sh) }); });
+      return zip(files);
+    }
+    return { build: build, _col: col };
+  })();
+  var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  function fileStamp() { var t = bkkNow(); return isoOf(t) + '_' + pad(t.getHours()) + pad(t.getMinutes()); }
+  /** สร้างและดาวน์โหลด .xlsx — sheets ตามรูปแบบ Xlsx.build · มีชีต "รายละเอียด" นำหน้าเสมอ */
+  function xlsxDownload(name, sheets, info) {
+    var meta = [['หน่วยงาน', S.boot.station], ['ส่งออกโดย', S.boot.me.name], ['เวลาส่งออก', th(today()) + ' ' + hm(nowLocal()) + ' น.']].concat(info || []);
+    meta.push(['ชีตในไฟล์', sheets.map(function (x) { return x.name + ' (' + x.rows.length + ')'; }).join(', ')]);
+    if (sheets.some(function (x) { return x.secret; })) meta.push(['⚠️ ข้อมูลลับ', 'มีข้อมูลผู้ต้องหา — เก็บในเครื่องที่มีรหัสผ่าน ห้ามส่งต่อ/อัปโหลดขึ้นบริการภายนอก ใช้เฉพาะงานคดี']);
+    var u8 = Xlsx.build([{ name: 'รายละเอียด', head: ['รายการ', 'ข้อมูล'], rows: meta }].concat(sheets));
+    var url = URL.createObjectURL(new Blob([u8], { type: XLSX_TYPE })), a = h('a', { href: url, download: name });
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 4000);
+    if (window.liff && liff.isInClient && liff.isInClient()) toast('ถ้าไฟล์ไม่ดาวน์โหลด ให้เปิดหน้านี้ในเบราว์เซอร์บนคอมพิวเตอร์ (เมนู ⋮ → เปิดในเบราว์เซอร์)', 6000);
+    else toast('⬇️ ดาวน์โหลด ' + name, 3500);
+    return u8.length;
+  }
+  function xlBtn(label, fn) { return submitBtn('⬇️ ' + (label || '.xlsx'), 'ghost sm xl-btn', fn); }
+
   function downloadB64(b64, name, type) {
     var bin = atob(b64), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
     var url = URL.createObjectURL(new Blob([arr], { type: type })), a = h('a', { href: url, download: name });
@@ -2985,6 +3355,7 @@
         h('div', { class: 'row', style: 'margin-top:8px' },
           submitBtn('🖼 บันทึกรูป', 'ghost grow', function () { return make().then(function (rs) { showFiles(rs); rs.forEach(function (r) { if (r.b64) downloadB64(r.b64, r.name, 'image/png'); }); }); }),
           h('button', { class: 'btn ghost grow', onclick: function () { copyText(data.text).then(function () { toast('📋 คัดลอกข้อความแล้ว'); }); }, text: '📋 คัดลอกข้อความ' })),
+        h('div', { style: 'margin-top:8px' }, xlBtn('ตารางเป็น .xlsx', function () { dailyXlsx(data); })),
         res));
       add(out, card('ข้อความรายงาน (ส่งคู่กับภาพ)'), h('div', { class: 'msg-preview', text: data.text }));
       var made = null;
@@ -3019,6 +3390,18 @@
     ar: ['จับกุม', '#c2410c', 'rgba(234,88,12,.07)'], es: ['', '#b45309', 'rgba(245,158,11,.09)'], mi: ['', '#7c3aed', 'rgba(124,58,237,.06)'] };
   var TH_WDF = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
   function thLong(iso) { var p = iso.split('-'); return TH_WDF[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()] + 'ที่ ' + (+p[2]) + ' ' + TH_MF[+p[1] - 1] + ' ' + (+p[0] + 543); }
+  function dailyXlsx(d) {
+    var head = ['เขต', 'รถ', 'ผลัด', 'เจ้าหน้าที่'].concat(DY_COLS.map(function (c) { return (c[1] + ' ' + (c[2] || '')).trim(); })).concat(['รวม', 'หมายเหตุ', 'สะสมวงรอบ', 'ผลัดในวงรอบ']);
+    var nums = function (n) { return DY_COLS.map(function (c) { return n[c[0]] || 0; }).concat([n.total || 0]); };
+    var rows = d.rows.map(function (r) { var m = (d.ctd || {})[r.car] || { total: 0, shifts: 0 };
+      return [r.zone || '', r.car, r.carry ? 'คืนก่อน (หลังเที่ยงคืน)' : r.shift === 'D' ? 'กลางวัน' : 'กลางคืน', r.crew.join(', ')].concat(nums(r.n)).concat([r.notes.map(function (x) { return x.text || x; }).join(' / '), m.total, m.shifts]); });
+    if (d.loose && d.loose.length) rows.push(['', 'ภารกิจ (ไม่ระบุรถ)', '', ''].concat(nums(d.looseN)).concat([d.loose.map(function (x) { return x.text || x; }).join(' / '), '', '']));
+    rows.push(['รวมทั้งสถานี', '', '', ''].concat(nums(d.total)).concat(['', '', '']));
+    rows.push(['เมื่อวาน', '', '', ''].concat(nums(d.yesterday)).concat(['', '', '']));
+    rows.push(['สะสมวงรอบ ' + th(d.cycleFrom) + '–' + th(d.date), '', '', ''].concat(nums(d.cycle)).concat(['', '', '']));
+    xlsxDownload('ผลการปฏิบัติประจำวัน_' + d.date + '.xlsx', [{ name: 'ผลประจำวัน', title: 'ผลการปฏิบัติประจำวัน ' + th(d.date) + ' — ' + S.boot.station, head: head, rows: rows },
+      { name: 'ข้อความรายงาน', head: ['ข้อความ'], rows: d.text.split('\n').map(function (l) { return [l]; }) }], [['วันที่', th(d.date)]]);
+  }
   function dyTickets(n) { return (n.T || 0) + (n.C || 0) + (n.R || 0); }
   /** หมายเหตุ 1 บรรทัด: "1.ข้อหา 2 ราย" — ตัวเลข+หน่วยท้ายไม่ตัดขึ้นบรรทัดใหม่ */
   function dyNote(k, x) {
