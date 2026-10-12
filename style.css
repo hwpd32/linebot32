@@ -654,3 +654,17 @@ details.info { margin-top: 8px; font-size: 13px; color: var(--muted); }
 details.info > summary { cursor: pointer; list-style: none; color: var(--blue); font-weight: 600; }
 details.info > summary::-webkit-details-marker { display: none; }
 details.info > div { margin-top: 6px; line-height: 1.5; background: var(--soft); border-radius: 10px; padding: 8px 10px; color: #475569; }
+/* ภาพประจำวันแผ่นเดียว (v1.14.1) */
+.dsh .dy-cases { margin-top: 4px; }
+.dsh .dy-case { display: flex; align-items: baseline; gap: 10px; font-size: 22px; line-height: 29px; color: #1e293b; white-space: nowrap; overflow: hidden; }
+.dsh .dy-case b { color: #0f2744; font-weight: 700; flex: none; min-width: 64px; }
+.dsh .dy-case span { overflow: hidden; text-overflow: ellipsis; }
+.dsh .dy-items .dy-item { display: flex; align-items: center; gap: 10px; font-size: 22px; line-height: 32px; color: #1e293b; white-space: nowrap; overflow: hidden; }
+.dsh .dy-items .dy-item i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; flex: none; }
+.dsh .dy-items .dy-item b { color: #0f2744; font-weight: 700; flex: none; min-width: 60px; }
+.dsh .dy-items .dy-item span { overflow: hidden; text-overflow: ellipsis; }
+.dsh .dyb .sb-lab { gap: 6px; } .dsh .dyb .sb-lab b.cno { width: auto; }
+.dsh .dy-cases.wrap .dy-case { white-space: normal; line-height: 26px; align-items: flex-start; }
+.dsh .dy-cases.wrap .dy-case span { overflow: hidden; max-height: 52px; }
+.dsh .dy-case { font-size: 21px; }
+.dsh .ow-card.three .owb .ol { font-size: 26px; margin-right: 8px; } .dsh .ow-card.three .owb b { font-size: 44px; } .dsh .ow-card.three .owb span:last-child { font-size: 22px; } .dsh .ow-card.three .sep { margin: 0 2px; }
