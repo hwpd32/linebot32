@@ -1,8 +1,8 @@
 /* charts.js — กราฟ SVG ขนาดเล็กสำหรับหน้าสรุป (ไม่ใช้ไลบรารีภายนอก ทำงานออฟไลน์ในเว็บวิวของไลน์) */
 (function () {
   var NS = 'http://www.w3.org/2000/svg';
-  // ชุดสีเดียวกันทั้งหน้า: ใบสั่ง = น้ำเงิน, ขนส่ง = ส้ม, รถยนต์ = ฟ้า, จราจร = ม่วง, ว.42 = เขียวเข้ม, ช่วยเหลือ = เขียวอ่อน, จับกุม = แดง
-  var C = { ticket: '#1f5fbf', T: '#e8812b', C: '#4ea1e6', R: '#8b5cf6', escort: '#0f7a5c', assist: '#5fb779', arrest: '#d64545', warning: '#9aa6b5', muted: '#94a3b8', grid: '#e5e9f0', ink: '#1e293b' };
+  // ชุดสีหมวดงานเดียวกับภาพรายงาน (v1.14): ใบสั่ง/จราจร = น้ำเงิน (ขนส่ง เข้ม · รถยนต์ กลาง · จราจร อ่อน), จับกุม = กรมท่า, ว.42 = อำพัน, ช่วยเหลือ = เขียว, ภารกิจ = ม่วง
+  var C = { ticket: '#2563eb', T: '#1e40af', C: '#3b82f6', R: '#93c5fd', escort: '#f59e0b', assist: '#0d9488', arrest: '#0f2744', mission: '#7c3aed', warning: '#9aa6b5', muted: '#94a3b8', grid: '#e5e9f0', ink: '#1e293b' };
   function el(tag, attrs, text) { var e = document.createElementNS(NS, tag); Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); }); if (text != null) e.textContent = text; return e; }
   function svg(w, h) { var s = el('svg', { viewBox: '0 0 ' + w + ' ' + h, width: '100%', role: 'img' }); s.style.display = 'block'; s.style.height = 'auto'; return s; }
   function niceMax(v) { if (v <= 0) return 1; var p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p; var n = m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10; return n * p; }

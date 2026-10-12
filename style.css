@@ -541,72 +541,39 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .wk-none { color: #cbd5e1; font-size: 16px; }
 .wk-det .wk-res { font-size: 14px; background: var(--soft); border-radius: 10px; padding: 8px 10px; margin: 8px 0 4px; line-height: 1.6; }
 
-/* ===== v1.10 ภาพสรุปผลการปฏิบัติประจำวัน ===== */
-.dsh.dy { height: auto; }
-.dsh .dy-k { padding: 14px 22px 16px; display: flex; flex-direction: column; justify-content: space-between; border-radius: 22px; overflow: visible; }
-.dsh .dy-kl { font-size: 23px; line-height: 1.35; font-weight: 600; color: #334155; white-space: nowrap; }
-.dsh .dy-kv { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
-.dsh .dy-kv b { font-size: 50px; font-weight: 700; color: #0f2744; line-height: 1.15; }
-.dsh .dy-kv i { font-style: normal; font-size: 22px; font-weight: 700; }
-.dsh .dy-kv small { font-size: 18px; color: #64748b; margin-left: auto; }
-.dsh .dy-ks { font-size: 19px; line-height: 1.5; padding-bottom: 2px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dsh .dy-box { background: #fff; border: 2px solid #c9d5e6; border-radius: 22px; overflow: hidden; }
-.dsh .dy-t { width: 1824px; border-collapse: collapse; table-layout: fixed; font-size: 20px; color: #1e293b; }
-.dsh .dy-t th { background: #0f2744; color: #fff; font-weight: 600; font-size: 19px; line-height: 1.2; padding: 8px 4px; border-left: 1px solid #24466f; text-align: center; vertical-align: middle; }
-.dsh .dy-t th:first-child { border-left: 0; }
-.dsh .dy-t th small { display: block; font-size: 15px; font-weight: 400; color: #c7d4e6; margin-top: 2px; }
-.dsh .dy-t th.dy-g { font-size: 18px; padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,.25); }
-.dsh .dy-t th.dy-n { font-size: 16px; line-height: 1.15; padding: 6px 2px; }
-.dsh .dy-t td { border-left: 1px solid #e2e8f0; border-top: 1px solid #e8edf3; padding: 7px 8px; vertical-align: middle; }
-.dsh .dy-t tr.dy-cs > td { border-top: 1px solid #c9d5e6; }
-.dsh .dy-t tr.dy-zs > td { border-top: 3px solid #b8c7da; }
-.dsh .dy-zone { background: #e6edf7; text-align: center; padding: 4px !important; }
-.dsh .dy-zone.alt { background: #dde6f2; }
-.dsh .dy-zone b { display: block; font-size: 20px; color: #0f2744; }
-.dsh .dy-zone small { display: block; font-size: 14px; color: #475569; line-height: 1.2; }
-.dsh .dy-car { text-align: center; background: #f8fafc; }
-.dsh .dy-car b { display: block; font-size: 26px; color: #0f2744; }
-.dsh .dy-car small { display: block; font-size: 15px; color: #64748b; }
-.dsh .dy-sh { text-align: center; padding: 4px !important; line-height: 1.1; }
-.dsh .dy-sh span { display: block; font-size: 22px; } .dsh .dy-sh small { display: block; font-size: 15px; color: #64748b; }
-.dsh .dy-crew { font-size: 19px; line-height: 1.35; }
-.dsh .dy-rep { font-size: 18px; line-height: 1.4; }
-.dsh .dy-ln { display: block; white-space: nowrap; }
-.dsh .dy-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; background: #94a3b8; }
-.dsh .dy-ln.ok { color: #166534; } .dsh .dy-ln.ok .dy-dot { background: #16a34a; }
-.dsh .dy-ln.warn { color: #b45309; font-weight: 600; } .dsh .dy-ln.warn .dy-dot { background: #f59e0b; }
-.dsh .dy-ln.bad { color: #b91c1c; font-weight: 700; } .dsh .dy-ln.bad .dy-dot { background: #dc2626; }
-.dsh .dy-ln.wait { color: #94a3b8; }
-.dsh .dy-mu { display: block; color: #64748b; font-size: 17px; }
-.dsh .dy-v { text-align: center; font-size: 26px; font-weight: 700; color: #0f2744; padding: 4px 2px !important; }
-.dsh .dy-v i { display: block; font-style: normal; font-size: 15px; font-weight: 700; }
-.dsh .dy-tot { text-align: center; font-size: 27px; font-weight: 700; color: #0f2744; background: #f1f5f9; }
-.dsh .dy-tot i { display: block; font-style: normal; font-size: 15px; }
-.dsh .dy-note { font-size: 18px; line-height: 1.38; color: #1e293b; }
-.dsh .dy-ni.k-arrest { font-weight: 700; color: #9a3412; } .dsh .dy-ni.k-pending { color: #b45309; }
-.dsh .dy-mtd { text-align: center; background: #f8fafc; line-height: 1.25; }
-.dsh .dy-mtd b { display: block; font-size: 28px; color: #0f2744; } .dsh .dy-mtd small { display: block; font-size: 15px; color: #64748b; white-space: nowrap; }
-.dsh .dy-me > td:not(.dy-zone):not(.dy-car):not(.dy-mtd) { background: #fff7cc !important; }
-.dsh .dy-loose { font-weight: 600; color: #5b21b6; background: #f5f3ff; }
-.dsh .dy-empty { text-align: center; color: #64748b; padding: 30px !important; font-size: 24px; }
-.dsh .dy-t tfoot td { background: #f1f5f9; }
-.dsh .dy-t tr.dy-sum > td { background: #e6edf7; border-top: 3px solid #9fb0c8; }
-.dsh .dy-t tr.dy-sum .dy-v b { font-size: 28px; }
-.dsh .dy-t tr.dy-cmp > td { font-size: 18px; color: #64748b; font-weight: 600; padding-top: 4px !important; padding-bottom: 4px !important; }
-.dsh .dy-t tr.dy-cmp .dy-v, .dsh .dy-t tr.dy-cmp .dy-tot { font-size: 20px; color: #64748b; background: #f8fafc; }
-.dsh .dy-lab b { display: block; font-size: 23px; color: #0f2744; } .dsh .dy-lab small { display: block; font-size: 16px; color: #475569; }
-.dsh .dy-lab { text-align: left; padding-left: 16px !important; }
-.dsh .dy-foot { font-size: 18px; color: #64748b; padding: 10px 18px 12px; background: #fff; border-top: 1px solid #e2e8f0; }
+/* ===== v1.14 ภาพสรุปผลการปฏิบัติประจำวัน (16:9 โทนเดียวกับภาพวงรอบ) ===== */
+.dsh .dy-k { padding: 12px 22px 12px; display: flex; flex-direction: column; justify-content: space-between; border-radius: 22px; overflow: hidden; }
+.dsh .dy-kl { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+.dsh .dy-kl b { font-size: 27px; font-weight: 700; color: #0f2744; }
+.dsh .dy-kl span { font-size: 19px; color: #64748b; }
+.dsh .dy-kv { display: flex; align-items: baseline; gap: 12px; white-space: nowrap; line-height: 1; }
+.dsh .dy-kv b { font-size: 58px; font-weight: 700; color: #0f2744; line-height: 1.05; }
+.dsh .dy-kv i { font-style: normal; font-size: 24px; font-weight: 700; }
+.dsh .dy-ks { font-size: 19px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dsh .dy-kc { display: flex; justify-content: space-between; font-size: 18px; color: #64748b; white-space: nowrap; border-top: 1px solid #e8edf3; padding-top: 6px; }
+.dsh .d-page { background: #0f2744; color: #fff; border-radius: 999px; padding: 4px 18px; font-size: 22px; font-weight: 600; white-space: nowrap; }
+.dsh .dy-evb { display: flex; align-items: center; overflow: hidden; }
+.dsh .dy-evb .ev { gap: 4px 18px; font-size: 24px; }
+.dsh .dy-evb .ev b { font-size: 30px; }
+.dsh .dy-band { border-radius: 10px; }
+.dsh .dy-mebg { background: #fde68a; border-radius: 8px; opacity: .55; }
+.dsh .dy-zc { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+.dsh .dy-zc b { font-size: 19px; font-weight: 700; color: #0f2744; white-space: nowrap; }
+.dsh .dy-zc small { font-size: 14px; color: #475569; white-space: nowrap; line-height: 1.1; }
+.dsh .dy-cl { display: flex; align-items: center; gap: 6px; padding-left: 8px; white-space: nowrap; }
+.dsh .dy-cl b { color: #0f2744; font-weight: 700; }
+.dsh .dy-cl .sh { font-size: 18px; }
+.dsh .dy-cl small { font-size: 13px; color: #64748b; }
+.dsh .dy-cw { display: flex; align-items: center; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 6px; }
+.dsh .dy-seg { border-radius: 5px; display: flex; align-items: center; justify-content: center; font-weight: 700; white-space: nowrap; overflow: hidden; }
+.dsh .dy-tv { display: flex; align-items: center; justify-content: flex-end; font-weight: 700; color: #0f2744; white-space: nowrap; }
+.dsh .dy-ni { font-size: 21px; line-height: 30px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 1310px; }
+.dsh .dy-ni.k-arrest, .dsh .dy-ni.k-seizure { font-weight: 700; color: #9a3412; } .dsh .dy-ni.k-pending { color: #b45309; }
+.dsh .dy-ni.k-escort { color: #92400e; } .dsh .dy-ni.k-assist { color: #0f766e; } .dsh .dy-ni.k-mission { color: #5b21b6; }
 .dsh-wrap .dy-zoom { position: absolute; right: 8px; bottom: 8px; border: 0; border-radius: 10px; background: rgba(15,39,68,.85); color: #fff; font: inherit; font-size: 14px; padding: 6px 10px; cursor: pointer; }
 .dy-big { overflow: auto; max-height: 70vh; border-radius: 10px; background: #eef2f7; -webkit-overflow-scrolling: touch; }
 .dy-big-in { position: relative; overflow: hidden; }
-.dsh .dy-nm { white-space: nowrap; display: inline-block; }
 .dsh .dy-nw { white-space: nowrap; }
-.dsh .dy-t tr.dy-ss > td:not(.dy-zone) { border-top: 2px dashed #c9d5e6; }
-.dsh .dy-sh.n { background: #f1f3fb; } .dsh .dy-sh.d { background: #fffbeb; }
-.dsh .dy-crew .dy-mu { display: block; font-size: 15px; margin-top: 2px; }
-.dsh .dy-t tr.dy-cyc > td { color: #0f2744; }
-.dsh .dy-t tr.dy-cyc .dy-v, .dsh .dy-t tr.dy-cyc .dy-tot { color: #0f2744; background: #eef2f8; }
 
 /* ===== v1.11: กันซ้ำ · ใบสั่งรอเทียบ PTM · ว.42 ลงนัด/รอรับกลับ · ส่งออก .xlsx ===== */
 .badge.purple { background: #ede9fe; color: #5b21b6; } .badge.blue { background: #dbeafe; color: #1e40af; }
@@ -657,3 +624,33 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .stale button { background: #fff; color: #92400e; border: 0; border-radius: 999px; padding: 2px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .stale-dot { width: 8px; height: 8px; border-radius: 50%; background: #60a5fa; animation: stalepulse 1s ease-in-out infinite; flex: none; }
 @keyframes stalepulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+/* ===== v1.14 หน้ารายงาน: แถบสถานะผลัดของฉัน + การ์ดพับ ===== */
+.card.rp .tiles { margin-top: 10px; }
+.md { margin: -2px 0 2px; }
+.md-none { font-size: 14px; color: var(--muted); background: var(--soft); border-radius: 10px; padding: 10px 12px; }
+.md-row { border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px 10px; margin-bottom: 8px; background: #fff; }
+.md-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.md-h b { font-size: 16px; } .md-h small { color: var(--muted); font-size: 13px; }
+.md-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.md-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 10px 4px 8px; border-radius: 10px; font-size: 14px; background: var(--soft); border: 1px solid #e3eaf3; max-width: 100%; }
+.md-chip.st-done { background: #f0fdf4; border-color: #bbf7d0; } .md-chip.st-due { background: #fffbeb; border-color: #fde68a; } .md-chip.st-late { background: #fef2f2; border-color: #fecaca; }
+.md-chip .btn.sm { min-height: 34px; padding: 4px 10px; font-size: 14px; margin: -2px -6px -2px 0; }
+details.card.fold { padding: 0; }
+details.card.fold > summary { list-style: none; cursor: pointer; padding: 14px; display: flex; align-items: center; gap: 10px; }
+details.card.fold > summary::-webkit-details-marker { display: none; }
+details.card.fold > summary b { font-size: 16px; flex: 1; } details.card.fold > summary small { color: var(--muted); font-size: 13px; }
+details.card.fold > summary::after { content: '›'; font-size: 24px; color: #94a3b8; transform: rotate(90deg); transition: transform .15s; }
+details.card.fold[open] > summary::after { transform: rotate(-90deg); }
+details.card.fold > :not(summary) { padding: 0 14px 14px; }
+
+/* ===== v1.14 หน้าแรกย่อ + เมนูย่อยผลงาน 5 รายการ ===== */
+.seg.n5 button { font-size: 14px; padding: 10px 2px; }
+.now-line { display: flex; flex-wrap: wrap; gap: 6px; }
+.ns-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--soft); border: 1px solid #e3eaf3; border-radius: 999px; padding: 4px 10px 4px 8px; font-size: 13px; color: var(--muted); }
+.ns-pill b { font-size: 17px; color: var(--ink); }
+.ns-pill.red b { color: var(--red); } .ns-pill.green b { color: var(--green); } .ns-pill.amber b { color: var(--amber); } .ns-pill.blue b { color: var(--blue); }
+details.info { margin-top: 8px; font-size: 13px; color: var(--muted); }
+details.info > summary { cursor: pointer; list-style: none; color: var(--blue); font-weight: 600; }
+details.info > summary::-webkit-details-marker { display: none; }
+details.info > div { margin-top: 6px; line-height: 1.5; background: var(--soft); border-radius: 10px; padding: 8px 10px; color: #475569; }
