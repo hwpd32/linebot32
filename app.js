@@ -71,6 +71,29 @@
   }
   function stage(msg) { window.__stage = msg; var p = $app.querySelector('.loading p'); if (p) p.textContent = msg; }
   // แคชคำตอบระยะสั้นสำหรับคำขออ่านอย่างเดียว (เปิดหน้าเดิมซ้ำไม่ต้องรอเซิร์ฟเวอร์) + รวมคำขอซ้ำที่กำลังรอ
+  // คำขออ่านอย่างเดียว: ไม่ล้างแคช · ลองใหม่อัตโนมัติ 1 ครั้งเมื่อเน็ตสะดุด/ตอบช้า (คำขอบันทึกไม่ลองซ้ำเอง)
+  var READS = {}; ['bootstrap', 'dash', 'home', 'shift.list', 'shift.get', 'arrest.list', 'arrest.detail', 'history.list', 'history.timeline', 'duty.board', 'duty.week', 'daily.report', 'fine.dash', 'fine.badges',
+    'now', 'summary', 'texts', 'roster.day', 'admin.people', 'admin.meta', 'codes.list', 'admin.registrations', 'score.get', 'score.text', 'admin.audit', 'settings.get', 'export.daily', 'export.events',
+    'escort.open', 'file.list', 'suspect.search'].forEach(function (a) { READS[a] = 1; });
+  // ---------- บัตรผ่านของระบบ (v1.13): ใช้แทน ID token ของ LINE ที่หมดอายุเร็ว อายุ 24 ชม. ----------
+  var SESS_KEY = 'sess:' + (CFG.LIFF_ID || '');
+  function sessExp(t) { try { return JSON.parse(decodeURIComponent(escape(atob(String(t).split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))))).e * 1000; } catch (e) { return 0; } }
+  function sessLoad(uid) { try { var j = JSON.parse(localStorage.getItem(SESS_KEY) || 'null'); if (j && j.uid === uid && sessExp(j.t) > Date.now() + 300000) S.sess = j.t; } catch (e) { } }
+  function sessSave(t) { S.sess = t; try { if (S.uid) localStorage.setItem(SESS_KEY, JSON.stringify({ uid: S.uid, t: t })); } catch (e) { } }
+  function sessClear() { S.sess = null; try { localStorage.removeItem(SESS_KEY); } catch (e) { } }
+  function authLost() {
+    if (authLost.shown) return; authLost.shown = true;
+    var m = document.getElementById('modal'); clear(m); m.hidden = false;
+    add(m, h('div', { class: 'sheet' }, h('h3', { text: '🔄 ต้องเชื่อมต่อใหม่' }),
+      h('p', { class: 'small', text: 'การยืนยันตัวตนกับ LINE หมดอายุ (เปิดแอปค้างไว้นาน) — แตะปุ่มด้านล่าง ระบบจะเปิดหน้านี้ใหม่ภายในไม่กี่วินาที' }),
+      h('button', { class: 'btn block', onclick: reconnect, text: '🔄 เชื่อมต่อใหม่' }),
+      h('button', { class: 'btn gray block', style: 'margin-top:8px', onclick: function () { authLost.shown = false; closeModal(); }, text: 'ภายหลัง' })));
+  }
+  function reconnect() {
+    try { sessionStorage.setItem('relogin', '0'); } catch (e) { }
+    try { if (window.liff && liff.isLoggedIn()) liff.logout(); } catch (e) { }
+    location.replace(location.href.replace(/[?#].*$/, '') + '?v=' + encodeURIComponent(S.view || 'home'));
+  }
   var READ_TTL = { 'shift.get': 45000, now: 30000, summary: 60000, 'shift.list': 60000, 'arrest.list': 30000, 'admin.meta': 60000, 'score.get': 60000, 'score.text': 60000 };
   var apiCache = {}, inflight = {};
   function apiKey(action, data) { return action + ':' + JSON.stringify(data || {}); }
@@ -82,8 +105,8 @@
       var hit = apiCache[k]; if (hit && Date.now() - hit.at < ttl) return Promise.resolve(hit.v);
       if (inflight[k]) return inflight[k];
     }
-    if (!ttl) apiInvalidate(); // คำขอเขียน → ข้อมูลที่จำไว้อาจเก่า
-    var p = apiRaw(action, data).then(function (v) { if (ttl) apiCache[k] = { at: Date.now(), v: v }; delete inflight[k]; return v; }, function (e) {
+    if (!READS[action]) apiInvalidate(); // คำขอเขียน → ข้อมูลที่จำไว้อาจเก่า
+    var p = apiTry(action, data).then(function (v) { if (ttl) apiCache[k] = { at: Date.now(), v: v }; delete inflight[k]; return v; }, function (e) {
       delete inflight[k];
       // ระบบพบรายการที่อาจซ้ำ → แสดงรายการเดิมให้ตรวจ แล้วให้ผู้ใช้ยืนยันก่อนบันทึก
       if (e.code === 'DUP' && e.dup && !(data && data.confirmDup)) return dupConfirm(e).then(function (yes) {
@@ -95,19 +118,67 @@
     if (ttl) inflight[k] = p;
     return p;
   }
+  // ---------- แสดงข้อมูลชุดล่าสุดที่เคยโหลดทันที แล้วอัปเดตตามหลัง (v1.13) ----------
+  // เก็บในเครื่องของผู้ใช้ (ต่อบัญชี LINE) ไม่เกิน 40 ชุด/36 ชม. — ไม่เก็บข้อมูลคดี/ผู้ต้องหา · โหมดจำลองมุมมองไม่ใช้
+  var SWR_PRE = 'swr1:' + (CFG.LIFF_ID || '') + ':', SWR_MAX_AGE = 36 * 3600000, SWR_MAX_N = 40;
+  function swrKey(action, data) { var d = {}; Object.keys(data || {}).forEach(function (k) { if (k !== 'fresh') d[k] = data[k]; }); return SWR_PRE + (S.uid || '-') + ':' + action + ':' + JSON.stringify(d); }
+  function swrGet(k) { try { var j = JSON.parse(localStorage.getItem(k) || 'null'); return j && Date.now() - j.at < SWR_MAX_AGE ? j : null; } catch (e) { return null; } }
+  function swrPut(k, v) {
+    try {
+      var str = JSON.stringify({ at: Date.now(), v: v }); if (str.length > 300000) return;
+      var idx = []; try { idx = JSON.parse(localStorage.getItem(SWR_PRE + 'idx') || '[]'); } catch (e) { }
+      idx = idx.filter(function (x) { return x !== k; }); idx.push(k);
+      while (idx.length > SWR_MAX_N) localStorage.removeItem(idx.shift());
+      for (;;) { try { localStorage.setItem(k, str); break; } catch (e) { if (idx.length <= 1) throw e; localStorage.removeItem(idx.shift()); } }
+      localStorage.setItem(SWR_PRE + 'idx', JSON.stringify(idx));
+    } catch (e) { }
+  }
+  /** cb(v, meta) อาจถูกเรียก 2 ครั้ง: ข้อมูลที่จำไว้ (meta.stale) แล้วข้อมูลล่าสุด (ถ้าต่างกัน) · เปลี่ยนหน้าไปแล้วจะไม่วาดทับ */
+  function live(action, data, cb, onErr) {
+    var off = S.viewAs || !S.uid, seq = S.viewSeq, k = swrKey(action, data), c = off ? null : swrGet(k);
+    if (c) { try { cb(c.v, { stale: true, at: c.at }); } catch (e) { } stalePill(c.at, 'loading'); }
+    return api(action, data, { fresh: true }).then(function (v) {
+      if (!off) swrPut(k, v);
+      if (seq !== S.viewSeq) return;
+      stalePill(null);
+      if (!c || JSON.stringify(c.v) !== JSON.stringify(v)) cb(v, { stale: false });
+    }, function (e) {
+      if (seq !== S.viewSeq) return;
+      if (c) stalePill(c.at, 'error'); else if (onErr) onErr(e);
+    });
+  }
+  /** โหลดล่วงหน้าเงียบ ๆ (เก็บไว้ให้เปิดหน้าครั้งแรกขึ้นทันที) */
+  function prefetch(action, data) { if (S.viewAs || !S.uid) return Promise.resolve(); var k = swrKey(action, data); return api(action, data, { fresh: true }).then(function (v) { swrPut(k, v); }, function () { }); }
+  function stalePill(at, state) {
+    var el = document.getElementById('stale');
+    if (!el) { el = h('div', { id: 'stale', role: 'status' }); document.body.appendChild(el); }
+    clear(el); el.hidden = !at; el.className = 'stale' + (state === 'error' ? ' err' : '');
+    if (!at) return;
+    var t = new Date(at), txt = 'ข้อมูลเมื่อ ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ' น.';
+    if (state === 'error') add(el, h('span', { text: '⚠️ ' + txt + ' · อัปเดตไม่สำเร็จ' }), h('button', { onclick: function () { stalePill(null); VIEWS[S.view](S.params); }, text: 'ลองใหม่' }));
+    else add(el, h('i', { class: 'stale-dot' }), h('span', { text: txt + ' · กำลังอัปเดต…' }));
+  }
+  /** คำขออ่าน: เน็ตสะดุด/ตอบช้า → รอ 0.8 วินาทีแล้วลองใหม่เอง 1 ครั้ง */
+  function apiTry(action, data) {
+    return apiRaw(action, data).then(null, function (e) {
+      if (!READS[action] || !window.__booted || (e.code !== 'TIMEOUT' && e.code !== 'NET')) throw e; // ช่วงเปิดแอปมีตัวกันค้าง + ปุ่มลองใหม่ของตัวเองอยู่แล้ว
+      return new Promise(function (r) { setTimeout(r, 800); }).then(function () { return apiRaw(action, data); });
+    });
+  }
   // คำสั่งที่ประมวลผลนาน (รวบรวมข้อมูลหลายเดือน/สร้างไฟล์) รอได้นานกว่าปกติ
   var LONG_MS = { 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000 };
   function apiRaw(action, data) {
     var ctl = window.AbortController ? new AbortController() : null;
-    var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken, viewAs: S.viewAs || undefined }), signal: ctl ? ctl.signal : undefined });
-    var ms = LONG_MS[action] || CFG.API_TIMEOUT_MS || 30000;
+    var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken, sess: S.sess || undefined, viewAs: S.viewAs || undefined }), signal: ctl ? ctl.signal : undefined });
+    var ms = LONG_MS[action] || CFG.API_TIMEOUT_MS || (READS[action] ? 15000 : 45000); // อ่าน: 15 วิ + ลองใหม่ 1 ครั้ง · บันทึก: รอได้ 45 วิ (อาจรอคิวล็อก)
     return withTimeout(req, ms, 'ระบบตอบช้าเกินไป (เกิน ' + Math.round(ms / 1000) + ' วินาที) กรุณากดลองใหม่').then(null, function (e) { if (ctl && e.code === 'TIMEOUT') ctl.abort(); throw e; })
-      .then(function (r) { return r.json().catch(function () { throw new Error('ระบบตอบกลับผิดรูปแบบ (HTTP ' + r.status + ') กรุณาลองใหม่'); }); }, function (e) { if (e.code === 'TIMEOUT') throw e; throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสัญญาณแล้วลองใหม่'); })
+      .then(function (r) { return r.json().catch(function () { throw new Error('ระบบตอบกลับผิดรูปแบบ (HTTP ' + r.status + ') กรุณาลองใหม่'); }); }, function (e) { if (e.code === 'TIMEOUT') throw e; var x = new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสัญญาณแล้วลองใหม่'); x.code = 'NET'; throw x; })
       .then(function (j) {
         // คำขอถูกเปลี่ยนเป็น GET ระหว่างทาง (ได้คำตอบ health แทน) = ระบบยังไม่ได้ทำรายการ → แจ้งให้ลองใหม่ ไม่ถือว่าสำเร็จ
         if (j && j.app && j.version && !('data' in j) && !j.error) throw new Error('การเชื่อมต่อสะดุด ระบบยังไม่ได้รับรายการ กรุณากดลองใหม่');
+        if (j.sess) sessSave(j.sess);
         if (j.ok) return j.data;
-        if (j.code === 'AUTH' && window.liff && liff.isLoggedIn()) { try { liff.logout(); if (!liff.isInClient()) liff.login({ redirectUri: location.href }); } catch (x) { } }
+        if (j.code === 'AUTH') { sessClear(); authLost(); }
         var e = new Error(j.error || 'เกิดข้อผิดพลาด'); e.code = j.code; if (j.dup) e.dup = j.dup; throw e;
       });
   }
@@ -192,7 +263,7 @@
     if (!VIEWS[view]) view = 'home';
     if (TOP[view]) S.stack = [];
     else if (!replace && S.view) S.stack.push({ view: S.view, params: S.params });
-    S.view = view; S.params = params || {};
+    S.view = view; S.params = params || {}; S.viewSeq = (S.viewSeq || 0) + 1; stalePill(null);
     var reg = view === 'register';
     document.getElementById('back').hidden = !S.stack.length || !!TOP[view];
     document.getElementById('home').hidden = !!TOP[view] || reg || !!S.stack.length;
@@ -235,7 +306,15 @@
     withTimeout(liff.init({ liffId: CFG.LIFF_ID }), CFG.INIT_TIMEOUT_MS || 20000, 'เชื่อมต่อ LINE ไม่สำเร็จ (ขั้นยืนยันตัวตน) — กรุณาปิดหน้านี้แล้วเปิดใหม่จากแชทบอท').then(function () {
       if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
       var dec = liff.getDecodedIDToken && liff.getDecodedIDToken();
-      if (dec && dec.exp && dec.exp * 1000 < Date.now() + 60000) { liff.logout(); liff.login({ redirectUri: location.href }); return; }
+      if (dec && dec.sub) { S.uid = dec.sub; sessLoad(dec.sub); }
+      // ID token ของ LINE หมดอายุและไม่มีบัตรผ่านของระบบ → ขอใหม่จาก LINE (กันวนซ้ำ: ครั้งเดียวต่อ 2 นาที)
+      if (dec && dec.exp && dec.exp * 1000 < Date.now() + 60000 && !S.sess) {
+        var last = 0; try { last = +(sessionStorage.getItem('relogin') || 0); } catch (e) { }
+        if (Date.now() - last > 120000) {
+          try { sessionStorage.setItem('relogin', String(Date.now())); } catch (e) { }
+          liff.logout(); if (liff.isInClient()) location.reload(); else liff.login({ redirectUri: location.href }); return;
+        }
+      }
       S.idToken = liff.getIDToken();
       var q = new URLSearchParams(location.search);
       var params = {}; q.forEach(function (v, k) { params[k] = v; });
@@ -251,6 +330,14 @@
         if (v === 'register') { v = 'home'; toast('✅ ท่านลงทะเบียนแล้ว — ใช้งานได้เลย', 3000); } // กดปุ่ม "ลงทะเบียน" ในแชทซ้ำหลังผูกแล้ว
         go(VIEWS[v] ? v : 'home', params, true);
         prefetchCurrentShift();
+        // โหลดหน้าที่ใช้บ่อยไว้ล่วงหน้าทีละหน้า (หลังหน้าแรกขึ้นแล้ว) — เปิดครั้งแรกจะขึ้นทันที
+        setTimeout(function () {
+          if (S.viewAs || !S.boot || !S.boot.registered) return;
+          var t = today(), q = [];
+          if (S.view !== 'report') q.push(['duty.week', {}]);
+          if (can('view.now') && S.view !== 'now') q.push(['now', {}]);
+          q.reduce(function (p, x) { return p.then(function () { return prefetch(x[0], x[1]); }); }, Promise.resolve());
+        }, 2500);
       }
       var cached = S.uid && !S.viewAs ? bootCacheGet(S.uid) : null;
       if (cached) { applyBoot(cached); open(); refreshBootQuiet(); return; }
@@ -450,7 +537,7 @@
     function worst(c) { var r = ['late', 'due', 'wait', 'done', 'void'], ss = [c.checkin.state, c.checkout.state, c.escort ? c.escort.state : 'done']; for (var i = 0; i < r.length; i++) if (ss.indexOf(r[i]) >= 0) return r[i]; return 'done'; }
     function load() {
       clear(body); add(body, h('div', { class: 'loading' }, spinner()));
-      api('duty.board', sel ? { date: sel } : {}, { fresh: true }).then(function (b) {
+      live('duty.board', sel ? { date: sel } : {}, function (b) {
         setToday(b.today);
         clear(body);
         add(body, h('div', { class: 'db-date-label', text: th(b.date) + (b.date === t ? ' (วันนี้)' : b.date === y ? ' (เมื่อวาน)' : '') }));
@@ -601,7 +688,7 @@
     }
     rs();
     add(body, h('div', { class: 'loading' }, spinner()));
-    api('duty.week', {}, { fresh: true }).then(function (w) {
+    live('duty.week', {}, function (w) {
       data = w; var s = w.sum; clear(sum);
       add(sum, h('span', { class: 'wk-miss', text: '🔴 ไม่ได้รายงาน ' + s.miss }), h('span', { class: 'wk-warn', text: '🟠 ไม่สมบูรณ์/ช้า ' + s.warn }), h('span', { class: 'wk-ok', text: '✅ ครบ ' + s.ok }),
         h('small', { class: 'muted', text: 'ผลัด · ' + th(w.from) + '–' + th(w.to) }), xlBtn('.xlsx', function () { weekXlsx(w); }));
@@ -713,7 +800,7 @@
     add($app, finePicker(load), segWrap, out); seg();
     function load(a, b) {
       clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
-      api('fine.dash', { from: a, to: b }).then(function (d) { data = d; paint(); }, function (e) { clear(out); add(out, errorBox(e.message)); });
+      live('fine.dash', { from: a, to: b }, function (d) { data = d; paint(); }, function (e) { clear(out); add(out, errorBox(e.message)); });
     }
     function paint() {
       if (!data) return; clear(out);
@@ -1743,7 +1830,7 @@
   VIEWS.now = function () {
     setTitle('📍 ตอนนี้', '');
     loading();
-    api('now').then(function (n) {
+    live('now', {}, function (n) {
       clear($app);
       setTitle('📍 ตอนนี้', SHIFT[n.shift].icon + ' ' + SHIFT[n.shift].label + ' ' + th(n.dutyDate) + ' · ' + hm(n.at) + ' น.');
       var k = card('ผลวันนี้', 'เทียบเมื่อวาน'), kp = h('div', { class: 'kpis' });
@@ -1917,7 +2004,7 @@
     function load(fresh) {
       var my = ++seqH; clear(body); add(body, skeleton(2));
       var q = { kind: kind, fresh: !!fresh }; if (kind === 'custom') { q.from = S.homeRange[0]; q.to = S.homeRange[1]; }
-      api('home', q).then(function (d) { if (my === seqH && body.isConnected) render(d); }, function (e) { if (my === seqH) { clear(body); add(body, errorBox(e.message)); } });
+      live('home', q, function (d) { if (my === seqH && body.isConnected) render(d); }, function (e) { if (my === seqH) { clear(body); add(body, errorBox(e.message)); } });
     }
     function rangeText(a, b) { return a === b ? th(a) : th(a) + ' – ' + th(b); }
     function render(d) {
@@ -1989,7 +2076,7 @@
     add($app, rangePicker(function (a, b) { load(a, b); }), h('div', { class: 'card' }, zsel), out);
     function load(a, b) {
       last = [a, b]; clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
-      api('summary', { from: a, to: b, zone: zone }).then(function (s) { renderSummary(out, s); }, function (e) { clear(out); add(out, errorBox(e.message)); });
+      live('summary', { from: a, to: b, zone: zone }, function (s) { renderSummary(out, s); }, function (e) { clear(out); add(out, errorBox(e.message)); });
     }
   };
   function renderSummary(out, s) {
@@ -2082,7 +2169,7 @@
     rc(); add($app, h('div', { class: 'card' }, chips), out);
     function load(fresh) {
       var p = presets[sel]; last = p; clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(3));
-      api('history.list', { from: p[1], to: p[2] }, { fresh: !!fresh }).then(function (rows) {
+      live('history.list', { from: p[1], to: p[2] }, function (rows) { if (last !== p) return;
         clear(out);
         if (!rows.length) { var e0 = card('ไม่มีรายการ'); add(e0, h('p', { class: 'muted', text: 'ยังไม่มีรายการที่ส่งในช่วงนี้' })); return add(out, e0); }
         add(out, h('div', { class: 'center', style: 'margin:0 0 8px' }, xlBtn('รายการทั้งหมดเป็น .xlsx', function () {
@@ -2198,7 +2285,7 @@
     var out = h('div');
     add($app, rangePicker(function (a, b) {
       clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
-      api('summary', { from: a, to: b }).then(function (s) {
+      live('summary', { from: a, to: b }, function (s) {
         clear(out);
         var p = s.people[S.boot.me.pid] || { tickets: 0, issued: 0, ticketJoint: 0, arrestPrimary: 0, arrestJoint: 0, escort: 0, assist: 0, mission: 0, warning: 0, checks: 0, nShifts: 0, nDay: 0, nNight: 0, ratePerShift: 0 };
         var c = card('ผลงาน ' + th(a) + ' – ' + th(b)), kp = h('div', { class: 'kpis' });
@@ -2439,7 +2526,8 @@
     var data = null;
     function load() {
       clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(2));
-      api('roster.day', { date: date.value }).then(function (d) {
+      var dv = date.value;
+      live('roster.day', { date: dv }, function (d) { if (dv !== date.value) return;
         data = d; clear(out);
         ['D', 'N'].forEach(function (sh) {
           var c = card(SHIFT[sh].icon + ' ' + SHIFT[sh].label + ' ' + th(d.date));
@@ -3981,7 +4069,7 @@
     }
     function load() {
       if (!data) { clear(out); add(out, h('div', { class: 'loading' }, spinner())); }
-      api('file.list', {}).then(function (d) {
+      live('file.list', {}, function (d) {
         data = d; if (S.boot) S.boot.filesPending = d.pending; render();
         if (params.id) { var el = document.getElementById('file-' + params.id); if (el) el.scrollIntoView({ block: 'center' }); }
         if (params.id && !load.opened) { load.opened = true; var it = d.items.filter(function (x) { return x.id === params.id; })[0]; if (it && it.canReview && it.status === 'pending') reviewFile(it.id, load); }

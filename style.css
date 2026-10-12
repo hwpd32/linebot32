@@ -648,3 +648,12 @@ table.bt tr.zr td:first-child { background: #eef3fa; }
 .pv-line { font-size: 14px; padding: 5px 0; border-bottom: 1px dashed #e2e8f0; word-break: break-word; }
 .pv-line:last-child { border-bottom: 0; }
 .pv-line.warn { color: #92400e; background: #fffbeb; margin: 0 -10px; padding: 5px 10px; }
+
+/* v1.13 ป้ายข้อมูลชุดเดิม (แสดงทันที แล้วอัปเดตตามหลัง) */
+.stale { position: fixed; right: 10px; top: calc(env(safe-area-inset-top) + 44px); z-index: 25; display: flex; align-items: center; gap: 6px;
+  background: #1e4a7a; color: #fff; font-size: 12px; padding: 3px 10px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 72vw; white-space: nowrap; overflow: hidden; }
+.stale[hidden] { display: none; }
+.stale.err { background: #92400e; }
+.stale button { background: #fff; color: #92400e; border: 0; border-radius: 999px; padding: 2px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.stale-dot { width: 8px; height: 8px; border-radius: 50%; background: #60a5fa; animation: stalepulse 1s ease-in-out infinite; flex: none; }
+@keyframes stalepulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
