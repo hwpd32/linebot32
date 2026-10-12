@@ -690,3 +690,31 @@ details.info > div { margin-top: 6px; line-height: 1.5; background: var(--soft);
 .dsh.dy .d-list .li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .dsh.dy .d-flag .fh small { white-space: nowrap; overflow: hidden; }
 .dsh .dy-kc3 .v i { font-style: normal; font-size: 20px; font-weight: 700; margin-left: 4px; }
+/* v1.15: ตาราง 7 วัน — ยังไม่ลงทะเบียน (สีเทา) */
+.wk-c.wk-unreg button { background: #f1f5f9; } .wk-c.wk-unreg .wk-ic { opacity: .7; filter: grayscale(1); }
+.wk-sum .wk-unreg { color: #475569; }
+.wk-reg { flex-basis: 100%; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #475569; margin-top: 2px; }
+.wk-reg .btn { margin-left: auto; }
+.wk-unreg-line { background: #f1f5f9; border-radius: 10px; padding: 6px 8px; margin-bottom: 6px; }
+/* v1.15: แจ้งเตือนพร้อมปุ่ม "เลิกทำ" · ร่างที่กู้คืน · ปุ่มเรียงแนวตั้งในกล่องถาม */
+#toast.act { pointer-events: auto; display: flex; align-items: center; gap: 10px; }
+#toast .toast-btn { background: #fff; color: #111827; border: 0; border-radius: 9px; padding: 6px 12px; font: inherit; font-weight: 700; }
+.draft-note { display: flex; align-items: center; gap: 8px; } .draft-note span { flex: 1; }
+.col-btns { display: flex; flex-direction: column; gap: 8px; }
+.audit-it { overflow-wrap: anywhere; word-break: break-word; }
+.od { font-size: 13px; margin-top: 8px; }
+.od-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 5px; }
+.od-d { flex: none; min-width: 108px; color: #475569; font-weight: 600; }
+.od-cars { display: flex; flex-wrap: wrap; gap: 4px; }
+.od-car { background: #fef3c7; color: #92400e; border-radius: 6px; padding: 1px 7px; font-weight: 700; font-size: 12px; }
+.exp-more > .card { box-shadow: none; border: 0; border-top: 1px solid #e2e8f0; border-radius: 0; margin: 0; }
+/* v1.15: ภาพประจำวัน — ตัวเลขหมายจับ/ซึ่งหน้าชิดขวาในช่องกว้างเท่ากัน (หลักหน่วยตรงกัน) */
+.dsh.dy .d-leg .vu, .dsh.dy .d-flag .fh .vu { width: 200px !important; }
+.dsh.dy .d-leg .vu .v, .dsh.dy .d-flag .fh .vu .v { display: inline-block; min-width: 92px; text-align: right; }
+/* v1.15: หน้าสุขภาพระบบ */
+.hl-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eef2f7; }
+.hl-row:last-child { border-bottom: 0; } .hl-row .grow { min-width: 0; } .hl-row small { display: block; margin-top: 2px; line-height: 1.4; }
+.hl-ic { flex: none; font-size: 14px; }
+.hl-slow { display: flex; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; } .hl-slow .right { margin-left: auto; color: #b45309; font-weight: 700; }
+#toast.act { min-width: 280px; justify-content: space-between; text-align: left; opacity: .97; }
+#toast .toast-btn { white-space: nowrap; flex: none; }

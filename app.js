@@ -32,7 +32,13 @@
     return el;
   }
   function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
-  function toast(t, ms) { var el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(function () { el.classList.remove('show'); }, ms || 2600); }
+  function toast(t, ms) { var el = document.getElementById('toast'); el.textContent = t; el.classList.remove('act'); el.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(function () { el.classList.remove('show'); }, ms || 2600); }
+  /** แจ้งเตือนพร้อมปุ่ม (เช่น "เลิกทำ") — แสดงนานขึ้นเพื่อให้กดทัน */
+  function toastAction(t, label, fn, ms) {
+    var el = document.getElementById('toast'); clear(el);
+    add(el, h('span', { text: t + ' ' }), h('button', { class: 'toast-btn', onclick: function () { el.classList.remove('show'); fn(); }, text: label }));
+    el.classList.add('show', 'act'); clearTimeout(toast._t); toast._t = setTimeout(function () { el.classList.remove('show', 'act'); }, ms || 8000);
+  }
   function setTitle(t, sub) { document.getElementById('title').textContent = t; document.getElementById('subtitle').textContent = sub || ''; document.title = t; }
   function spinner() {
     var el = h('div', { class: 'spin' });
@@ -238,6 +244,7 @@
   /** หน้าแสดงผลหลังบันทึก + ส่งข้อความขึ้นกลุ่ม */
   function done(title, message, opts) {
     opts = opts || {};
+    if (S.keeper) { S.keeper.done(); S.keeper = null; }
     clear($app);
     var status = h('p', { class: 'muted', text: 'กำลังส่งข้อความเข้ากลุ่ม…' });
     add($app, h('div', { class: 'card success' }, h('div', { class: 'big', text: '✅' }), h('h2', { text: title }), status, opts.extra || null),
@@ -257,14 +264,24 @@
   // หน้าระดับบนสุด → แท็บที่สว่าง (แถบเมนูล่างแสดงเฉพาะหน้าเหล่านี้ หน้าฟอร์มจะซ่อนเพื่อให้ปุ่มบันทึกเด่น)
   var TOP = { home: 'home', report: 'report', overview: 'results', now: 'results', summary: 'results', me: 'results', score: 'results', more: 'more' };
   var TABS = [['home', '🏠', 'หน้าแรก'], ['report', '📝', 'รายงาน'], ['results', '📈', 'ผลงาน'], ['more', '☰', 'เพิ่มเติม']];
-  function go(view, params, replace) {
+  function go(view, params, replace, force) {
     if (view === 'menu') view = 'home';
     if (view === 'results') view = S.resultsLast || 'overview';
-    if (TOP[view] === 'results') S.resultsLast = view;
     if (!VIEWS[view]) view = 'home';
-    if (TOP[view]) S.stack = [];
+    // ออกจากฟอร์มที่กรอกค้าง → ถามก่อน (ร่างเก็บไว้ให้แล้ว)
+    if (!force && S.keeper && S.keeper.dirty()) { confirmLeave(function () { go(view, params, replace, true); }); return; }
+    S.keeper = null; closeModal();
+    if (TOP[view] === 'results') S.resultsLast = view;
+    var depth = S.stack.length, prev = S.view;
+    if (S.popping) { /* ย้อนกลับด้วยปุ่มมือถือ: S.stack ปรับแล้วใน popstate */ }
+    else if (TOP[view]) S.stack = [];
     else if (!replace && S.view) S.stack.push({ view: S.view, params: S.params });
     S.view = view; S.params = params || {}; S.viewSeq = (S.viewSeq || 0) + 1; stalePill(null);
+    // ประวัติเบราว์เซอร์ให้ตรงกับลำดับหน้าในแอป → ปุ่มย้อนกลับของมือถือ/ปัดย้อน = กลับหน้าก่อน (ไม่ปิดแอป)
+    if (!S.popping) {
+      if (TOP[view] && (S.hd || 0) > 0) { S.rewind = true; try { history.go(-S.hd); } catch (e) { S.rewind = false; histSet(false); } }
+      else histSet(!TOP[view] && !replace && !!prev);
+    }
     var reg = view === 'register';
     document.getElementById('back').hidden = !S.stack.length || !!TOP[view];
     document.getElementById('home').hidden = !!TOP[view] || reg || !!S.stack.length;
@@ -293,7 +310,77 @@
     items.forEach(function (x) { add(seg, h('button', { class: x[0] === view ? 'on' : '', onclick: function () { go(x[0], {}, true); }, text: x[1] })); });
     add(nav, seg);
   }
-  document.getElementById('back').onclick = function () { var p = S.stack.pop(); if (p) go(p.view, p.params, true); else go('home', {}, true); };
+  document.getElementById('back').onclick = function () {
+    if (HIST && S.stack.length) return history.back();
+    var p = S.stack.pop(); if (p) go(p.view, p.params, true); else go('home', {}, true);
+  };
+  // ---------- ประวัติหน้า (History API) ----------
+  var HIST = !!(window.history && history.pushState);
+  try { if (HIST) history.scrollRestoration = 'manual'; } catch (e) { }
+  // สถานะในประวัติ: v = หน้า, p = พารามิเตอร์, d = ลำดับหน้าในแอป, h = ลำดับในประวัติเบราว์เซอร์ (นับหน้าต่างย่อยด้วย), modal = รายการของหน้าต่างย่อย
+  function histSet(push) {
+    if (!HIST) return;
+    if (push) S.hd = (S.hd || 0) + 1;
+    var st = { app: 1, v: S.view, p: S.params, d: S.stack.length, h: S.hd || 0 };
+    try { if (push) history.pushState(st, ''); else history.replaceState(st, ''); } catch (e) { }
+  }
+  /** เปิดหน้าต่างย่อย → เพิ่มรายการในประวัติ เพื่อให้ปุ่มย้อนกลับปิดหน้าต่างก่อน (ไม่ออกจากหน้า/แอป) */
+  function histModal() {
+    if (!HIST || S.modalH) return;
+    S.hd = (S.hd || 0) + 1; S.modalH = S.hd;
+    try { history.pushState({ app: 1, v: S.view, p: S.params, d: S.stack.length, h: S.hd, modal: 1 }, ''); } catch (e) { }
+  }
+  window.addEventListener('popstate', function (e) {
+    var st = e.state;
+    S.hd = st && st.app ? st.h || 0 : 0;
+    if (S.rewind) { S.rewind = false; histSet(false); return; }
+    var m = document.getElementById('modal');
+    if (m && !m.hidden) { closeModal(); return; } // ปุ่มย้อนกลับ = ปิดหน้าต่างย่อย
+    // รายการค้างของหน้าต่างที่ปิดด้วยปุ่ม / ซ้ำกับหน้าปัจจุบัน → ข้ามไปอีกหนึ่งขั้น
+    if (st && st.app && S.hd > 0 && (st.modal || (st.v === S.view && JSON.stringify(st.p || {}) === JSON.stringify(S.params || {}) && (st.d || 0) === S.stack.length))) { history.back(); return; }
+    if (S.keeper && S.keeper.dirty() && !S.leaveOk) { histSet(true); confirmLeave(function () { S.leaveOk = true; history.back(); }); return; }
+    S.leaveOk = false;
+    if (!st || !st.app) { if (S.view && S.view !== 'home') { S.stack = []; S.popping = true; try { go('home', {}, true, true); } finally { S.popping = false; } histSet(false); } return; }
+    S.stack = S.stack.slice(0, Math.max(0, st.d || 0));
+    S.popping = true;
+    try { go(st.v, st.p || {}, true, true); } finally { S.popping = false; }
+  });
+  /** ถามก่อนออกจากฟอร์มที่กรอกค้าง: กรอกต่อ / ออกไปก่อน (เก็บร่าง) / ทิ้งข้อมูล */
+  function confirmLeave(leave) {
+    var k = S.keeper;
+    var b = h('div', null, h('p', { style: 'margin:0 0 10px', text: 'ข้อมูลที่กรอกยังไม่ได้ส่ง — ระบบเก็บร่างไว้ให้ 24 ชม. กลับมาเปิดหน้านี้จะกู้คืนให้อัตโนมัติ' }),
+      h('div', { class: 'col-btns' }, h('button', { class: 'btn green block', onclick: function () { closeModal(); }, text: '✏️ กรอกต่อ' }),
+        h('button', { class: 'btn ghost block', onclick: function () { if (k) k.save(); closeModal(); S.keeper = null; leave(); }, text: 'ออกไปก่อน (เก็บร่างไว้)' }),
+        h('button', { class: 'btn ghost block red-ghost', onclick: function () { if (k) k.done(); closeModal(); S.keeper = null; leave(); }, text: '🗑 ทิ้งข้อมูลที่กรอก' })));
+    modal('ออกจากหน้านี้?', b);
+    var m = document.getElementById('modal'), x = m.querySelector('.sheet > .row'); if (x) x.remove();
+  }
+  // ---------- ร่างอัตโนมัติ (ทุกฟอร์ม) ----------
+  /** kind = ชนิดฟอร์ม · get() = ค่าที่กรอก (แปลงเป็น JSON ได้) · set(v) = ใส่ค่ากลับ · start(sub) เมื่อฟอร์มพร้อม (หลังโหลดข้อมูลเดิม) */
+  function keep(kind, get, set) {
+    var k = { key: kind, base: null, on: false };
+    k.ser = function () { try { return JSON.stringify(get()); } catch (e) { return ''; } };
+    k.start = function (sub) {
+      k.key = kind + (sub ? ':' + sub : ''); k.base = k.ser(); k.on = true; S.keeper = k;
+      var d = Draft.get(k.key);
+      if (d && JSON.stringify(d) !== k.base) {
+        try { set(d); } catch (e) { }
+        var nt = h('div', { class: 'note draft-note' }, h('span', { text: '↩️ กู้คืนข้อมูลที่กรอกค้างไว้แล้ว' }),
+          h('button', { class: 'btn sm ghost', onclick: function () { k.done(); S.keeper = null; VIEWS[S.view](S.params); }, text: 'ล้าง เริ่มใหม่' }));
+        $app.insertBefore(nt, $app.firstChild);
+      }
+      return k;
+    };
+    k.dirty = function () { return k.on && k.base != null && k.ser() !== k.base; };
+    k.save = function () { if (!k.on || k.base == null) return; var s2 = k.ser(); if (s2 === k.base) Draft.del(k.key); else Draft.set(k.key, JSON.parse(s2)); };
+    k.done = function () { Draft.del(k.key); k.on = false; };
+    return k;
+  }
+  var keepT = null;
+  function keepSave() { clearTimeout(keepT); keepT = setTimeout(function () { if (S.keeper) S.keeper.save(); }, 250); }
+  ['input', 'change', 'click'].forEach(function (ev) { $app.addEventListener(ev, keepSave); });
+  window.addEventListener('pagehide', function () { if (S.keeper) S.keeper.save(); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden && S.keeper) S.keeper.save(); });
   document.getElementById('home').onclick = function () { go('home', {}, true); };
   function fail(e, retry) {
     clear($app); add($app, errorBox(e.message || String(e)));
@@ -329,7 +416,10 @@
         if (!S.boot.registered) return go('register', {}, true);
         var v = params.v === 'more' && !VIEWS.more ? 'home' : params.v;
         if (v === 'register') { v = 'home'; toast('✅ ท่านลงทะเบียนแล้ว — ใช้งานได้เลย', 3000); } // กดปุ่ม "ลงทะเบียน" ในแชทซ้ำหลังผูกแล้ว
-        go(VIEWS[v] ? v : 'home', params, true);
+        var target = VIEWS[v] ? v : 'home';
+        // เปิดจากลิงก์ตรงเข้าหน้าฟอร์ม (เช่น แจ้งเตือนส่งเวร) → ย้อนกลับแล้วไปหน้าแรก ไม่ปิดแอป
+        if (!TOP[target] && HIST) { S.view = 'home'; S.params = {}; histSet(false); go(target, params); }
+        else go(target, params, true);
         prefetchCurrentShift();
         // โหลดหน้าที่ใช้บ่อยไว้ล่วงหน้าทีละหน้า (หลังหน้าแรกขึ้นแล้ว) — เปิดครั้งแรกจะขึ้นทันที
         setTimeout(function () {
@@ -643,29 +733,40 @@
     }, function () { });
   }
   // ---------- ย้อนหลัง 7 วัน: ตรวจว่าใครรายงานครบ/ตกหล่น (ทุกคนเห็นทั้งสถานี · แก้ได้ตามสิทธิ์) ----------
-  var WK_ST = { ok: ['✅', 'wk-ok'], miss: ['🔴', 'wk-miss'], warn: ['🟠', 'wk-warn'], live: ['🔵', 'wk-live'], wait: ['⚪', 'wk-wait'], void: ['➖', 'wk-void'] };
+  var WK_ST = { ok: ['✅', 'wk-ok'], miss: ['🔴', 'wk-miss'], warn: ['🟠', 'wk-warn'], live: ['🔵', 'wk-live'], wait: ['⚪', 'wk-wait'], void: ['➖', 'wk-void'], unreg: ['👤', 'wk-unreg'] };
   var WD = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
   function wd(iso) { var p = iso.split('-'); return WD[new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay()]; }
   var WK_N = [['T', 'ขส'], ['C', 'รย'], ['R', 'จร'], ['warning', 'ตักเตือน'], ['truck_check', 'รถบรรทุก'], ['suspect_check', 'รถต้องสงสัย'], ['assist', 'ช่วยเหลือ'],
     ['warrant', 'หมายจับ'], ['crime', 'อาญา'], ['escort', 'ว.42'], ['mission', 'ภารกิจ']];
-  var WK_TXT = { ok: '✅ ครบ', miss: '🔴 ไม่ได้รายงาน', warn: '🟠 ไม่สมบูรณ์/ช้า', live: '🔵 กำลังปฏิบัติ', wait: '⚪ ยังไม่ถึงเวลา', void: '➖ ยกเลิก' };
+  var WK_XL = { ok: 'ครบ', miss: 'ไม่ได้รายงาน', warn: 'ไม่สมบูรณ์/ช้า', live: 'กำลังปฏิบัติ', wait: 'ยังไม่ถึงเวลา', void: 'ยกเลิก', unreg: 'ยังไม่ลงทะเบียน' };
+  var WK_TXT = { ok: '✅ ครบ', miss: '🔴 ไม่ได้รายงาน', warn: '🟠 ไม่สมบูรณ์/ช้า', live: '🔵 กำลังปฏิบัติ', wait: '⚪ ยังไม่ถึงเวลา', void: '➖ ยกเลิก', unreg: '👤 ยังไม่ลงทะเบียน' };
+  /** ข้อความชวนลงทะเบียน (ส่งเข้ากลุ่มจากบัญชีผู้กด — ไม่กินโควตาข้อความของสถานี) */
+  function inviteRegister(names) {
+    var t = '📢 ขอเชิญ' + (names && names.length ? ' ' + names.join(', ') : 'เจ้าหน้าที่ทุกท่าน') + ' ลงทะเบียนระบบรายงานผล ' + S.boot.station + '\n' +
+      '1) กดลิงก์นี้ในไลน์: https://liff.line.me/' + CFG.LIFF_ID + '?v=register\n2) เลือกชื่อตนเอง + ใส่เบอร์โทร 4 ตัวท้าย\n' +
+      'ลงทะเบียนครั้งเดียว ใช้กดเข้าเวร/ส่งเวร/รายงานผลได้ทันที';
+    return postToChat(t).then(function (x) { toast(x === 'copied' ? '📋 คัดลอกข้อความชวนแล้ว — วางในกลุ่มได้เลย' : x === 'cancel' ? 'ยกเลิก' : '💬 ส่งข้อความชวนแล้ว'); });
+  }
   function weekXlsx(w) {
     var rows = w.rows.slice().sort(function (a, b) { return (a.shift === b.shift ? 0 : a.shift === 'D' ? -1 : 1) || (a.zone || 99) - (b.zone || 99) || String(a.car).localeCompare(String(b.car), 'th', { numeric: true }); });
-    var grid = rows.map(function (r) { return [r.car, r.zone || 'นอกตาราง', SHIFT[r.shift].label].concat(w.days.map(function (d) { var c = r.cells[d]; return c ? (WK_TXT[c.st] || c.st) + (c.n && c.n.total ? ' (' + c.n.total + ')' : '') : ''; })); });
+    var grid = rows.map(function (r) { return [r.car, r.zone || 'นอกตาราง', SHIFT[r.shift].label].concat(w.days.map(function (d) { var c = r.cells[d]; return c ? (WK_XL[c.st] || c.st) + (c.n && c.n.total ? ' (' + c.n.total + ')' : '') : ''; })); });
     var fix = [];
-    rows.forEach(function (r) { w.days.forEach(function (d) { var c = r.cells[d]; if (c) c.flags.forEach(function (f) { fix.push([d, SHIFT[r.shift].label, r.car, r.zone || '', f.lv === 'miss' ? 'ไม่ได้รายงาน' : 'ไม่สมบูรณ์', f.text, (c.crew || []).join(', ')]); }); }); });
+    rows.forEach(function (r) { w.days.forEach(function (d) { var c = r.cells[d]; if (c) c.flags.forEach(function (f) { fix.push([d, SHIFT[r.shift].label, r.car, r.zone || '', c.st === 'unreg' ? 'ยังไม่ลงทะเบียน' : f.lv === 'miss' ? 'ไม่ได้รายงาน' : 'ไม่สมบูรณ์', f.text, (c.crew || []).join(', ')]); }); }); });
     var res = [];
     rows.forEach(function (r) { w.days.forEach(function (d) { var c = r.cells[d]; if (c && c.n && c.n.total) res.push([d, SHIFT[r.shift].label, r.car, r.zone || ''].concat(WK_N.map(function (x) { return c.n[x[0]] || 0; })).concat([c.n.total, (c.crew || []).join(', ')])); }); });
     xlsxDownload('ตรวจการรายงาน7วัน_' + w.from + '_' + w.to + '.xlsx', [
-      { name: 'ตาราง 7 วัน', head: ['รถ', 'เขต', 'ผลัด'].concat(w.days.map(function (d) { return wd(d) + ' ' + th(d); })), rows: grid },
+      { name: 'ตาราง 7 วัน', head: ['รถ', 'เขต', 'ผลัด'].concat(w.days.map(function (d) { return wd(d) + ' ' + th(d); })), rows: grid, status: w.days.map(function (_, i) { return i + 3; }) },
       { name: 'รายการที่ต้องแก้', head: ['วันที่', 'ผลัด', 'รถ', 'เขต', 'ระดับ', 'ปัญหา', 'เจ้าหน้าที่'], rows: fix },
       { name: 'ผลที่รายงาน', head: ['วันที่', 'ผลัด', 'รถ', 'เขต'].concat(WK_N.map(function (x) { return x[1]; })).concat(['รวม', 'เจ้าหน้าที่']), rows: res }],
-      [['ช่วงวันที่', th(w.from) + ' – ' + th(w.to)], ['สรุป', 'ไม่ได้รายงาน ' + w.sum.miss + ' · ไม่สมบูรณ์/ช้า ' + w.sum.warn + ' · ครบ ' + w.sum.ok + ' ผลัด']]);
+      [['ช่วงวันที่', th(w.from) + ' – ' + th(w.to)], ['สรุป', 'ไม่ได้รายงาน ' + w.sum.miss + ' · ไม่สมบูรณ์/ช้า ' + w.sum.warn + ' · ครบ ' + w.sum.ok + (w.sum.unreg ? ' · ยังไม่ลงทะเบียน ' + w.sum.unreg : '') + ' ผลัด']],
+      { title: 'ตรวจการรายงาน 7 วัน', kpi: [['ครบ', w.sum.ok, 'ผลัด'], ['ไม่สมบูรณ์/ช้า', w.sum.warn, 'ผลัด'], ['ไม่ได้รายงาน', w.sum.miss, 'ผลัด']].concat(w.sum.unreg ? [['ยังไม่ลงทะเบียน (ไม่มีใครในรถผูก LINE)', w.sum.unreg, 'ผลัด']] : []).concat(w.sum.people ? [['ผูก LINE แล้ว', w.sum.linked + ' / ' + w.sum.people, 'คน']] : []) });
   }
   function weekBoardCard(container) {
     var cur = S.boot.current || {}, sh = cur.shift === 'N' ? 'N' : 'D', only = '', data = null;
-    var seg = h('div', { class: 'seg' }), filt = h('div', { class: 'chips', style: 'margin-top:8px' }), sum = h('div', { class: 'wk-sum' }), body = h('div');
-    add(container, h('div', { class: 'card wk' }, h('h3', null, '🗓 ย้อนหลัง 7 วัน', h('span', { class: 'right', text: 'ตรวจการรายงานทั้งสถานี' })), sum, seg, filt, body));
+    var seg = h('div', { class: 'seg' }), filt = h('div', { class: 'chips', style: 'margin-top:8px' }), sum = h('div', { class: 'wk-sum' }), body = h('div'), legBody = h('div');
+    // คำอธิบายสร้างครั้งเดียว (หน้าวาด 2 รอบ: ข้อมูลในเครื่อง → ข้อมูลใหม่) — อัปเดตเฉพาะเนื้อหา
+    var legend = h('details', { class: 'note db-legend', hidden: true }, h('summary', { text: 'ℹ️ ความหมายของสัญลักษณ์' }), legBody);
+    add(container, h('div', { class: 'card wk' }, h('h3', null, '🗓 ย้อนหลัง 7 วัน', h('span', { class: 'right', text: 'ตรวจการรายงานทั้งสถานี' })), sum, seg, filt, body, legend));
     function rs() { clear(seg); ['D', 'N'].forEach(function (k) { add(seg, h('button', { class: k === sh ? 'on' : '', onclick: function () { sh = k; rs(); draw(); }, text: SHIFT[k].icon + ' ผลัด' + SHIFT[k].label })); }); }
     function rf() {
       clear(filt);
@@ -695,7 +796,7 @@
           if (!c) return add(tr, h('td', { class: 'wk-none', text: '·' }));
           var st = WK_ST[c.st] || WK_ST.wait, n = c.n ? c.n.total : 0;
           add(tr, h('td', { class: 'wk-c ' + st[1] + (d === data.today ? ' wk-today' : '') }, h('button', { onclick: function () { wkDetail(r, d, c); }, title: th(d) },
-            h('span', { class: 'wk-ic', text: st[0] }), h('small', { text: c.st === 'wait' || c.st === 'void' || (c.st === 'miss' && !n) ? '' : String(n) }))));
+            h('span', { class: 'wk-ic', text: st[0] }), h('small', { text: c.st === 'wait' || c.st === 'void' || c.st === 'unreg' || (c.st === 'miss' && !n) ? '' : String(n) }))));
         });
         add(tb, tr);
       });
@@ -707,6 +808,11 @@
       function line(ic, txt, cls) { return h('div', { class: 'db-step ' + (cls || '') }, h('span', { class: 'db-ic', text: ic }), h('span', { class: 'grow', text: txt })); }
       function when(at) { return hm(at) + ' น.' + (String(at).slice(0, 10) !== d ? ' (' + th(String(at).slice(0, 10)) + ')' : ''); }
       add(b, h('p', { class: 'muted small', style: 'margin:0 0 6px', text: '👥 ' + (c.crew.join(', ') || 'ไม่มีรายชื่อเจ้าหน้าที่') + (r.zone ? ' · เขต ' + r.zone : '') }));
+      if (c.unreg || c.unregSome) {
+        var un = c.unreg || c.unregSome;
+        add(b, h('div', { class: 'db-step wk-unreg-line' }, h('span', { class: 'db-ic', text: '👤' }), h('span', { class: 'grow', text: (c.unreg ? 'ยังไม่มีใครในรถคันนี้ลงทะเบียน (ผูก LINE): ' : 'ยังไม่ลงทะเบียน: ') + un.join(', ') }),
+          h('button', { class: 'btn sm', onclick: function () { inviteRegister(un); }, text: '📢 ชวนลงทะเบียน' })));
+      }
       if (c.st === 'void') add(b, line('➖', 'ผลัดนี้ถูกยกเลิก'));
       else {
         add(b, line(c.in ? '✅' : c.phase === 'wait' ? '⚪' : '🔴', c.in ? 'เข้าเวร ' + when(c.in.at) + (c.in.by ? ' · ' + c.in.by : '') : c.phase === 'wait' ? 'ยังไม่ถึงเวลาเข้าเวร' : 'ไม่ได้กดเข้าเวร', c.in ? 'st-done' : ''));
@@ -740,12 +846,16 @@
     live('duty.week', {}, function (w) {
       data = w; var s = w.sum; clear(sum);
       add(sum, h('span', { class: 'wk-miss', text: '🔴 ไม่ได้รายงาน ' + s.miss }), h('span', { class: 'wk-warn', text: '🟠 ไม่สมบูรณ์/ช้า ' + s.warn }), h('span', { class: 'wk-ok', text: '✅ ครบ ' + s.ok }),
+        s.unreg ? h('span', { class: 'wk-unreg', text: '👤 ยังไม่ลงทะเบียน ' + s.unreg }) : null,
         h('small', { class: 'muted', text: 'ผลัด · ' + th(w.from) + '–' + th(w.to) }));
+      if (s.people && s.linked < s.people) add(sum, h('div', { class: 'wk-reg' }, h('span', { text: '👥 ผูก LINE แล้ว ' + s.linked + '/' + s.people + ' คน' }),
+        h('button', { class: 'btn sm ghost', onclick: function () { inviteRegister(null); }, text: '📢 ชวนลงทะเบียน' })));
       rf(); draw();
-      add(body.parentNode, h('details', { class: 'note db-legend' }, h('summary', { text: 'ℹ️ ความหมาย' }),
+      legend.hidden = false; clear(legBody);
+      add(legBody, h('div', { text: '👤 ยังไม่ลงทะเบียน: ผลัดที่ไม่มีใครในรถผูก LINE กับระบบ จึงรายงานในแอปไม่ได้ — แตะช่องเพื่อดูรายชื่อและส่งข้อความชวน' }),
         h('div', { text: '✅ เข้าเวรและส่งเวรครบตามเวลา · 🔴 ไม่ได้เข้าเวร/ไม่ได้ส่งเวร · 🟠 ไม่สมบูรณ์: ส่งเวรช้า (เกิน ' + (w.rules.checkout / 60) + ' ชม. หลังจบผลัด) ว.42 ไม่กดจบ/นัดหรือรอรับกลับค้างเกิน 24 ชม. หรือคดีรออนุมัติ/ถูกส่งกลับ · 🔵 กำลังปฏิบัติ · ⚪ ยังไม่ถึงเวลา · ➖ ยกเลิกผลัด' }),
         h('div', { text: 'ตัวเลขในช่อง = ผลรวมที่รายงานในผลัดนั้น (ใบสั่ง ตักเตือน ตรวจรถ ช่วยเหลือ จับกุม ว.42 ภารกิจ) · แตะช่องเพื่อดูรายละเอียด' }),
-        h('div', { text: 'เจ้าหน้าที่ส่งเข้าเวร/ส่งเวรย้อนหลังเองได้ภายใน ' + w.backDays + ' วัน (ระบบบันทึกว่าส่งช้า) · เกินนั้นหรือผลัดของผู้อื่นให้ธุรการบันทึกแทน' })));
+        h('div', { text: 'เจ้าหน้าที่ส่งเข้าเวร/ส่งเวรย้อนหลังเองได้ภายใน ' + w.backDays + ' วัน (ระบบบันทึกว่าส่งช้า) · เกินนั้นหรือผลัดของผู้อื่นให้ธุรการบันทึกแทน' }));
     }, function (e) { clear(body); add(body, errorBox(e.message)); });
   }
 
@@ -811,6 +921,7 @@
       rowLink('👁', 'จำลองมุมมองตามสิทธิ์', 'ดูแอปในมุมของแต่ละบทบาทหรือรายคน', function () { go('viewAs'); }),
       rowLink('🔐', 'สิทธิ์ตามบทบาท', 'กำหนดว่าแต่ละบทบาทเห็น/ทำอะไรได้', function () { go('roles'); }),
       rowLink('🧾', 'รหัสความผิด', 'เพิ่ม/แก้/ปิดรายการความผิด', function () { go('codes'); }),
+      rowLink('🩺', 'สุขภาพระบบ', 'สำรองข้อมูล · ความเร็ว · โควตา · ย้ายข้อมูลเก่าเข้าคลัง', function () { go('health'); }),
       rowLink('⚙️', 'ตั้งค่าระบบ', 'โควตาข้อความ · การแจ้งเตือน · ข้อความมาตรฐาน', function () { go('settings'); })]);
     add($app, h('p', { class: 'muted small center', text: 'v' + S.boot.version + ' · ' + (S.boot.station || '') }));
   };
@@ -881,7 +992,7 @@
     sh.push({ name: 'รายคน', head: ['ชื่อ', 'รายงาน (ออกเอง)', 'ชำระแล้ว', 'อัตรา %', 'บาท', 'ใบสั่งกล้อง'], rows: (d.officers || []).map(function (p) { return [p.name, p.reported, p.paid, p.rate == null ? '' : p.rate, p.paidAmt, p.cam || 0]; }) });
     if (d.cars) sh.push({ name: 'รายรถ', head: ['รถ', 'รายงาน', 'ชำระแล้ว', 'อัตรา %', 'บาท'], rows: d.cars.map(function (x) { return [x.car, x.reported, x.paid, x.rate == null ? '' : x.rate, x.paidAmt]; }) });
     if (d.unmatched) sh.push({ name: 'ยังไม่ทราบผู้ออก', head: ['รหัสหมวก', 'ชื่อใน PTM', 'ใบ', 'ใบสั่งกล้อง', 'บาท'], rows: d.unmatched.map(function (u) { return [u.badge || '', u.name || '', u.n, u.cam || 0, u.amt]; }) });
-    if (d.rate) sh.push({ name: 'อัตราชำระ', head: ['พ.ร.บ.', 'รายงาน', 'ชำระแล้ว', 'อัตรา %'], rows: d.rate.byAct.map(function (x) { return [x.act, x.reported, x.paid, x.rate == null ? '' : x.rate]; }).concat([['รวม', d.rate.reported, d.rate.paid, d.rate.rate == null ? '' : d.rate.rate]]) });
+    if (d.rate) sh.push({ name: 'อัตราชำระ', noTotal: true, head: ['พ.ร.บ.', 'รายงาน', 'ชำระแล้ว', 'อัตรา %'], rows: d.rate.byAct.map(function (x) { return [x.act, x.reported, x.paid, x.rate == null ? '' : x.rate]; }).concat([['รวม', d.rate.reported, d.rate.paid, d.rate.rate == null ? '' : d.rate.rate]]) });
     var info = [['ช่วงวันที่', rg]];
     if (d.issuers) info.push(['ผู้ออกใบสั่ง', 'รายงาน ' + d.issuers.tickets + ' ใบ · ปรับตาม PTM ' + d.issuers.ptm + ' · รอเทียบ PTM ' + d.issuers.unknown]);
     xlsxDownload('ค่าปรับ_' + d.from + '_' + d.to + '.xlsx', sh, info);
@@ -1122,13 +1233,15 @@
     }, text: okText }));
     add(sheet, btns); add(m, sheet);
     m.onclick = function (e) { if (e.target === m) closeModal(); };
+    histModal();
   }
-  function closeModal() { var m = document.getElementById('modal'); m.hidden = true; clear(m); }
+  function closeModal() { var m = document.getElementById('modal'); m.hidden = true; clear(m); S.modalH = 0; }
   function stepper(val, onChange, max) {
     var inp = h('input', { type: 'number', inputmode: 'numeric', min: '0', value: String(val || 0) });
     function set(v) { v = Math.max(0, Math.min(max || 999, v | 0)); inp.value = String(v); onChange(v); }
     inp.onchange = function () { set(+inp.value); };
-    return h('div', { class: 'stepper' }, h('button', { type: 'button', onclick: function () { set((+inp.value || 0) - 1); }, text: '−' }), inp, h('button', { type: 'button', onclick: function () { set((+inp.value || 0) + 1); }, text: '+' }));
+    var el = h('div', { class: 'stepper' }, h('button', { type: 'button', onclick: function () { set((+inp.value || 0) - 1); }, text: '−' }), inp, h('button', { type: 'button', onclick: function () { set((+inp.value || 0) + 1); }, text: '+' }));
+    el._set = set; return el;
   }
   function submitBtn(text, cls, fn) {
     var b = h('button', { class: 'btn ' + (cls || ''), text: text });
@@ -1200,6 +1313,13 @@
         });
         if (rec && rec.note) note.value = rec.note;
         render(g);
+        keep('checkout', function () {
+          var tk = {}; Object.keys(state.tickets).forEach(function (p) { var o = state.tickets[p], c = {}; Object.keys(o || {}).forEach(function (k) { if (o[k]) c[k] = o[k]; }); if (Object.keys(c).length) tk[p] = c; });
+          return { tickets: tk, warnings: state.warnings, truckChecks: state.truckChecks, suspectChecks: state.suspectChecks, note: note.value };
+        }, function (d) {
+          state.tickets = JSON.parse(JSON.stringify(d.tickets || {})); state.warnings = +d.warnings || 0; state.truckChecks = +d.truckChecks || 0; state.suspectChecks = +d.suspectChecks || 0;
+          note.value = d.note || ''; render(g);
+        }).start(sel.dutyDate + '|' + sel.shift + '|' + sel.car);
       }, function (e) { clear(body); add(body, errorBox(e.message)); });
     }), body);
     function render(g) {
@@ -1475,6 +1595,8 @@
     rs();
     add($app, f, details, btn);
     drawList();
+    keep('escort', function () { return { mode: mode, kind: kind, name: name.value, origin: origin.value, dest: dest.value, hfrom: hfrom.value, note: note.value, rt: rt.checked }; },
+      function (d) { if (d.mode && d.mode !== mode) { mode = d.mode; rs(); } if (S.boot.escortTypes.indexOf(d.kind) >= 0) { kind = d.kind; rk(); } name.value = d.name || kind; origin.value = d.origin || ''; dest.value = d.dest || ''; hfrom.value = d.hfrom || ''; note.value = d.note || ''; rt.checked = !!d.rt; }).start();
     if (!params._fresh) escReload(function () { if (S.view === 'escort') { list = S.boot.escorts; mine = list.filter(escMine); others = list.filter(function (e) { return !escMine(e); }); drawList(); } }).catch(function () { });
   };
 
@@ -1494,8 +1616,9 @@
       clear(types); S.boot.assistTypes.forEach(function (k) { add(types, h('button', { class: 'chip' + (k === type ? ' on' : ''), onclick: function () { type = k; rt(); }, text: k })); });
       acc.hidden = !/อุบัติเหตุ/.test(type);
     }
-    add(acc, h('div', { class: 'vrow' }, h('div', { class: 'lbl', text: '☠️ เสียชีวิต (ราย)' }), stepper(0, function (v) { dead.v = v; }, 99)),
-      h('div', { class: 'vrow' }, h('div', { class: 'lbl', text: '🚑 บาดเจ็บ (ราย)' }), stepper(0, function (v) { inj.v = v; }, 99)), h('label', { class: 'f', text: 'มูลค่าความเสียหาย' }), damage);
+    var deadSt = stepper(0, function (v) { dead.v = v; }, 99), injSt = stepper(0, function (v) { inj.v = v; }, 99);
+    add(acc, h('div', { class: 'vrow' }, h('div', { class: 'lbl', text: '☠️ เสียชีวิต (ราย)' }), deadSt),
+      h('div', { class: 'vrow' }, h('div', { class: 'lbl', text: '🚑 บาดเจ็บ (ราย)' }), injSt), h('label', { class: 'f', text: 'มูลค่าความเสียหาย' }), damage);
     rt();
     var f = card('รายละเอียด');
     add(f, h('label', { class: 'f', text: 'ประเภท' }), types, h('div', { class: 'row' }, h('div', { class: 'grow' }, h('label', { class: 'f', text: 'ทล.' }), road), h('div', { class: 'grow' }, h('label', { class: 'f', text: 'กม.' }), km)),
@@ -1505,6 +1628,8 @@
       return api('assist', { dutyDate: cur.dutyDate, shift: cur.shift, car: cur.car, type: type, road: road.value, km: km.value, dir: dir.value, dead: dead.v, injured: inj.v, damage: damage.value, result: result.value, lat: geo.lat, lng: geo.lng })
         .then(function (r) { done('บันทึกแล้ว', r.message, { next: 'assist' }); });
     })));
+    keep('assist', function () { return { type: type, road: road.value, km: km.value, dir: dir.value, dead: dead.v, inj: inj.v, damage: damage.value, result: result.value }; },
+      function (d) { if (S.boot.assistTypes.indexOf(d.type) >= 0) { type = d.type; rt(); } road.value = d.road || ''; km.value = d.km || ''; dir.value = d.dir || ''; deadSt._set(d.dead || 0); injSt._set(d.inj || 0); damage.value = d.damage || ''; result.value = d.result || ''; }).start();
   };
 
   // ======================= ภารกิจ/จิตอาสา =======================
@@ -1525,6 +1650,8 @@
       if (!title.value.trim()) throw new Error('กรุณาใส่ชื่อภารกิจ');
       return api('mission', { type: type, title: title.value, date: date.value, time: time.value, place: place.value, participants: parts, detail: detail.value }).then(function (r) { done('บันทึกภารกิจแล้ว', r.message); });
     })));
+    keep('mission', function () { return { type: type, title: title.value, date: date.value, time: time.value, place: place.value, parts: parts, detail: detail.value }; },
+      function (d) { if (S.boot.missionTypes.indexOf(d.type) >= 0) { type = d.type; rt(); } title.value = d.title || ''; if (d.date) date.value = d.date; time.value = d.time || ''; place.value = d.place || ''; if (d.parts && d.parts.length) { parts = d.parts; rp(); } detail.value = d.detail || ''; }).start();
   };
 
   // ======================= จับกุม (แบบ CCOC) =======================
@@ -1563,6 +1690,9 @@
     function save() { if (!editing) Draft.set('arrest', f); }
     var timer = null; function autosave() { clearTimeout(timer); timer = setTimeout(save, 600); }
     function inp(key, attrs) { var el = h(attrs && attrs.tag || 'input', Object.assign({ value: f[key] == null ? '' : String(f[key]) }, attrs || {})); el.oninput = function () { f[key] = el.value; autosave(); }; return el; }
+    // ถามก่อนออกเมื่อกรอกค้าง (ร่างของฟอร์มจับกุมเก็บเองอยู่แล้ว)
+    var fbase = JSON.stringify(f), kp = { dirty: function () { return JSON.stringify(f) !== fbase; }, save: function () { save(); }, done: function () { if (!editing) Draft.del('arrest'); }, rebase: function () { fbase = JSON.stringify(f); } };
+    S.keeper = kp;
     if (fromDraft) add($app, h('div', { class: 'note' }, 'กู้คืนร่างที่กรอกค้างไว้แล้ว ', h('button', { class: 'btn ghost sm', onclick: function () { Draft.del('arrest'); VIEWS.arrest(params); }, text: 'เริ่มใหม่' })));
     // รถ/ผลัด: ตั้งต้นจากผลัดปัจจุบันของผู้รายงาน และเติมชุดจับกุมจากเจ้าหน้าที่
     var m = (S.boot.myShifts || []).filter(function (x) { return params.car ? x.car === params.car && x.dutyDate === params.d : x.state === 'เข้าเวร' || (x.dutyDate === S.boot.current.dutyDate && x.shift === S.boot.current.shift); })[0];
@@ -1602,7 +1732,7 @@
       add(teamBox, h('button', { class: 'btn ghost sm', style: 'margin-top:8px', onclick: function () { pickPerson('เพิ่มผู้ร่วมจับกุม', function (p) { if (!f.team.some(function (t) { return t.pid === p.pid; })) f.team.push({ pid: p.pid, role: 'joint' }); rteam(); autosave(); }); }, text: '➕ เพิ่มเจ้าหน้าที่' }));
     }
     if (m && !editing && f.team.length === 1 && !fromDraft) api('shift.get', { dutyDate: m.dutyDate, shift: m.shift, car: m.car }).then(function (g) {
-      (g.record && g.record.crew && g.record.crew.length ? g.record.crew : g.expected.filter(function (c) { return !c.away; })).forEach(function (c) { if (!f.team.some(function (t) { return t.pid === c.pid; })) f.team.push({ pid: c.pid, role: 'joint' }); });
+      (g.record && g.record.crew && g.record.crew.length ? g.record.crew : g.expected.filter(function (c) { return !c.away; })).forEach(function (c) { if (!f.team.some(function (t) { return t.pid === c.pid; })) f.team.push({ pid: c.pid, role: 'joint' }); }); if (!kp.dirty || S.keeper === kp) kp.rebase();
       rteam();
     }, function () { });
     rteam();
@@ -2089,7 +2219,17 @@
       }
       if (n.missing.length) add(nc, h('div', { class: 'small', style: 'margin-top:8px' }, h('b', { style: 'color:var(--red)', text: '🔴 ยังไม่เข้าเวร: ' }), n.missing.join(', ')));
       n.escorts.forEach(function (e) { add(nc, h('div', { class: 'small', style: 'margin-top:4px', text: '🚔 รถ ' + e.car + ' · ' + e.name + (e.start ? ' · เริ่ม ' + hm(e.start) + ' น.' : '') })); });
-      if (n.overdue.length) add(nc, h('div', { class: 'small', style: 'margin-top:6px' }, h('b', { style: 'color:var(--amber)', text: '⚠️ เลยกำหนดส่งเวร ' + (brief ? n.overdue.length + ' ผลัด' : ': ') }), brief ? '' : n.overdue.map(function (m) { return th(m.date) + (m.shift === 'N' ? '🌙' : '☀️') + m.car; }).join(' · ')));
+      if (n.overdue.length) {
+        // เลยกำหนดส่งเวร: แยกบรรทัดตามวัน/ผลัด แสดงรถเป็นชิป (เดิมเป็นข้อความยาวต่อกันอ่านยาก)
+        var od = h('div', { class: 'od' }, h('b', { style: 'color:var(--amber)', text: '⚠️ เลยกำหนดส่งเวร ' + n.overdue.length + ' ผลัด' }));
+        if (!brief) {
+          var grp = {}, order = [];
+          n.overdue.forEach(function (m) { var k = m.date + '|' + m.shift; if (!grp[k]) { grp[k] = []; order.push(k); } grp[k].push(m.car); });
+          order.sort().reverse().forEach(function (k) { var p2 = k.split('|');
+            add(od, h('div', { class: 'od-row' }, h('span', { class: 'od-d', text: (p2[1] === 'N' ? '🌙 ' : '☀️ ') + wd(p2[0]) + ' ' + th(p2[0]) }), h('span', { class: 'od-cars' }, grp[k].map(function (c) { return h('span', { class: 'od-car', text: c }); })))); });
+        }
+        add(nc, od);
+      }
       add(body, nc);
       // 2) ตัวเลขหลัก (สีหมวดงานชุดเดียวกับภาพรายงาน)
       var kp = h('div', { class: 'kpis' });
@@ -2281,6 +2421,7 @@
       var btns = h('div', { class: 'hist-btns' });
       if (r.canEdit) add(btns, h('button', { class: 'btn ghost sm', onclick: function () { edit(r); }, text: '✏️ แก้ไข' }));
       if (r.canVoid) add(btns, h('button', { class: 'btn ghost sm red-ghost', onclick: function () { cancel(r); }, text: '🗑 ยกเลิก' }));
+      if (r.canRestore) add(btns, submitBtn('↩️ กู้คืน', 'ghost sm', function () { return restore(r); }));
       if (r.kind === 'arrest') add(btns, h('button', { class: 'btn ghost sm', onclick: function () { go('case', { id: r.id }); }, text: '📄 เปิดคดี' }));
       add(btns, h('button', { class: 'btn ghost sm', onclick: function () { timeline(r, title); }, text: '🕘 ประวัติ' }));
       add(el, btns);
@@ -2346,7 +2487,16 @@
       var what = r.kind === 'shift' ? 'รายงานผลัดนี้ทั้งหมด (เข้าเวร + ผลการปฏิบัติ)' : r.title;
       modal('ยกเลิก ' + what, [h('p', { class: 'muted small', text: 'ระบบจะไม่นับรายการนี้ในสถิติ และเก็บประวัติไว้ว่าใครยกเลิกเมื่อไร (ไม่ลบจริง)' }), reason], '🗑 ยืนยันยกเลิก', function () {
         var call = r.kind === 'shift' ? api('shift.void', { id: r.id, reason: reason.value }) : api('event.void', { id: r.id, reason: reason.value });
-        return call.then(function () { toast('ยกเลิกแล้ว'); apiInvalidate(); refreshBoot(); load(true); });
+        return call.then(function () {
+          apiInvalidate(); refreshBoot(); load(true);
+          toastAction('🗑 ยกเลิกแล้ว', '↩️ เลิกทำ', function () { restore(r).then(null, function (e) { toast('⚠️ ' + e.message, 4000); }); });
+        });
+      });
+    }
+    /** กู้คืนรายการ/ผลัดที่ยกเลิก (ภายใน 7 วัน) */
+    function restore(r) {
+      return api(r.kind === 'shift' ? 'shift.restore' : 'event.restore', { id: r.id }).then(function () {
+        toast('↩️ กู้คืนแล้ว — นับเข้าสถิติตามเดิม', 3500); apiInvalidate(); refreshBoot(); load(true);
       });
     }
     load();
@@ -2652,7 +2802,7 @@
 
   // ======================= ส่งออก =======================
   VIEWS.export = function () {
-    setTitle('⬇️ ส่งออก', 'ไฟล์เก็บใน Google Drive ของสถานี — เปิด/แชร์เข้าไลน์ได้ทันที');
+    setTitle('⬇️ ส่งออก', 'ไฟล์สำรองลงเครื่อง · PDF/รูปเก็บใน Drive ของสถานี');
     clear($app);
     var cur = null, out = h('div'), zone = '';
     var zsel = h('select', { onchange: function () { zone = zsel.value; } }, h('option', { value: '', text: 'ทั้งสถานี' }));
@@ -2661,14 +2811,14 @@
     add($app, rangePicker(function (a, b) { cur = [a, b]; }, 2), h('div', { class: 'card' }, zsel), out);
     function show(r, label) { clear(out); add(out, fileCard(r, label)); out.scrollIntoView({ behavior: 'smooth' }); }
     var c = card('📄 รายงานสรุป PDF', 'หัวกระดาษสถานี + ตาราง + แท่งเปรียบเทียบ');
-    add(c, info('ตัวเลขหลัก · รายเขต · รายรถ · ประเภทความผิด · ประเภทคดี · รายบุคคล (เฉพาะผู้มีสิทธิ์) · วินัยการรายงาน'),
+    add(c, info('ตัวเลขหลัก · รายเขต · รายรถ · ประเภทความผิด · ประเภทคดี · รายบุคคล (เฉพาะผู้มีสิทธิ์) · วินัยการรายงาน', 'มีอะไรใน PDF'),
       submitBtn('📄 สร้าง PDF สรุปผล', 'block', function () {
         if (!cur) throw new Error('เลือกช่วงวัน');
         toast('กำลังสร้าง PDF… ประมาณ 10–20 วินาที', 8000);
         return api('export.pdf', { from: cur[0], to: cur[1], zone: zone }).then(function (r) { show(r, 'PDF สรุปผล'); });
       }));
     var c1 = card('📗 Excel แบบเจ้าหน้าที่สถิติ', '1 ชีตต่อวัน + สรุป + รายบุคคล');
-    add(c1, info('หัวคอลัมน์เดิม: พ.ร.บ.ขนส่ง · พ.ร.บ.รถยนต์ · ตรวจสอบฯรถบรรทุก · ตรวจรถต้องสงสัย · ช่วยเหลือฯ · หมายจับ · อาญาทั่วไป · ว.42 · ภารกิจ + หมายเหตุอัตโนมัติ (ไม่เกิน 31 วัน)'),
+    add(c1, info('หัวคอลัมน์เดิม: พ.ร.บ.ขนส่ง · พ.ร.บ.รถยนต์ · ตรวจสอบฯรถบรรทุก · ตรวจรถต้องสงสัย · ช่วยเหลือฯ · หมายจับ · อาญาทั่วไป · ว.42 · ภารกิจ + หมายเหตุอัตโนมัติ (ไม่เกิน 31 วัน)', 'หัวคอลัมน์ในไฟล์'),
       submitBtn('📗 สร้างไฟล์ .xlsx', 'block', function () {
         if (!cur) throw new Error('เลือกช่วงวัน');
         toast('กำลังสร้างไฟล์… อาจใช้เวลา 10–30 วินาที', 8000);
@@ -2711,13 +2861,13 @@
           [['ช่วงวันที่', th(cur[0]) + ' – ' + th(cur[1])]]);
       });
     }));
-    var c5 = card('🗓 ตรวจการรายงาน 7 วัน (.xlsx)', 'ตาราง 7 วัน × รถ · รายการที่ต้องแก้ · ผลที่รายงาน');
+    var c5 = card('🗓 ตรวจการรายงาน 7 วัน (Excel)', 'ตาราง 7 วัน × รถ (สีตามสถานะ) · รายการที่ต้องแก้ · ผลที่รายงาน');
     add(c5, submitBtn('⬇️ ดาวน์โหลด 7 วันล่าสุด (ถึงวันสุดท้ายของช่วง)', 'gray block', function () {
       return api('duty.week', cur ? { end: cur[1] } : {}).then(function (w) { weekXlsx(w); });
     }));
     // ไฟล์สำรองรวมทุกหมวด (ธุรการเก็บในคอมพิวเตอร์) — ไม่เกิน 92 วันต่อไฟล์
-    var c0 = card('💾 ไฟล์สำรองข้อมูล (.xlsx)', 'ทุกหมวดในไฟล์เดียว · ดาวน์โหลดลงเครื่องโดยตรง');
-    add(c0, h('p', { class: 'muted small', text: 'สรุปรายรถ · สรุปรายคน · ผลัด · ใบสั่ง (ผู้ออก/รอเทียบ PTM) · ว.42 · ช่วยเหลือ · จับกุม · ภารกิจ · งานอื่นในผลัด · ตารางเวร' +
+    var c0 = card('💾 ไฟล์สำรองข้อมูล (Excel)', 'ทุกหมวดในไฟล์เดียว · ลงเครื่องโดยตรง');
+    add(c0, h('p', { class: 'muted small', text: 'แผ่นแรก "สรุป" (ตัวเลขหลัก · แยกเขต · สารบัญกดไปแต่ละชีต) แล้วตามด้วย สรุปรายรถ · สรุปรายคน · ผลัด · ใบสั่ง (ผู้ออก/รอเทียบ PTM) · ว.42 · ช่วยเหลือ · จับกุม · ภารกิจ · งานอื่นในผลัด · ตารางเวร' +
       (can('fine.manage') || S.boot.perms.admin || (can('view.people') && S.boot.perms.scope === 'station') ? ' · ค่าปรับรายวัน · ใบสั่งชำระแล้ว' : '') + (can('view.suspect') ? ' · ผู้ต้องหา (ข้อมูลลับ)' : '') +
       ' — ครั้งละไม่เกิน 92 วัน (แนะนำส่งออกทุกสิ้นวงรอบ/สิ้นเดือน) · ระบบบันทึกประวัติทุกครั้งที่ส่งออก' }),
       can('view.suspect') ? h('p', { class: 'note small', text: '🔒 ไฟล์ที่มีข้อมูลผู้ต้องหา: เก็บในเครื่องที่ตั้งรหัสผ่าน ห้ามส่งต่อทางไลน์/อีเมล/อัปโหลดขึ้นบริการภายนอก ใช้เฉพาะงานคดี' }) : null,
@@ -2727,10 +2877,13 @@
         return api('export.backup', { from: cur[0], to: cur[1] }).then(function (r) {
           var n = r.sheets.reduce(function (a, x) { return a + x.rows.length; }, 0);
           xlsxDownload('สำรองข้อมูล_' + S.boot.station.replace(/[\s.]/g, '') + '_' + r.from + '_' + r.to + '.xlsx', r.sheets,
-            [['ช่วงวันที่', th(r.from) + ' – ' + th(r.to)], ['ขอบเขต', r.scope === 'station' ? 'ทั้งสถานี' : r.scope === 'zone' ? 'เขต ' + r.zone : 'เฉพาะของผู้ส่งออก'], ['จำนวนแถวรวม', n]]);
+            [['ช่วงวันที่', th(r.from) + ' – ' + th(r.to)], ['ขอบเขต', r.scope === 'station' ? 'ทั้งสถานี' : r.scope === 'zone' ? 'เขต ' + r.zone : 'เฉพาะของผู้ส่งออก']],
+            { title: 'สำรองข้อมูล ' + S.boot.station, kpi: r.summary && r.summary.kpi, zones: r.summary && r.summary.zones });
         });
       }));
-    add($app, c0, c, c1, c2, c3, c4, c5);
+    // ปุ่มหลัก 2 อย่าง (ไฟล์สำรอง + ตรวจ 7 วัน) — รูปแบบอื่นพับไว้ ไม่ให้หน้ารก
+    var more = h('details', { class: 'card fold exp-more' }, h('summary', null, h('b', { text: '📂 รูปแบบอื่น' }), h('small', { class: 'muted', text: ' PDF · รูปภาพ · ข้อความ · Excel แบบเจ้าหน้าที่สถิติ · ข้อมูลดิบ' })), c, c1, c2, c3, c4);
+    add($app, c0, c5, more);
   };
   /** การ์ดผลลัพธ์ไฟล์ที่เก็บใน Google Drive: เปิด / แชร์เข้าไลน์ / คัดลอกลิงก์ */
   function fileCard(r, label) {
@@ -2779,66 +2932,235 @@
     }
     function esc(v) { return String(v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, ''); }
     function col(i) { var s = ''; i++; while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
-    function cell(r, c, v, st) {
-      var ref = col(c) + r, sa = st ? ' s="' + st + '"' : '';
-      if (v === null || v === undefined || v === '') return st ? '<c r="' + ref + '"' + sa + '/>' : '';
-      if (typeof v === 'number' && isFinite(v)) return '<c r="' + ref + '"' + sa + '><v>' + v + '</v></c>';
-      v = String(v); if (v.length > 32000) v = v.slice(0, 32000);
-      return '<c r="' + ref + '" t="inlineStr"' + sa + '><is><t xml:space="preserve">' + esc(v) + '</t></is></c>';
-    }
     function sname(n, used) { var b = String(n || 'Sheet').replace(/[\[\]:*?\/\\]/g, '-').slice(0, 31) || 'Sheet', x = b, i = 2; while (used[x.toLowerCase()]) x = b.slice(0, 28) + ' ' + i++; used[x.toLowerCase()] = 1; return x; }
-    function sheetXml(sh) {
-      var head = sh.head || [], rows = sh.rows || [], r0 = sh.title ? 2 : 1, ncol = Math.max(head.length, 1);
-      var w = head.map(function (hh, i) { var m = String(hh).length; rows.slice(0, 400).forEach(function (row) { var v = row[i], l = v == null ? 0 : String(v).length; if (l > m) m = l; }); return Math.min(60, Math.max(7, Math.round(m * 1.15) + 2)); });
-      var x = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'];
-      x.push('<sheetViews><sheetView workbookViewId="0"><pane ySplit="' + r0 + '" topLeftCell="A' + (r0 + 1) + '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>');
-      if (w.length) x.push('<cols>' + w.map(function (v, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + v + '" customWidth="1"/>'; }).join('') + '</cols>');
-      x.push('<sheetData>');
-      if (sh.title) x.push('<row r="1">' + cell(1, 0, sh.title, 3) + '</row>');
-      x.push('<row r="' + r0 + '">' + head.map(function (hh, i) { return cell(r0, i, hh, 1); }).join('') + '</row>');
-      rows.forEach(function (row, j) { var r = r0 + 1 + j; x.push('<row r="' + r + '">' + row.map(function (v, i) { return cell(r, i, v, typeof v === 'number' ? 2 : 0); }).join('') + '</row>'); });
-      x.push('</sheetData>');
-      if (rows.length && head.length) x.push('<autoFilter ref="A' + r0 + ':' + col(ncol - 1) + (r0 + rows.length) + '"/>');
-      x.push('<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1" fitToHeight="0"/></worksheet>');
-      return x.join('');
+    /** ความกว้างที่ตาเห็น: ไม่นับสระบน/ล่างและวรรณยุกต์ (ไม่กินที่) */
+    function visLen(v) { return String(v == null ? '' : v).replace(/[ัิ-ฺ็-๎]/g, '').length; }
+    // ---------- สีชุดเดียวกับภาพรายงาน ----------
+    var CAT = { navy: '0F2744', blue: '1D4ED8', amber: 'B45309', teal: '0F766E', purple: '6D28D9', slate: '475569', red: 'B91C1C', green: '15803D', gray: '64748B' };
+    var ST = { green: ['DCFCE7', '166534'], red: ['FEE2E2', '991B1B'], amber: ['FEF3C7', '92400E'], gray: ['F1F5F9', '475569'], blue: ['DBEAFE', '1E40AF'] };
+    /** สีช่องสถานะจากข้อความ */
+    function stColor(v) {
+      var s = String(v || '');
+      if (!s) return null;
+      if (/ยังไม่ลงทะเบียน|ยกเลิก|ไม่มีผล|ยังไม่ถึง|ไม่ระบุ/.test(s)) return 'gray';
+      if (/ไม่ได้รายงาน|ส่งกลับ|ไม่ตรง|ขาด|ไม่ได้/.test(s)) return 'red';
+      if (/ไม่สมบูรณ์|ช้า|รอ|ค้าง|นัด|มีใบสั่ง/.test(s)) return 'amber';
+      if (/กำลัง|เข้าเวร$/.test(s)) return 'blue';
+      if (/ปกติ|ครบ|ส่งเวร|อนุมัติ|จบแล้ว|ยืนยัน|ส่งยอดแล้ว|ตรงกัน/.test(s)) return 'green';
+      return null;
     }
-    var STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-      '<fonts count="3"><font><sz val="11"/><name val="Tahoma"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Tahoma"/></font><font><b/><sz val="14"/><color rgb="FF0F2744"/><name val="Tahoma"/></font></fonts>' +
-      '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F3B63"/><bgColor indexed="64"/></patternFill></fill></fills>' +
-      '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFC9D3DF"/></left><right style="thin"><color rgb="FFC9D3DF"/></right><top style="thin"><color rgb="FFC9D3DF"/></top><bottom style="thin"><color rgb="FFC9D3DF"/></bottom><diagonal/></border></borders>' +
-      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-      '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
-      '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' +
-      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
-      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
-      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
-    /** sheets = [{ name, head: [], rows: [[]], title? }] → Uint8Array ของไฟล์ .xlsx */
+    // ---------- ทะเบียนรูปแบบเซลล์ (สร้าง styles.xml ตามที่ใช้จริง) ----------
+    var FONT = 'TH Sarabun New';
+    function Styles() {
+      var fonts = [], fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'], xfs = [], fk = {}, flk = {}, xk = {};
+      function font(o) { var k = JSON.stringify(o); if (fk[k] != null) return fk[k]; fk[k] = fonts.length; fonts.push('<font>' + (o.b ? '<b/>' : '') + (o.u ? '<u/>' : '') + '<sz val="' + (o.sz || 16) + '"/><color rgb="FF' + (o.c || '1E293B') + '"/><name val="' + FONT + '"/><family val="2"/></font>'); return fk[k]; }
+      function fill(rgb) { if (!rgb) return 0; if (flk[rgb] != null) return flk[rgb]; flk[rgb] = fills.length; fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FF' + rgb + '"/><bgColor indexed="64"/></patternFill></fill>'); return flk[rgb]; }
+      /** o: { b, sz, c, u, bg, fmt (numFmtId), border (0/1), h (left|center|right), v (top|center), wrap } */
+      function xf(o) {
+        var k = JSON.stringify(o); if (xk[k] != null) return xk[k];
+        var f = font({ b: o.b, sz: o.sz, c: o.c, u: o.u }), fl = fill(o.bg), al = '<alignment' + (o.h ? ' horizontal="' + o.h + '"' : '') + ' vertical="' + (o.v || 'top') + '"' + (o.wrap ? ' wrapText="1"' : '') + '/>';
+        xk[k] = xfs.length + 1; // 0 = ค่าตั้งต้น
+        xfs.push('<xf numFmtId="' + (o.fmt || 0) + '" fontId="' + f + '" fillId="' + fl + '" borderId="' + (o.border === 0 ? 0 : 1) + '" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"' + (o.fmt ? ' applyNumberFormat="1"' : '') + '>' + al + '</xf>');
+        return xk[k];
+      }
+      font({});
+      function xml() {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+          '<numFmts count="2"><numFmt numFmtId="164" formatCode="[$-107041E]d mmm yy"/><numFmt numFmtId="165" formatCode="[$-107041E]d mmm yy hh:mm"/></numFmts>' +
+          '<fonts count="' + fonts.length + '">' + fonts.join('') + '</fonts><fills count="' + fills.length + '">' + fills.join('') + '</fills>' +
+          '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="thin"><color rgb="FFCBD5E1"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom><diagonal/></border></borders>' +
+          '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+          '<cellXfs count="' + (xfs.length + 1) + '"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' + xfs.join('') + '</cellXfs>' +
+          '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleLight1" defaultPivotStyle="PivotStyleLight16"/></styleSheet>';
+      }
+      return { xf: xf, xml: xml };
+    }
+    // ---------- ข้อความใช้ร่วม (sharedStrings) ----------
+    function Strings() { var list = [], idx = {}; return { id: function (s) { s = String(s); if (s.length > 32000) s = s.slice(0, 32000); if (idx[s] == null) { idx[s] = list.length; list.push(s); } return idx[s]; }, xml: function (count) { return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="' + count + '" uniqueCount="' + list.length + '">' + list.map(function (s) { return '<si><t xml:space="preserve">' + esc(s) + '</t></si>'; }).join('') + '</sst>'; } }; }
+    // ---------- วันที่ไทย (แสดง พ.ศ.) แต่เก็บเป็นวันที่จริง → กรอง/เรียง/Pivot ตามเดือนได้ ----------
+    var RE_D = /^(\d{4})-(\d{2})-(\d{2})$/, RE_DT = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/;
+    function serial(v) { var m = String(v).match(RE_DT) || String(v).match(RE_D); if (!m) return null; var d = (Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(1899, 11, 30)) / 864e5; return m[4] != null ? d + (+m[4] * 60 + +m[5]) / 1440 : d; }
+    var NO_SUM = /เขต|ลำดับ|อายุ|รหัส|เลข|ปี|เวลา|นาที|ทล\.|กม\.|อันดับ|คะแนน|อัตรา|%|สะสม/;
+    /** ชนิดคอลัมน์จากหัวและค่า: date · datetime · int · status · text */
+    function colTypes(sh) {
+      var head = sh.head || [], rows = sh.rows || [];
+      return head.map(function (hh, i) {
+        if ((sh.status || []).indexOf(i) >= 0 || /^(สถานะ|ระดับ)/.test(String(hh))) return 'status';
+        var seen = 0, d = 0, dt = 0, num = 0;
+        rows.forEach(function (r) { var v = r[i]; if (v === '' || v == null) return; seen++; if (typeof v === 'number' && isFinite(v)) num++; else if (RE_D.test(String(v))) d++; else if (RE_DT.test(String(v))) dt++; });
+        if (!seen) return 'text';
+        return num === seen ? 'int' : d === seen ? 'date' : d + dt === seen ? 'datetime' : 'text';
+      });
+    }
+    /**
+     * sheets = [{ name, head, rows, title?, color?, secret?, status?: [คอลัมน์สถานะ], kind?: 'summary', blocks? }]
+     * ชีตข้อมูล: แถว 1 ชื่อชีต/ช่วงวัน · แถว 2 หัวตาราง (สีตามหมวด) · ข้อมูลเป็นตาราง Excel (กรอง/เรียง/Pivot) · แถวรวมเป็นสูตร SUBTOTAL (เปลี่ยนตามตัวกรอง)
+     * ชีตสรุป (kind 'summary'): บล็อกข้อความ/ตารางเล็ก + สารบัญลิงก์ไปทุกชีต
+     */
     function build(sheets) {
       var used = {}, list = sheets.map(function (sh) { return Object.assign({}, sh, { name: sname(sh.name, used) }); });
-      var files = [{ name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
-        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
-        list.map(function (_, i) { return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join('') + '</Types>' },
+      var S = Styles(), T = Strings(), nStr = 0, tables = [], files = [];
+      function cellXml(ref, v, st) {
+        var sa = st ? ' s="' + st + '"' : '';
+        if (v && typeof v === 'object' && v.f) return '<c r="' + ref + '"' + sa + '><f>' + esc(v.f) + '</f></c>';
+        if (v === null || v === undefined || v === '') return st ? '<c r="' + ref + '"' + sa + '/>' : '';
+        if (typeof v === 'number' && isFinite(v)) return '<c r="' + ref + '"' + sa + '><v>' + v + '</v></c>';
+        nStr++; return '<c r="' + ref + '" t="s"' + sa + '><v>' + T.id(v) + '</v></c>';
+      }
+      var X = {
+        title: S.xf({ b: 1, sz: 22, c: '0F2744', border: 0, v: 'center' }), sub: S.xf({ sz: 14, c: '64748B', border: 0, v: 'center' }),
+        text: S.xf({}), wrap: S.xf({ wrap: 1 }), int: S.xf({ fmt: 3, h: 'right' }), date: S.xf({ fmt: 164, h: 'center' }), dt: S.xf({ fmt: 165, h: 'center' }),
+        totL: S.xf({ b: 1, bg: 'E2E8F0' }), totN: S.xf({ b: 1, bg: 'E2E8F0', fmt: 3, h: 'right' }), empty: S.xf({ c: '94A3B8', border: 0 }),
+        mL: S.xf({ b: 1, bg: 'F1F5F9' }), mV: S.xf({ wrap: 1 }), mN: S.xf({ fmt: 3, h: 'left' }), cInt: S.xf({ fmt: 3, h: 'center' }), cText: S.xf({ h: 'center' }), kpiN: S.xf({ b: 1, sz: 18, c: '0F2744', fmt: 3, h: 'right', v: 'center' }), kpiL: S.xf({ sz: 16, v: 'center' }),
+        link: S.xf({ u: 1, c: '1D4ED8' }), warn: S.xf({ b: 1, c: '991B1B', bg: 'FEE2E2', wrap: 1 })
+      };
+      function head(color) { return S.xf({ b: 1, c: 'FFFFFF', bg: color || CAT.navy, h: 'center', v: 'center', wrap: 1 }); }
+      function stX(v) { var c = stColor(v); return c ? S.xf({ bg: ST[c][0], c: ST[c][1], h: 'center' }) : S.xf({ h: 'center' }); }
+      function wrapSheet(sh, i, rowsXml, opt) {
+        var x = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'];
+        x.push('<sheetPr><tabColor rgb="FF' + (sh.secret ? CAT.red : sh.color || CAT.navy) + '"/><pageSetUpPr fitToPage="1"/></sheetPr>');
+        x.push('<sheetViews><sheetView workbookViewId="0"' + (i === 0 ? ' tabSelected="1"' : '') + ' zoomScale="100">' + (opt.freeze ? '<pane ySplit="' + opt.freeze + '" topLeftCell="A' + (opt.freeze + 1) + '" activePane="bottomLeft" state="frozen"/>' : '') + '</sheetView></sheetViews>');
+        x.push('<sheetFormatPr defaultRowHeight="24"/>');
+        if (opt.widths.length) x.push('<cols>' + opt.widths.map(function (v, j) { return '<col min="' + (j + 1) + '" max="' + (j + 1) + '" width="' + v + '" customWidth="1"/>'; }).join('') + '</cols>');
+        x.push('<sheetData>' + rowsXml.join('') + '</sheetData>');
+        if (opt.merges && opt.merges.length) x.push('<mergeCells count="' + opt.merges.length + '">' + opt.merges.map(function (m) { return '<mergeCell ref="' + m + '"/>'; }).join('') + '</mergeCells>');
+        if (opt.links && opt.links.length) x.push('<hyperlinks>' + opt.links.map(function (l) { return '<hyperlink ref="' + l.ref + '" location="' + esc("'" + l.sheet.replace(/'/g, "''") + "'!A1") + '" display="' + esc(l.sheet) + '"/>'; }).join('') + '</hyperlinks>');
+        x.push('<printOptions horizontalCentered="1"/><pageMargins left="0.4" right="0.4" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="' + (opt.portrait ? 'portrait' : 'landscape') + '" fitToWidth="1" fitToHeight="' + (opt.onePage ? 1 : 0) + '"/>');
+        x.push('<headerFooter><oddFooter>' + esc('&L' + sh.name + '&Rหน้า &P / &N') + '</oddFooter></headerFooter>');
+        if (opt.table) x.push('<tableParts count="1"><tablePart r:id="rId1"/></tableParts>');
+        x.push('</worksheet>');
+        return x.join('');
+      }
+      function dataSheet(sh, i) {
+        var hd = (sh.head || []).map(function (x) { return String(x == null ? '' : x); }), rows = sh.rows || [], nc = Math.max(hd.length, 1), types = colTypes(sh);
+        // หัวคอลัมน์ต้องไม่ว่าง/ไม่ซ้ำ (ตาราง Excel)
+        var seen = {}; hd = hd.map(function (x, j) { var b = x.trim() || 'คอลัมน์ ' + (j + 1), y = b, k = 2; while (seen[y]) y = b + ' (' + k++ + ')'; seen[y] = 1; return y; });
+        var widths = hd.map(function (hh, j) {
+          var m = Math.min(visLen(hh), 14); if (types[j] === 'date') m = Math.max(m, 9); if (types[j] === 'datetime') m = Math.max(m, 15);
+          rows.slice(0, 500).forEach(function (r) { var v = r[j]; if (types[j] !== 'date' && types[j] !== 'datetime') { var l = typeof v === 'number' ? String(Math.round(v)).length + 2 : visLen(v); if (l > m) m = l; } });
+          return Math.min(48, Math.max(6, Math.round(m * 1.05) + 3));
+        });
+        var wrapCol = hd.map(function (_, j) { return types[j] === 'text' && rows.slice(0, 500).some(function (r) { return visLen(r[j]) > 46; }); });
+        if (sh.plain) widths = widths.map(function (w) { return Math.max(w, 90); });
+        var mid = hd.map(function (hh, j) { return (types[j] === 'int' && NO_SUM.test(hh)) || (types[j] === 'text' && rows.length && rows.slice(0, 500).every(function (r) { return visLen(r[j]) <= 7; })); });
+        var R = [], r0 = 2, last = r0 + rows.length;
+        R.push('<row r="1" ht="34" customHeight="1">' + cellXml('A1', sh.title || sh.name, X.title) + '</row>');
+        R.push('<row r="2" ht="30" customHeight="1">' + hd.map(function (hh, j) { return cellXml(col(j) + 2, hh, head(sh.color)); }).join('') + '</row>');
+        if (!rows.length) R.push('<row r="3">' + cellXml('A3', 'ไม่มีข้อมูลในช่วงนี้', X.empty) + '</row>');
+        rows.forEach(function (row, k) {
+          var r = r0 + 1 + k, cs = '';
+          for (var j = 0; j < nc; j++) {
+            var v = row[j], t = types[j], st = X.text;
+            if (t === 'date' || t === 'datetime') { var sv = v === '' || v == null ? null : serial(v); if (sv != null) { v = sv; st = t === 'date' ? X.date : X.dt; } }
+            else if (t === 'int') st = mid[j] ? X.cInt : X.int;
+            else if (t === 'status') st = stX(v);
+            else if (wrapCol[j]) st = X.wrap;
+            else if (mid[j]) st = X.cText;
+            cs += cellXml(col(j) + r, v, st);
+          }
+          R.push('<row r="' + r + '">' + cs + '</row>');
+        });
+        // แถวรวม (SUBTOTAL 109 = รวมเฉพาะแถวที่มองเห็นหลังกรอง)
+        var sums = types.map(function (t, j) { return t === 'int' && !NO_SUM.test(hd[j]); });
+        if (rows.length >= 2 && sums.some(Boolean) && !sh.noTotal && !sh.plain) {
+          var tr = last + 1, cs2 = '';
+          for (var j2 = 0; j2 < nc; j2++) cs2 += cellXml(col(j2) + tr, j2 === 0 ? 'รวม' : sums[j2] ? { f: 'SUBTOTAL(109,' + col(j2) + (r0 + 1) + ':' + col(j2) + last + ')' } : '', j2 === 0 || !sums[j2] ? X.totL : X.totN);
+          R.push('<row r="' + tr + '">' + cs2 + '</row>');
+        }
+        var table = null;
+        if (rows.length && !sh.plain) {
+          table = { id: tables.length + 1, sheet: i, ref: 'A2:' + col(nc - 1) + last, head: hd };
+          tables.push(table);
+        }
+        return { xml: wrapSheet(sh, i, R, { freeze: 2, widths: widths, table: !!table }), table: table, printTitles: '$2:$2' };
+      }
+      /** ชีตสรุป: blocks = [{ title, pairs: [[ป้าย, ค่า]] } | { title, head, rows } | { toc: true }] */
+      function summarySheet(sh, i, all) {
+        var R = [], r = 1, merges = [], links = [], W = Math.max(4, (sh.blocks || []).reduce(function (m, b) { return Math.max(m, b.head ? b.head.length : 0); }, 0)), L = col(W - 1);
+        function pad(cells, st) { while (cells.length < W) cells.push(['', st]); return cells; }
+        function row(cells, ht) { R.push('<row r="' + r + '"' + (ht ? ' ht="' + ht + '" customHeight="1"' : '') + '>' + cells.map(function (c, j) { return cellXml(col(j) + r, c[0], c[1]); }).join('') + '</row>'); r++; }
+        row([[sh.title || sh.name, X.title]], 38); merges.push('A1:' + L + '1');
+        if (sh.sub) { row([[sh.sub, X.sub]], 26); merges.push('A2:' + L + '2'); }
+        (sh.blocks || []).forEach(function (b) {
+          r++;
+          var hc = head(b.color || CAT.navy);
+          if (b.title) { row(pad([[b.title, hc]], hc), 28); merges.push('A' + (r - 1) + ':' + L + (r - 1)); }
+          if (b.pairs) b.pairs.forEach(function (p) { var w = /ข้อมูลลับ/.test(p[0]), vs = w ? X.warn : X.mV; row(pad([[p[0], w ? X.warn : X.mL], [p[1], w ? X.warn : typeof p[1] === 'number' ? X.mN : X.mV]], vs)); merges.push('B' + (r - 1) + ':' + L + (r - 1)); });
+          if (b.kpi) b.kpi.forEach(function (k) { row(pad([[k[0], X.kpiL], [k[1], X.kpiN], [k[2] || '', X.kpiL]], X.kpiL), 28); if (W > 3) merges.push('C' + (r - 1) + ':' + L + (r - 1)); });
+          if (b.head) {
+            row(b.head.map(function (hh) { return [hh, head(b.color || CAT.slate)]; }), 26);
+            b.rows.forEach(function (rw) { row(rw.map(function (v) { return [v, typeof v === 'number' ? X.int : X.text]; })); });
+          }
+          if (b.toc) {
+            row(pad([['ชีต (กดเพื่อเปิด)', head(CAT.slate)], ['จำนวนแถว', head(CAT.slate)], ['เนื้อหา', head(CAT.slate)]], head(CAT.slate)), 26); merges.push('C' + (r - 1) + ':' + L + (r - 1));
+            all.forEach(function (o, j) {
+              if (j === 0) return;
+              links.push({ ref: 'A' + r, sheet: o.name });
+              row(pad([[o.name, X.link], [o.rows ? o.rows.length : 0, X.int], [o.note || '', X.mV]], X.mV)); merges.push('C' + (r - 1) + ':' + L + (r - 1));
+            });
+          }
+        });
+        var ws = [32, 14]; while (ws.length < W) ws.push(W > 4 ? 13 : ws.length === W - 1 ? 30 : 14);
+        return { xml: wrapSheet(sh, i, R, { widths: ws, merges: merges, links: links, portrait: true, onePage: r < 60 }), table: null };
+      }
+      var built = list.map(function (sh, i) { return sh.kind === 'summary' ? summarySheet(sh, i, list) : dataSheet(sh, i); });
+      // ---------- ประกอบไฟล์ ----------
+      var ct = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>',
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
+        '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'];
+      list.forEach(function (_, i) { ct.push('<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'); });
+      tables.forEach(function (t) { ct.push('<Override PartName="/xl/tables/table' + t.id + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>'); });
+      ct.push('</Types>');
+      var dn = built.map(function (b, i) { return b.printTitles ? '<definedName name="_xlnm.Print_Titles" localSheetId="' + i + '">' + esc("'" + list[i].name.replace(/'/g, "''") + "'!" + b.printTitles) + '</definedName>' : ''; }).join('');
+      files.push({ name: '[Content_Types].xml', data: ct.join('') },
         { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
-        { name: 'xl/workbook.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>' +
-          list.map(function (sh, i) { return '<sheet name="' + esc(sh.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</sheets>' +
-          (function () { var dn = list.map(function (sh, i) { var r0 = sh.title ? 2 : 1, n = (sh.head || []).length; return sh.rows && sh.rows.length && n ? '<definedName name="_xlnm._FilterDatabase" localSheetId="' + i + '" hidden="1">\'' + esc(sh.name.replace(/'/g, "''")) + '\'!$A$' + r0 + ':$' + col(n - 1) + '$' + (r0 + sh.rows.length) + '</definedName>' : ''; }).join(''); return dn ? '<definedNames>' + dn + '</definedNames>' : ''; })() + '</workbook>' },
+        { name: 'xl/workbook.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="0"/></bookViews><sheets>' +
+          list.map(function (sh, i) { return '<sheet name="' + esc(sh.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</sheets>' + (dn ? '<definedNames>' + dn + '</definedNames>' : '') + '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>' },
         { name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
           list.map(function (_, i) { return '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>'; }).join('') +
-          '<Relationship Id="rId' + (list.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
-        { name: 'xl/styles.xml', data: STYLES }];
-      list.forEach(function (sh, i) { files.push({ name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: sheetXml(sh) }); });
+          '<Relationship Id="rId' + (list.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+          '<Relationship Id="rId' + (list.length + 2) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>' });
+      built.forEach(function (b, i) {
+        files.push({ name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: b.xml });
+        if (b.table) files.push({ name: 'xl/worksheets/_rels/sheet' + (i + 1) + '.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table' + b.table.id + '.xml"/></Relationships>' });
+      });
+      tables.forEach(function (t) {
+        files.push({ name: 'xl/tables/table' + t.id + '.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="' + t.id + '" name="Data' + t.id + '" displayName="Data' + t.id + '" ref="' + t.ref + '" headerRowCount="1" totalsRowShown="0">' +
+          '<autoFilter ref="' + t.ref + '"/><tableColumns count="' + t.head.length + '">' + t.head.map(function (hh, j) { return '<tableColumn id="' + (j + 1) + '" name="' + esc(hh) + '"/>'; }).join('') + '</tableColumns>' +
+          '<tableStyleInfo name="TableStyleLight1" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>' });
+      });
+      files.push({ name: 'xl/styles.xml', data: S.xml() }, { name: 'xl/sharedStrings.xml', data: T.xml(nStr) });
       return zip(files);
     }
-    return { build: build, _col: col };
+    return { build: build, _col: col, _serial: serial, _stColor: stColor, CAT: CAT };
   })();
   var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   function fileStamp() { var t = bkkNow(); return isoOf(t) + '_' + pad(t.getHours()) + pad(t.getMinutes()); }
   /** สร้างและดาวน์โหลด .xlsx — sheets ตามรูปแบบ Xlsx.build · มีชีต "รายละเอียด" นำหน้าเสมอ */
-  function xlsxDownload(name, sheets, info) {
-    var meta = [['หน่วยงาน', S.boot.station], ['ส่งออกโดย', S.boot.me.name], ['เวลาส่งออก', th(today()) + ' ' + hm(nowLocal()) + ' น.']].concat(info || []);
-    meta.push(['ชีตในไฟล์', sheets.map(function (x) { return x.name + ' (' + x.rows.length + ')'; }).join(', ')]);
-    if (sheets.some(function (x) { return x.secret; })) meta.push(['⚠️ ข้อมูลลับ', 'มีข้อมูลผู้ต้องหา — เก็บในเครื่องที่มีรหัสผ่าน ห้ามส่งต่อ/อัปโหลดขึ้นบริการภายนอก ใช้เฉพาะงานคดี']);
-    var u8 = Xlsx.build([{ name: 'รายละเอียด', head: ['รายการ', 'ข้อมูล'], rows: meta }].concat(sheets));
+  // สีแถบหัวตาราง/แท็บชีตตามหมวด (ชุดเดียวกับภาพรายงาน) + คำอธิบายในสารบัญ
+  var XL_COLOR = { 'สรุปรายรถ': 'navy', 'สรุปรายคน': 'navy', 'ผลัด': 'slate', 'ใบสั่ง': 'blue', 'ว.42': 'amber', 'ช่วยเหลือ': 'teal', 'จับกุม': 'navy', 'คดีอาญา': 'navy', 'ภารกิจ': 'purple',
+    'งานอื่นในผลัด': 'slate', 'ตารางเวร': 'gray', 'ค่าปรับรายวัน': 'green', 'ใบสั่งชำระแล้ว': 'green', 'รับชำระรายวัน': 'green', 'แยก พ.ร.บ.': 'green', 'แยกช่องทาง': 'green', 'อัตราชำระ': 'green',
+    'ตาราง 7 วัน': 'slate', 'รายการที่ต้องแก้': 'red', 'ผลที่รายงาน': 'blue', 'รายการที่ส่งแล้ว': 'slate', 'รายการทั้งหมด': 'slate', 'รายรถ': 'navy', 'รายคน': 'navy', 'ผลประจำวัน': 'navy', 'ข้อความรายงาน': 'gray' };
+  var XL_NOTE = { 'สรุปรายรถ': 'ผลงานรวมแต่ละรถในช่วงวัน', 'สรุปรายคน': 'ผลงานรวมแต่ละคน', 'ผลัด': '1 แถว = 1 ผลัด: เวลาเข้า/ส่งเวร เจ้าหน้าที่ ผลรวม', 'ใบสั่ง': 'ใบสั่งแยกรายการ: ความผิด ผู้ออก สถานะ',
+    'ว.42': 'นำขบวน: เวลา เส้นทาง ผู้ร่วม', 'ช่วยเหลือ': 'ช่วยเหลือ/อุบัติเหตุ: ทล. กม. ผล', 'จับกุม': 'คดีจับกุม: ข้อหา ของกลาง ผู้จับกุม', 'ผู้ต้องหา (ลับ)': 'ข้อมูลลับ — เก็บในเครื่องที่มีรหัสผ่าน',
+    'ภารกิจ': 'ภารกิจ/จิตอาสา', 'งานอื่นในผลัด': 'ตักเตือน · ตรวจรถ', 'ตารางเวร': 'ตารางเวรตามคำสั่ง', 'ค่าปรับรายวัน': 'ยอด PTM/KTB/ลงทะเบียน รายวัน', 'ใบสั่งชำระแล้ว': 'ใบสั่งที่ชำระแล้วตามไฟล์ PTM',
+    'ตาราง 7 วัน': 'สถานะการรายงานรายผลัด (สีตามสถานะ)', 'รายการที่ต้องแก้': 'ผลัดที่ไม่ได้รายงาน/ไม่สมบูรณ์', 'ผลที่รายงาน': 'ผลรวมแต่ละผลัด' };
+  /**
+   * สร้างและดาวน์โหลด .xlsx — แผ่นแรก "สรุป" (รายละเอียดไฟล์ · ตัวเลขหลัก · แยกเขต · สารบัญลิงก์ไปทุกชีต) แล้วตามด้วยชีตข้อมูล
+   * opt: { title, kpi: [[ป้าย, ค่า, หน่วย]], zones: { head, rows } }
+   */
+  function xlsxDownload(name, sheets, info, opt) {
+    opt = opt || {};
+    var total = sheets.reduce(function (a, x) { return a + (x.rows || []).length; }, 0), period = (info || []).filter(function (x) { return /^ช่วง/.test(x[0]); })[0];
+    var pairs = [['หน่วยงาน', S.boot.station]].concat(info || []).concat([['ส่งออกโดย', S.boot.me.name], ['เวลาส่งออก', th(today()) + ' ' + hm(nowLocal()) + ' น.'], ['จำนวนแถวรวม', total]]);
+    if (sheets.some(function (x) { return x.secret; })) pairs.push(['⚠️ ข้อมูลลับ', 'มีข้อมูลผู้ต้องหา — เก็บในเครื่องที่มีรหัสผ่าน ห้ามส่งต่อ/อัปโหลดขึ้นบริการภายนอก']);
+    var blocks = [{ title: 'รายละเอียดไฟล์', pairs: pairs }];
+    if (opt.kpi && opt.kpi.length) blocks.push({ title: 'ตัวเลขหลัก', kpi: opt.kpi });
+    if (opt.zones && opt.zones.rows && opt.zones.rows.length) blocks.push({ title: 'แยกเขตตรวจ', head: opt.zones.head, rows: opt.zones.rows });
+    blocks.push({ title: 'สารบัญ', toc: true });
+    var sub = period ? String(period[1]) : '';
+    var list = sheets.map(function (sh) { return Object.assign({ color: Xlsx.CAT[XL_COLOR[sh.name] || 'navy'], note: XL_NOTE[sh.name] || '', title: sh.name + (sub ? ' · ' + sub : '') }, sh); });
+    var u8 = Xlsx.build([{ name: 'สรุป', kind: 'summary', title: opt.title || name.replace(/\.xlsx$/, '').replace(/_/g, ' '), sub: [sub, S.boot.station].filter(Boolean).join(' · '), blocks: blocks }].concat(list));
     var url = URL.createObjectURL(new Blob([u8], { type: XLSX_TYPE })), a = h('a', { href: url, download: name });
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 4000);
     if (window.liff && liff.isInClient && liff.isInClient()) toast('ถ้าไฟล์ไม่ดาวน์โหลด ให้เปิดหน้านี้ในเบราว์เซอร์บนคอมพิวเตอร์ (เมนู ⋮ → เปิดในเบราว์เซอร์)', 6000);
@@ -3593,8 +3915,8 @@
     rows.push(['รวมทั้งสถานี', '', '', ''].concat(nums(d.total)).concat(['', '', '']));
     rows.push(['เมื่อวาน', '', '', ''].concat(nums(d.yesterday)).concat(['', '', '']));
     rows.push(['สะสมวงรอบ ' + th(d.cycleFrom) + '–' + th(d.date), '', '', ''].concat(nums(d.cycle)).concat(['', '', '']));
-    xlsxDownload('ผลการปฏิบัติประจำวัน_' + d.date + '.xlsx', [{ name: 'ผลประจำวัน', title: 'ผลการปฏิบัติประจำวัน ' + th(d.date) + ' — ' + S.boot.station, head: head, rows: rows },
-      { name: 'ข้อความรายงาน', head: ['ข้อความ'], rows: d.text.split('\n').map(function (l) { return [l]; }) }], [['วันที่', th(d.date)]]);
+    xlsxDownload('ผลการปฏิบัติประจำวัน_' + d.date + '.xlsx', [{ name: 'ผลประจำวัน', title: 'ผลการปฏิบัติประจำวัน ' + th(d.date) + ' — ' + S.boot.station, head: head, rows: rows, noTotal: true },
+      { name: 'ข้อความรายงาน', head: ['ข้อความ'], rows: d.text.split('\n').map(function (l) { return [l]; }), plain: true }], [['วันที่', th(d.date)]]);
   }
   function dyTickets(n) { return (n.T || 0) + (n.C || 0) + (n.R || 0); }
   /** ภาพรายงานผู้บังคับบัญชา → .xlsx: ตารางรายรถ + รายการคดี + ข้อความ */
@@ -3606,7 +3928,7 @@
     xlsxDownload('รายงานผู้บังคับบัญชา_' + d.from + (d.to !== d.from ? '_' + d.to : '') + '.xlsx', [
       { name: 'รายรถ', title: 'ผลการปฏิบัติแยกรายรถ ' + rg, head: ['เขต', 'รถ', 'ผลัดที่ออก', 'กลางวัน', 'กลางคืน', 'เจ้าหน้าที่ (ผลัด)', 'อาญา', 'หมายจับ', 'ซึ่งหน้า', 'ฐานความผิด', 'จราจร', 'ขส', 'รย', 'จร', 'ว.42', 'ช่วยเหลือ', 'คะแนน', 'อันดับ'], rows: cars },
       { name: 'คดีอาญา', head: ['วันที่', 'เวลา', 'รถ', 'ประเภท', 'ฐานความผิด', 'เรื่อง', 'ผู้ต้องหา (ราย)', 'หมาย', 'ของกลาง'], rows: cases },
-      { name: 'ข้อความรายงาน', head: ['ข้อความ'], rows: String(d.text || '').split('\n').map(function (l) { return [l]; }) }], [['ช่วง', rg]]);
+      { name: 'ข้อความรายงาน', head: ['ข้อความ'], rows: String(d.text || '').split('\n').map(function (l) { return [l]; }), plain: true }], [['ช่วง', rg]]);
   }
   /** หมวดงานในภาพประจำวัน: [key, ชื่อ, หน่วย, สี, ค่าจาก n, บรรทัดย่อยจาก n] */
   var DY_CATS = [
@@ -3665,7 +3987,8 @@
     // ---------- 1) จับกุมคดีอาญา (46,236 997×346) ----------
     var nA = (t.warrant || 0) + (t.crime || 0), A = ab('d-card', 46, 236, 997, 346); add(st, A); head(A, 'จับกุมคดีอาญา', cmp(nA, (y.warrant || 0) + (y.crime || 0), (c.warrant || 0) + (c.crime || 0)));
     var dn = ab('d-donut', 30, 90, 236, 236); add(dn, donut(236, 34, [{ v: t.warrant || 0, c: CAT.arrest }, { v: t.crime || 0, c: DK.amber }]), h('div', { class: 'd-center' }, h('b', { style: 'font-size:' + bigNum(nA) + 'px', text: fmtN(nA) }), h('span', { style: t.warrant ? 'font-size:23px' : '', text: t.warrant ? 'ราย/หมาย' : 'ราย' }))); add(A, dn);
-    var crime = d.crime || {}, x = ab('d-leg', 318, 82, 652, 60);
+    // แถว "หมายจับ" ใช้ขอบเดียวกับเนื้อในกล่อง "ซึ่งหน้า" (กล่องมีขอบ 2 + ระยะใน 18) → สี่เหลี่ยมสี ป้าย และตัวเลขตรงกันทั้งสองแถว
+    var crime = d.crime || {}, x = ab('d-leg', 326, 82, 624, 60);
     add(x, h('i', { class: 'sq', style: 'background:' + CAT.arrest }), h('span', { class: 'lb', text: 'หมายจับ' }), h('span', { class: 'wd', text: fitText(crimeText(crime.warrant), 22, 250) }),
       h('div', { class: 'vu', style: 'width:200px' }, h('b', { class: 'v', text: fmtN(t.warrant || 0) }), h('span', { class: 'un', text: 'หมาย' }))); add(A, x);
     var box = ab('d-flag', 306, 142, 664, 186); add(A, box);
@@ -4308,7 +4631,22 @@
   var AUDIT_LABEL = { 'suspect.view': '🔒 เปิดดูข้อมูลผู้ต้องหา', 'suspect.search': '🔎 ค้นหาผู้ต้องหา', 'perm.set': '🔐 ปรับสิทธิ์รายคน', 'role.set': '🔐 แก้สิทธิ์บทบาท', 'backup.set': '👑 แต่งตั้งแอดมินสำรอง',
     'backup.remove': '👑 ถอดแอดมินสำรอง', 'settings.set': '⚙️ แก้ตั้งค่า', 'codes.save': '🧾 แก้รหัสความผิด', 'arrest.approved': '✅ อนุมัติคดี', 'arrest.returned': '↩️ ส่งคดีกลับแก้', 'arrest.edit': '✏️ แก้รายงานจับกุม',
     'event.void': '🗑 ยกเลิกรายการ', 'shift.void': '🗑 ยกเลิกรายงานผลัด', 'event.update': '✏️ แก้ไข ว.42/ช่วยเหลือ', 'register.auto': '🔗 ผูก LINE อัตโนมัติ', 'register.approved': '🔗 อนุมัติผูก LINE', 'register.rejected': '⛔ ปฏิเสธคำขอ', 'register.unlink': '🔗 ยกเลิกผูก LINE',
-    'people.status': '👤 เปลี่ยนสถานะบัญชี', 'people.import': '📥 นำเข้ากำลังพล', 'people.update': '👤 แก้ข้อมูลกำลังพล', 'score.set': '🏅 ตั้ง/แก้เกณฑ์คะแนน', 'score.delete': '🏅 ลบช่วงคะแนน', 'score.start': '🏅 ตั้งวันเริ่มคิดคะแนน', 'export.xlsx': '⬇️ ส่งออก Excel', 'roster.import': '🗓 นำเข้าตารางเวร' };
+    'people.status': '👤 เปลี่ยนสถานะบัญชี', 'event.restore': '↩️ กู้คืนรายการ', 'shift.restore': '↩️ กู้คืนรายงานผลัด', 'archive.run': '🗄 ย้ายข้อมูลเก่าเข้าคลัง', 'export.backup': '💾 สร้างไฟล์สำรอง',
+    'file.import': '📥 นำเข้าไฟล์', 'file.upload': '📤 ส่งไฟล์เข้าคลัง', 'people.createFromRoster': '👤 สร้างรายชื่อจากคำสั่งเวร', 'superadmin.claim': '👑 ผูกแอดมินหลัก', 'register.superadmin': '👑 ลงทะเบียนแอดมินหลัก', 'config.group': '⚙️ ตั้งกลุ่มไลน์', 'people.import': '📥 นำเข้ากำลังพล', 'people.update': '👤 แก้ข้อมูลกำลังพล', 'score.set': '🏅 ตั้ง/แก้เกณฑ์คะแนน', 'score.delete': '🏅 ลบช่วงคะแนน', 'score.start': '🏅 ตั้งวันเริ่มคิดคะแนน', 'export.xlsx': '⬇️ ส่งออก Excel', 'roster.import': '🗓 นำเข้าตารางเวร' };
+  // ชื่อรายการที่อ่านง่าย (ไม่แสดงรหัสคำสั่ง/JSON ดิบ)
+  var AUDIT_PREFIX = [[/^file\./, '📁 ไฟล์/คลังเอกสาร'], [/^export\./, '⬇️ ส่งออกข้อมูล'], [/^people\./, '👤 ข้อมูลกำลังพล'], [/^register\./, '🔗 ลงทะเบียน'], [/^(superadmin|admin)\./, '👑 แอดมิน'],
+    [/^config\./, '⚙️ ตั้งค่ากลุ่มไลน์'], [/^fine\./, '💰 ค่าปรับ'], [/^escort\./, '🚔 ว.42'], [/^(checkin|report|shift)\./, '📝 รายงานผลัด'], [/^(event)\./, '📝 รายการ'], [/^arrest\./, '🚨 คดีจับกุม'],
+    [/^score\./, '🏅 เกณฑ์คะแนน'], [/^(roster|swap)\./, '🗓 ตารางเวร'], [/^archive\./, '🗄 ย้ายข้อมูลเก่าเข้าคลัง'], [/^ticket\./, '🧾 ใบสั่ง']];
+  var AUD_KEY = { role: 'บทบาท', scope: 'ขอบเขต', caps: 'สิทธิ์', status: 'สถานะ', rows: 'จำนวนแถว', shifts: 'ผลัด', daily: 'หน้าที่รายวัน', leave: 'ลา/ภารกิจ', name: 'ชื่อไฟล์', kind: 'ชนิด', size: 'ขนาด (ไบต์)',
+    suspects: 'มีข้อมูลผู้ต้องหา', fines: 'มีค่าปรับ', voidedEvents: 'รายการที่ยกเลิกด้วย', restoredEvents: 'รายการที่กู้คืน', moved: 'ย้ายเข้าคลัง', pid: 'เจ้าหน้าที่', totals: 'ผลรวม', zone: 'เขต', car: 'รถ' };
+  function auditLabel(a) { if (AUDIT_LABEL[a.action]) return AUDIT_LABEL[a.action]; for (var i = 0; i < AUDIT_PREFIX.length; i++) if (AUDIT_PREFIX[i][0].test(a.action)) return AUDIT_PREFIX[i][1]; return '• ' + a.action; }
+  function auditVal(v) { return v === true ? 'ใช่' : v === false ? 'ไม่' : Array.isArray(v) ? v.length + ' รายการ' : v && typeof v === 'object' ? '…' : String(v).slice(0, 40); }
+  function auditDetail(s2) {
+    if (!s2) return '';
+    try { var o = JSON.parse(s2); if (o && typeof o === 'object' && !Array.isArray(o)) return Object.keys(o).slice(0, 6).map(function (k) { return (AUD_KEY[k] || k) + ': ' + auditVal(o[k]); }).join(' · '); if (Array.isArray(o)) return o.length + ' รายการ'; } catch (e) { }
+    return String(s2).slice(0, 160);
+  }
+  function auditTarget(t) { t = String(t || ''); var parts = t.split(','); return parts.length > 3 ? parts.length + ' รายการ' : t; }
   VIEWS.audit = function () {
     setTitle('🧾 ประวัติการใช้งาน', '200 รายการล่าสุด');
     loading();
@@ -4320,14 +4658,52 @@
       function render() {
         clear(out); var c = card(null), re = f.value ? new RegExp(f.value) : null;
         list.filter(function (a) { return !re || re.test(a.action); }).forEach(function (a) {
-          add(c, h('div', { class: 'list-item', style: 'display:block' }, h('div', { class: 'small muted', text: th(a.at.slice(0, 10)) + ' ' + hm(a.at) + ' · ' + a.actor }), h('b', { text: (AUDIT_LABEL[a.action] || a.action) + ' ' + a.target }),
-            a.reason ? h('div', { class: 'small', text: '💬 ' + a.reason }) : null, a.after && !/^suspect/.test(a.action) ? h('div', { class: 'small muted clamp2', text: a.after }) : null));
+          var det = !/^suspect/.test(a.action) ? auditDetail(a.after) : '';
+          add(c, h('div', { class: 'list-item audit-it', style: 'display:block' }, h('div', { class: 'small muted', text: th(a.at.slice(0, 10)) + ' ' + hm(a.at) + ' · ' + (a.actor || 'ระบบ') }),
+            h('b', { text: auditLabel(a) }), a.target ? h('span', { class: 'small muted', text: ' · ' + auditTarget(a.target) }) : null,
+            a.reason ? h('div', { class: 'small', text: '💬 ' + a.reason }) : null, det ? h('div', { class: 'small muted clamp2', text: det }) : null));
         });
         if (!c.children.length) add(c, h('p', { class: 'muted', text: 'ไม่มีรายการ' }));
         add(out, c);
       }
       render();
     }, function (e) { fail(e, VIEWS.audit); });
+  };
+  // ======================= สุขภาพระบบ (v1.15 · แอดมิน) =======================
+  VIEWS.health = function () {
+    setTitle('🩺 สุขภาพระบบ', 'ตรวจว่าระบบพร้อมใช้ · ไม่มีค่าใช้จ่าย');
+    loading();
+    function ago(at) { if (!at) return '-'; var m = Math.round((Date.now() - new Date(String(at).replace(' ', 'T') + '+07:00').getTime()) / 60000); return m < 1 ? 'เมื่อสักครู่' : m < 60 ? m + ' นาทีที่แล้ว' : m < 1440 ? Math.round(m / 60) + ' ชม.ที่แล้ว' : Math.round(m / 1440) + ' วันที่แล้ว'; }
+    function line(ok, title, sub, right) { return h('div', { class: 'hl-row' }, h('span', { class: 'hl-ic', text: ok === true ? '🟢' : ok === false ? '🔴' : '🟠' }), h('div', { class: 'grow' }, h('b', { text: title }), sub ? h('small', { class: 'muted', text: sub }) : null), right || null); }
+    function draw(r) {
+      clear($app);
+      var c = card('ภาพรวม', 'v' + r.version + ' · ตรวจเมื่อ ' + hm(r.now) + ' น.');
+      var bk = r.backup, bkAge = bk && bk.at ? (Date.now() - new Date(bk.at + '+07:00').getTime()) / 36e5 : 999;
+      add(c, line(bkAge < 30, 'สำรองฐานข้อมูลอัตโนมัติทุกคืน', bk && bk.at ? 'ล่าสุด ' + th(bk.at.slice(0, 10)) + ' ' + hm(bk.at) + ' น. (' + ago(bk.at) + ') · เก็บ ' + bk.count + ' ชุดใน Drive โฟลเดอร์ "LineBot สำรอง"' : 'ยังไม่พบไฟล์สำรอง — ตรวจ trigger jobBackup'));
+      var wl = r.warm.last;
+      add(c, line(r.warm.on, 'ตัวอุ่นระบบ (ลดอาการรอ 8–12 วินาที)', r.warm.on ? 'ทำงานทุก 10 นาที 05:00–24:00' + (wl ? ' · ล่าสุด ' + ago(wl.at) + ' (' + (wl.ms / 1000).toFixed(1) + ' วิ)' : '') : 'ปิดอยู่',
+        submitBtn(r.warm.on ? 'ปิด' : 'เปิด', 'sm ' + (r.warm.on ? 'ghost' : 'green'), function () { return api('admin.warm', { on: !r.warm.on }).then(draw); })));
+      var q = r.quota; add(c, line(q ? q.used < q.limit * 0.8 : null, 'โควตาข้อความ LINE เดือนนี้ (ฟรี)', q ? 'ใช้ ' + q.used + ' / ' + q.limit + ' ข้อความ · ข้อความที่เจ้าหน้าที่กดส่งเองไม่นับโควตา' : 'อ่านไม่ได้'));
+      var cl = r.cells, pc = cl.cells / cl.limit * 100; add(c, line(pc < 60 ? true : pc < 85 ? null : false, 'พื้นที่ฐานข้อมูล Google Sheets', 'ใช้ ' + (cl.cells / 1e6).toFixed(2) + ' ล้าน / 10 ล้านเซลล์ (' + pc.toFixed(1) + '%) · ' + cl.sheets + ' ชีต'));
+      add(c, line(r.people.linked >= r.people.total * 0.8 ? true : null, 'เจ้าหน้าที่ผูก LINE แล้ว', r.people.linked + ' / ' + r.people.total + ' คน', h('button', { class: 'btn sm ghost', onclick: function () { inviteRegister(null); }, text: '📢 ชวน' })));
+      add(c, line(r.triggers.indexOf('jobMorning') >= 0 && r.triggers.indexOf('jobBackup') >= 0, 'งานอัตโนมัติ (trigger)', r.triggers.join(' · ') || 'ไม่มี'));
+      add($app, c);
+      var sc = card('⏱ คำขอที่ช้า', 'เกิน ' + (r.slowMs / 1000) + ' วิ · 30 รายการล่าสุด');
+      if (!r.slow.length) add(sc, h('p', { class: 'muted small', text: '👍 ยังไม่มีคำขอที่ช้า' }));
+      r.slow.slice(0, 15).forEach(function (x) { add(sc, h('div', { class: 'hl-slow' }, h('span', { text: th(x.at.slice(0, 10)) + ' ' + hm(x.at) }), h('b', { text: x.a }), h('span', { class: 'right', text: (x.ms / 1000).toFixed(1) + ' วิ' }))); });
+      add($app, sc);
+      var ac = card('🗄 ย้ายข้อมูลเก่าเข้าคลัง', 'ปีละครั้ง · ข้อมูลเก่ากว่า 13 เดือน (ก่อน ' + th(r.archive.cutoff) + ')');
+      if (r.archive.total) {
+        add(ac, h('p', { class: 'note small', text: '🟠 มีข้อมูลเก่า ' + r.archive.total + ' แถว — ย้ายเข้าไฟล์ "LineBot คลังข้อมูลเก่า" เพื่อให้ระบบเร็วเหมือนเดิม (ไม่ลบทิ้ง เปิดดูได้ตลอด)' }));
+        r.archive.sheets.forEach(function (x) { add(ac, h('div', { class: 'small', text: '• ' + x.sheet + ' ' + x.rows + ' แถว (เก่าสุด ' + th(x.oldest) + ')' })); });
+        add(ac, submitBtn('🗄 ย้ายเข้าคลังตอนนี้', 'block', function () {
+          return api('admin.archive', {}).then(function (x) { toast('ย้ายแล้ว ' + x.moved.reduce(function (a, m) { return a + m.rows; }, 0) + ' แถว', 4000); return api('admin.health', {}).then(draw); });
+        }));
+      } else add(ac, h('p', { class: 'muted small', text: '👍 ยังไม่มีข้อมูลที่ต้องย้าย' }));
+      if (r.archiveUrl) add(ac, h('button', { class: 'btn ghost sm', style: 'margin-top:8px', onclick: function () { openExternal(r.archiveUrl); }, text: '🔗 เปิดไฟล์คลังข้อมูลเก่า' }));
+      add($app, ac, info('ระบบทั้งหมดใช้บริการฟรี: Google Apps Script + Google Sheets/Drive (บัญชีสถานี) · GitHub Pages (หน้าเว็บ) · LINE Official Account แบบฟรี — ไม่มีค่าใช้จ่ายรายเดือน · ถ้าบัญชีมีปัญหา ดู "คู่มือกู้ระบบ" ในเอกสารของโปรเจกต์', 'ระบบนี้ใช้อะไรบ้าง'));
+    }
+    api('admin.health', {}).then(draw, function (e) { fail(e, VIEWS.health); });
   };
   VIEWS.settings = function () {
     setTitle('⚙️ ตั้งค่าระบบ', 'เฉพาะแอดมิน/แอดมินสำรอง');
