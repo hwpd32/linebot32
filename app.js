@@ -3792,6 +3792,41 @@
     if (window.html2canvas) return run();
     return new Promise(function (res, rej) { var sc = h('script', { src: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js' }); sc.onload = res; sc.onerror = function () { rej(new Error('โหลดตัวสร้างรูปไม่ได้ กรุณาตรวจสัญญาณ')); }; document.head.appendChild(sc); }).then(run);
   }
+  // ---------- ภาพรายงานเป็นรูปจริง (v1.15.4): คลิกขวา "บันทึกรูปภาพ" · มือถือกดค้างที่ภาพ · ปุ่ม ⬇️ มุมภาพ (ผู้ใช้กำหนด 21 ต.ค. 69) ----------
+  /** items: [{ wrap, fresh: () => โหนดภาพใหม่สำหรับถ่าย (ไม่มีแถบสีของผู้ใช้), name, H }] · ถ่ายทีละภาพในเบื้องหลัง แล้ววางรูป PNG ทับตัวอย่าง · alive() = ยังเป็นภาพชุดเดิม */
+  function toImages(items, alive, onReady) {
+    items.forEach(function (it) { it.badge = h('span', { class: 'dsh-badge', text: '⏳ กำลังเตรียมรูปสำหรับบันทึก…' }); add(it.wrap, it.badge); });
+    function one(i) {
+      if (i >= items.length || !alive()) return Promise.resolve(items);
+      var it = items[i], H = it.H || 1080, node = it.fresh();
+      var off = h('div', { style: 'position:fixed;left:-30000px;top:0;width:1920px;height:' + H + 'px;overflow:hidden' }); add(off, node); document.body.appendChild(off);
+      return captureDash(node).then(function (b64) {
+        off.remove(); if (!alive()) return items;
+        it.b64 = b64; showImg(it); if (onReady) onReady(it, i);
+        return one(i + 1);
+      }, function () { off.remove(); if (it.badge) it.badge.remove(); return one(i + 1); }); // ถ่ายไม่ได้ (เช่น ไม่มีสัญญาณ) คงตัวอย่างเดิม
+    }
+    return dashFont().then(function () { return one(0); });
+  }
+  function freeImages(items) { (items || []).forEach(function (it) { if (it.url) URL.revokeObjectURL(it.url); }); }
+  function b64Blob(b64, type) { var bin = atob(b64), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i); return new Blob([arr], { type: type }); }
+  function showImg(it) {
+    it.url = URL.createObjectURL(b64Blob(it.b64, 'image/png'));
+    var img = h('img', { class: 'dsh-img', src: it.url, alt: it.name.replace(/\.png$/, ''), title: 'คลิกขวา → บันทึกรูปภาพ (มือถือ: กดค้างที่ภาพ)' });
+    it.wrap.insertBefore(img, it.wrap.firstChild); it.wrap.classList.add('as-img');
+    if (it.badge) it.badge.remove();
+    add(it.wrap, h('button', { class: 'dsh-dl', title: 'บันทึกภาพนี้', 'aria-label': 'บันทึกภาพนี้', onclick: function (e) { e.stopPropagation(); saveImg(it); }, text: '⬇️' }));
+  }
+  function inLineApp() { return !!(window.liff && liff.isInClient && liff.isInClient()); }
+  /** ⬇️: เบราว์เซอร์ทั่วไปดาวน์โหลดพร้อมชื่อไฟล์ · ในแอป LINE (ดาวน์โหลดไฟล์ไม่ได้ทุกเครื่อง) เปิดภาพเต็มให้กดค้างบันทึก */
+  function saveImg(it) { if (inLineApp()) viewImg(it); else downloadB64(it.b64, it.name, 'image/png'); }
+  function viewImg(it) {
+    modal(it.name.replace(/\.png$/, ''), h('div', null,
+      h('p', { class: 'small muted', style: 'margin:0 0 8px', text: 'กดค้างที่ภาพ → บันทึกรูปภาพ · เลื่อนซ้าย-ขวาเพื่อดูทั้งภาพ' }),
+      h('div', { class: 'dsh-big' }, h('img', { src: it.url, alt: it.name.replace(/\.png$/, '') })),
+      h('button', { class: 'btn ghost block', style: 'margin-top:8px', onclick: function () { downloadB64(it.b64, it.name, 'image/png'); }, text: '⬇️ ดาวน์โหลดไฟล์ภาพ' })));
+  }
+  function imgHint() { return h('p', { class: 'small muted dsh-hint', hidden: true, text: '💡 บันทึกภาพทีละภาพ: คลิกขวาที่ภาพ → บันทึกรูปภาพ · มือถือกดค้างที่ภาพ · หรือกด ⬇️ ที่มุมภาพ' }); }
   /** ส่งหลายข้อความ (ภาพ + ข้อความ) เข้าห้องแชท: ในกลุ่มส่งตรง · นอกกลุ่มให้เลือกห้อง */
   function sendToChat(msgs, fallbackText) {
     var ctx = window.liff && liff.getContext ? liff.getContext() : null, inGroup = ctx && (ctx.type === 'group' || ctx.type === 'room');
@@ -3866,18 +3901,23 @@
       var my = ++seq; clear(out); add(out, h('div', { class: 'loading' }, spinner(), h('p', { text: 'กำลังรวมผล ' + th(a) + (a !== b ? ' – ' + th(b) : '') + '…' })));
       api('dash', { from: a, to: b }).then(function (d) { if (my !== seq) return; d._kind = kind; data = d; draw(); }, function (e) { if (my === seq) { clear(out); add(out, errorBox(e.message)); } });
     }
+    var shots = [], drawN = 0;
     function draw() {
       if (!data) return;
-      clear(out);
-      var ps = pages(), fits = [];
-      ps.forEach(function (pg, i) {
+      clear(out); freeImages(shots);
+      var ps = pages(), fits = [], my = ++drawN, hint = imgHint(), cap = null;
+      add(out, hint);
+      shots = ps.map(function (pg, i) {
         var H = +pg.node.getAttribute('data-h') || 1080, wrap = h('div', { class: 'dsh-wrap' }); add(wrap, pg.node);
         if (ps.length > 1) add(out, h('div', { class: 'section-label', style: 'margin:4px 2px 6px', text: 'ภาพที่ ' + (i + 1) + ' · ' + PAGE_LABEL[pg.key] + (pg.key === 'cases' ? ' (' + data.board.cases.length + ' คดี)' : '') + (pg.pg ? ' · หน้า ' + pg.pg : '') }));
         add(out, wrap);
         fits.push(function () { var sc = wrap.clientWidth / 1920; pg.node.style.transform = 'scale(' + sc + ')'; wrap.style.height = Math.ceil(H * sc) + 'px'; });
+        return { wrap: wrap, name: pg.name, H: H, key: layout + data.from + data.to, fresh: function () { cap = cap || pages(); return cap[i].node; } };
       });
+      shots.key = layout + data.from + data.to;
       function fit() { fits.forEach(function (f) { f(); }); }
       fit(); setTimeout(fit, 50); window.onresize = fit;
+      toImages(shots, function () { return my === drawN && out.isConnected; }, function () { hint.hidden = false; });
       var res = h('div');
       add(out, h('div', { class: 'card' },
         submitBtn('📤 ส่งภาพ ' + ps.length + ' ภาพ + ข้อความรายงานเข้าไลน์', 'green block', function () { return make().then(function (rs) {
@@ -3903,6 +3943,10 @@
         function next(i) {
           if (i >= todo.length) { made = { key: key, list: list }; return Promise.resolve(list); }
           var pg = todo[i], H = +pg.node.getAttribute('data-h') || 1080;
+          if (shots.key === key && shots[i] && shots[i].b64) { // ใช้รูปที่เตรียมไว้แล้ว ไม่ต้องถ่ายซ้ำ
+            var b0 = shots[i].b64; toast('กำลังบันทึกภาพที่ ' + (i + 1) + '/' + todo.length + ' ไว้ใน Drive ของสถานี…', 8000);
+            return api('dash.image', { base64: b0, name: pg.name }).then(function (r) { r.b64 = b0; r.name = pg.name; list.push(r); return next(i + 1); });
+          }
           toast('กำลังสร้างภาพที่ ' + (i + 1) + '/' + todo.length + '…', 8000);
           var off = h('div', { style: 'position:fixed;left:-30000px;top:0;width:1920px;height:' + H + 'px;overflow:hidden' }); add(off, pg.node); document.body.appendChild(off);
           return dashFont().then(function () { return captureDash(pg.node); }).then(function (b64) {
@@ -4147,7 +4191,7 @@
   VIEWS.daily = function (params) {
     setTitle('📅 ภาพสรุปผลประจำวัน', 'ส่งให้ผู้บังคับบัญชา');
     clear($app); dashFont();
-    var t = today(), sel = params && /^\d{4}-\d{2}-\d{2}$/.test(params.date || '') ? params.date : addDays(t, -1), data = null, seq = 0, made = null;
+    var t = today(), sel = params && /^\d{4}-\d{2}-\d{2}$/.test(params.date || '') ? params.date : addDays(t, -1), data = null, seq = 0, made = null, imgs = [], drawN = 0;
     var chips = h('div', { class: 'chips' }), dateIn = h('input', { type: 'date', class: 'db-date', max: t, value: sel }), out = h('div');
     function rc() {
       clear(chips);
@@ -4175,15 +4219,20 @@
         add(mc, h('button', { class: 'btn ghost block', style: 'margin-top:8px', onclick: function () { go('me'); }, text: '📈 ผลของฉันสะสม ›' }));
         add(out, mc);
       }
-      var ps = dailyPages(data, { me: me }), fits = [];
-      ps.forEach(function (pg, i) {
+      var ps = dailyPages(data, { me: me }), fits = [], my = ++drawN, hint = imgHint(), cap = null;
+      freeImages(imgs); add(out, hint);
+      imgs = ps.map(function (pg, i) {
         var wrap = h('div', { class: 'dsh-wrap' }); add(wrap, pg.node);
         add(out, wrap);
-        add(wrap, h('button', { class: 'dy-zoom', onclick: function () { openBig(pg); }, text: '🔍 ขยาย' }));
+        var it = { wrap: wrap, name: pg.name, H: 1080, fresh: function () { cap = cap || dailyPages(data, {}); return cap[i].node; } }; // รูปที่บันทึก = แบบที่ส่ง (ไม่มีแถบสีของผู้ใช้)
+        add(wrap, h('button', { class: 'dy-zoom', onclick: function () { if (it.url) viewImg(it); else openBig(pg); }, text: '🔍 ขยาย' }));
         fits.push(function () { var sc = wrap.clientWidth / 1920; pg.node.style.transform = 'scale(' + sc + ')'; wrap.style.height = Math.ceil(1080 * sc) + 'px'; });
+        return it;
       });
+      imgs.date = data.date;
       function fit() { fits.forEach(function (f) { f(); }); }
       fit(); setTimeout(fit, 60); dashFont().then(fit); window.onresize = fit;
+      toImages(imgs, function () { return my === drawN && out.isConnected; }, function () { hint.hidden = false; });
       var res = h('div');
       add(out, h('div', { class: 'card' },
         submitBtn('📤 ส่งภาพ' + (ps.length > 1 ? ' ' + ps.length + ' ภาพ' : '') + ' + ข้อความเข้าไลน์', 'green block', function () { return make().then(function (rs) {
@@ -4213,7 +4262,12 @@
       return dashFont().then(function () { todo = dailyPages(data, {}); return next(0); });
       function next(i) {
         if (i >= todo.length) { made = { date: data.date, list: list }; return Promise.resolve(list); }
-        var pg = todo[i], off = h('div', { style: 'position:fixed;left:-30000px;top:0;width:1920px;height:1080px;overflow:hidden' }); add(off, pg.node); document.body.appendChild(off);
+        var pg = todo[i];
+        if (imgs.date === data.date && imgs[i] && imgs[i].b64) { // ใช้รูปที่เตรียมไว้แล้ว ไม่ต้องถ่ายซ้ำ
+          var b0 = imgs[i].b64; toast('กำลังบันทึกภาพที่ ' + (i + 1) + '/' + todo.length + ' ไว้ใน Drive ของสถานี…', 8000);
+          return api('dash.image', { base64: b0, name: pg.name }).then(function (r) { r.b64 = b0; r.name = pg.name; list.push(r); return next(i + 1); });
+        }
+        var off = h('div', { style: 'position:fixed;left:-30000px;top:0;width:1920px;height:1080px;overflow:hidden' }); add(off, pg.node); document.body.appendChild(off);
         return dashFont().then(function () { return captureDash(pg.node); }).then(function (b64) {
           off.remove(); toast('กำลังบันทึกภาพที่ ' + (i + 1) + '/' + todo.length + ' ไว้ใน Drive ของสถานี…', 8000);
           return api('dash.image', { base64: b64, name: pg.name }).then(function (r) { r.b64 = b64; r.name = pg.name; list.push(r); return next(i + 1); });

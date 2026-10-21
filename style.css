@@ -721,3 +721,14 @@ details.info > div { margin-top: 6px; line-height: 1.5; background: var(--soft);
 /* v1.15.3 หมายเหตุแยกเขต + ข้อความหมวดหมายจับไม่ถูกตัด */
 .dsh .zg-note { display: flex; flex-direction: column; font-size: 14px; line-height: 17px; color: #64748b; white-space: nowrap; }
 .dsh .d-leg .wd.wd2 { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.15; max-width: 300px; }
+/* v1.15.4 ภาพรายงานเป็นรูปจริง: คลิกขวา/กดค้างบันทึกได้ · ตัวอย่างเดิมซ่อนไว้ (คงแถบสีของผู้ใช้ทับบนรูป) */
+.dsh-wrap .dsh-img { display: block; width: 100%; height: auto; position: relative; z-index: 0; -webkit-touch-callout: default; -webkit-user-select: auto; user-select: auto; }
+.dsh-wrap.as-img > .dsh { visibility: hidden; pointer-events: none; z-index: 1; background: transparent; }
+.dsh-wrap.as-img > .dsh .dy-mebg { visibility: visible; opacity: .3; }
+.dsh-wrap .dsh-dl { position: absolute; right: 8px; top: 8px; z-index: 3; border: 0; border-radius: 10px; background: rgba(15,39,68,.85); color: #fff; font: inherit; font-size: 15px; line-height: 1; padding: 7px 9px; cursor: pointer; }
+.dsh-wrap .dsh-badge { position: absolute; left: 8px; top: 8px; z-index: 3; background: rgba(255,255,255,.92); color: #475569; font-size: 12px; border-radius: 8px; padding: 3px 8px; }
+.dsh-wrap .dy-zoom { z-index: 3; }
+.dsh-hint { margin: 0 2px 8px; }
+.dsh-big { overflow: auto; max-height: 70vh; border-radius: 10px; background: #eef2f7; -webkit-overflow-scrolling: touch; }
+.dsh-big img { display: block; width: 1280px; max-width: none; height: auto; -webkit-touch-callout: default; }
+
