@@ -3248,7 +3248,7 @@
     // รวม = ซึ่งหน้า (ราย) + หมายจับ (หมาย) · ผู้ต้องหา 1 ราย 3 หมาย นับ 3
     var dn = ab('d-donut', 30, 90, 236, 236); add(dn, donut(236, 34, [{ v: t.arrestWarrant, c: DK.navy }, { v: t.arrestFlag, c: DK.amber }]), h('div', { class: 'd-center' }, h('b', { style: 'font-size:' + bigNum(t.arrest) + 'px', text: fmtN(t.arrest) }), h('span', { style: t.arrestWarrant ? 'font-size:23px' : '', text: t.arrestWarrant ? 'ราย/หมาย' : 'ราย' })));
     add(A, dn);
-    x = ab('d-leg', 318, 82, 652, 60); add(x, h('i', { class: 'sq', style: 'background:' + DK.navy }), h('span', { class: 'lb', text: 'หมายจับ' }), h('span', { class: 'wd', text: crimeText(d.warrantCat) }),
+    x = ab('d-leg', 318, 82, 652, 60); add(x, h('i', { class: 'sq', style: 'background:' + DK.navy }), h('span', { class: 'lb', text: 'หมายจับ' }), fitWd(d.warrantCat, 22, 210),
       h('div', { class: 'vu', style: 'width:252px' }, h('b', { class: 'v', text: fmtN(t.arrestWarrant) }), h('span', { class: 'un', text: 'หมาย' + (t.arrestWarrant ? ' (' + fmtN(t.warrantPersons || 0) + ' ราย)' : '') }))); add(A, x);
     var box = ab('d-flag', 306, 142, 664, 186); add(A, box);
     add(box, h('div', { class: 'fh' }, h('i', { class: 'sq', style: 'background:' + DK.amber }), h('span', { class: 'lb', text: 'ซึ่งหน้า' }), h('small', { text: 'แยกตามฐานความผิด' }), h('div', { class: 'vu', style: 'width:232px' }, h('b', { class: 'v', text: fmtN(t.arrestFlag) }), h('span', { class: 'un', text: 'ราย' }))));
@@ -3286,7 +3286,7 @@
     var zt = ab('d-h2', 24, 10, null, null, 'font-size:30px'); zt.textContent = 'แยกเขตตรวจ'; add(Z, zt);
     add(Z, ab('d-legr', 0, 16, 0, null, 'right:22px;left:auto;font-size:21px'));
     add(Z.lastChild, h('i', { class: 'sq', style: 'width:18px;height:18px;background:' + DK.navy }), h('span', { text: 'อาญา' }), h('i', { class: 'sq', style: 'width:18px;height:18px;background:' + DK.blue + ';margin-left:14px' }), h('span', { text: 'จราจร' }));
-    add(Z, zoneGrid(d.zones, 18, 56, 575, 92));
+    add(Z, zoneGrid(d.zones, 18, 56, 575, 92), zoneNote(d.zones, t.arrest));
     return markZeros(st);
   }
   /** แถวแยกเขต: ชื่อเขต | คอลัมน์ละชุด (แท่ง + ตัวเลข) — สเกลแยกแต่ละชุด */
@@ -3409,6 +3409,17 @@
     return rows.sort(function (a, b) { return b[1] - a[1]; });
   }
   function crimeRows(map) { return Object.keys(map || {}).filter(function (k) { return map[k]; }).sort(function (a, b) { return map[b] - map[a]; }).map(function (k) { return [DASH_CAT[k] || k, map[k]]; }); }
+  /** ข้อความหมวดคดีข้างหัวข้อ: ย่อตัวอักษร 22→15px ให้พอดี ถ้ายังไม่พอขึ้น 2 บรรทัด (ไม่ตัดทิ้ง) */
+  /** ข้อความเล็กข้างหัวข้อ: ย่อตัวอักษรได้ถึง 16px ก่อนจึงตัดด้วย … */
+  function fitSmall(s, px, w) { var f = px; while (f > 16 && textW(s, f) > w) f--; return { style: 'font-size:' + f + 'px', text: fitText(s, f, w) }; }
+  function fitWd(map, px, w) {
+    var s = crimeText(map), f = px; while (f > 18 && textW(s, f) > w) f--;
+    if (textW(s, f) <= w) return h('span', { class: 'wd', style: 'font-size:' + f + 'px', text: s });
+    f = px; while (f > 14 && textW(s, f) > w * 1.85) f--; // 2 บรรทัด ตัดบรรทัดระหว่างหมวด ไม่ตัดกลางคำ
+    var sp = h('span', { class: 'wd wd2', style: 'font-size:' + f + 'px' });
+    crimeRows(map).forEach(function (r, i) { if (i) add(sp, ' · '); add(sp, h('span', { style: 'white-space:nowrap', text: r[0] + ' ' + fmtN(r[1]) })); });
+    return sp;
+  }
   function crimeText(map, sep) { return crimeRows(map).map(function (r) { return r[0] + ' ' + fmtN(r[1]); }).join(sep || ' · '); }
   function prevLabel(p) {
     if (!p) return '';
@@ -3580,6 +3591,15 @@
       add(box, row);
     });
     return box;
+  }
+  /** หมายเหตุใต้หัว "แยกเขตตรวจ" เมื่อคดีร่วมหลายเขตทำให้ผลรวมรายเขตมากกว่ายอดสถานี (ผู้ใช้กำหนด 21 ต.ค. 69) */
+  function zoneNote(zones, total) {
+    var sum = (zones || []).reduce(function (s, z) { return s + (+z.arrest || 0); }, 0);
+    if (sum <= (+total || 0)) return null;
+    var x = 24 + Math.ceil(textW('แยกเขตตรวจ', 30, 700)) + 14, w = 404 - x; // ระหว่างหัวข้อกับคำอธิบายสี
+    var n = ab('zg-note', x, 12, w, null);
+    add(n, h('span', { text: fitText('คดีร่วมนับให้ทุกเขตที่ร่วม', 14, w) }), h('span', { text: fitText('ยอดสถานี อาญา ' + fmtN(total) + ' ราย/หมาย', 14, w) }));
+    return n;
   }
   /** ภาพ: แยกเขตตรวจแบบกระชับ 2 คอลัมน์ (อาญา · จราจร) */
   function zoneGrid(zones, x0, y0, w, hh) {
@@ -3989,13 +4009,19 @@
     var dn = ab('d-donut', 30, 90, 236, 236); add(dn, donut(236, 34, [{ v: t.warrant || 0, c: CAT.arrest }, { v: t.crime || 0, c: DK.amber }]), h('div', { class: 'd-center' }, h('b', { style: 'font-size:' + bigNum(nA) + 'px', text: fmtN(nA) }), h('span', { style: t.warrant ? 'font-size:23px' : '', text: t.warrant ? 'ราย/หมาย' : 'ราย' }))); add(A, dn);
     // แถว "หมายจับ" ใช้ขอบเดียวกับเนื้อในกล่อง "ซึ่งหน้า" (กล่องมีขอบ 2 + ระยะใน 18) → สี่เหลี่ยมสี ป้าย และตัวเลขตรงกันทั้งสองแถว
     var crime = d.crime || {}, x = ab('d-leg', 326, 82, 624, 60);
-    add(x, h('i', { class: 'sq', style: 'background:' + CAT.arrest }), h('span', { class: 'lb', text: 'หมายจับ' }), h('span', { class: 'wd', text: fitText(crimeText(crime.warrant), 22, 250) }),
+    add(x, h('i', { class: 'sq', style: 'background:' + CAT.arrest }), h('span', { class: 'lb', text: 'หมายจับ' }), fitWd(crime.warrant, 22, 250),
       h('div', { class: 'vu', style: 'width:200px' }, h('b', { class: 'v', text: fmtN(t.warrant || 0) }), h('span', { class: 'un', text: 'หมาย' }))); add(A, x);
     var box = ab('d-flag', 306, 142, 664, 186); add(A, box);
-    add(box, h('div', { class: 'fh' }, h('i', { class: 'sq', style: 'background:' + DK.amber }), h('span', { class: 'lb', text: 'ซึ่งหน้า' }), h('small', { text: fitText(crimeText(crime.flag) || 'แยกตามฐานความผิด', 23, 230) }),
+    add(box, h('div', { class: 'fh' }, h('i', { class: 'sq', style: 'background:' + DK.amber }), h('span', { class: 'lb', text: 'ซึ่งหน้า' }), h('small', fitSmall(crimeText(crime.flag) || 'แยกตามฐานความผิด', 23, 230)),
       h('div', { class: 'vu', style: 'width:200px' }, h('b', { class: 'v', text: fmtN(t.crime || 0) }), h('span', { class: 'un', text: 'ราย' }))));
     // รายคดี: รถ · ประเภท ฐานความผิด (ข้อหาสั้น) จำนวน — ครบทุกคดี (มากกว่า 4 คดีแบ่ง 2 คอลัมน์)
-    var cases = []; rows.forEach(function (r) { r.notes.forEach(function (n) { if (n.k === 'arrest' || n.k === 'seizure') cases.push({ car: r.loose ? '-' : r.car, n: n }); }); });
+    // คดีร่วมหลายคัน (ck เดียวกัน) แสดงบรรทัดเดียว: ช่องรถ = จำนวนคันที่ร่วม
+    var cases = [], byCk = {}; rows.forEach(function (r) { r.notes.forEach(function (n) {
+      if (n.k !== 'arrest' && n.k !== 'seizure') return;
+      if (n.ck && byCk[n.ck]) { byCk[n.ck].cars.push(r.car); return; }
+      var c0 = { car: r.loose ? '-' : r.car, n: n, cars: [r.car] }; cases.push(c0); if (n.ck) byCk[n.ck] = c0;
+    }); });
+    cases.forEach(function (c0) { if (c0.cars.length > 1) c0.car = c0.cars.length + ' คัน'; });
     cases.sort(function (a, b) { return (b.n.kind === 'หมายจับ') - (a.n.kind === 'หมายจับ'); });
     var cl = ab('dy-cases', 0, 62, 664, 120); add(box, cl);
     if (!cases.length) { var nc = ab('dy-case muted', 18, 8, 620, 30, 'font-size:22px'); nc.textContent = 'ไม่มีการจับกุมในวันนี้'; add(cl, nc); }
@@ -4042,8 +4068,11 @@
     var zt = ab('d-h2', 24, 10, null, null, 'font-size:30px'); zt.textContent = 'แยกเขตตรวจ'; add(Z, zt);
     add(Z, ab('d-legr', 0, 16, 0, null, 'right:22px;left:auto;font-size:21px'));
     add(Z.lastChild, h('i', { class: 'sq', style: 'width:18px;height:18px;background:' + CAT.arrest }), h('span', { text: 'จับกุม' }), h('i', { class: 'sq', style: 'width:18px;height:18px;background:' + CAT.ticket + ';margin-left:14px' }), h('span', { text: 'ใบสั่ง' }));
-    var zs = (d.zones || []).map(function (z) { var o = { zone: z.zone, name: z.name, ticket: 0, arrest: 0 }; (d.rows || []).forEach(function (r) { if (+r.zone === z.zone) { o.ticket += dyTickets(r.n); o.arrest += (r.n.warrant || 0) + (r.n.crime || 0); } }); return o; });
-    add(Z, zoneGrid(zs, 18, 56, 575, 92));
+    var zs = (d.zones || []).map(function (z) {
+      if (z.arrest != null) return z; // เซิร์ฟเวอร์รวมให้แล้ว (คดีร่วมในเขตเดียวกันนับครั้งเดียว)
+      var o = { zone: z.zone, name: z.name, ticket: 0, arrest: 0 }; (d.rows || []).forEach(function (r) { if (+r.zone === z.zone) { o.ticket += dyTickets(r.n); o.arrest += (r.n.warrant || 0) + (r.n.crime || 0); } }); return o;
+    });
+    add(Z, zoneGrid(zs, 18, 56, 575, 92), zoneNote(zs, (d.total.warrant || 0) + (d.total.crime || 0)));
     return markZeros(st);
   }
   /** แถวรายรถ 1–2 คอลัมน์: [รถ ผลัด / เขต] แถบซ้อน 5 หมวด + รวม · บรรทัดถัดไป = เจ้าหน้าที่ แล้วต่อด้วย ว.42/ช่วยเหลือ/ภารกิจ (สีตามหมวด) ครบทุกรายการ

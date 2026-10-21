@@ -718,3 +718,6 @@ details.info > div { margin-top: 6px; line-height: 1.5; background: var(--soft);
 .hl-slow { display: flex; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; } .hl-slow .right { margin-left: auto; color: #b45309; font-weight: 700; }
 #toast.act { min-width: 280px; justify-content: space-between; text-align: left; opacity: .97; }
 #toast .toast-btn { white-space: nowrap; flex: none; }
+/* v1.15.3 หมายเหตุแยกเขต + ข้อความหมวดหมายจับไม่ถูกตัด */
+.dsh .zg-note { display: flex; flex-direction: column; font-size: 14px; line-height: 17px; color: #64748b; white-space: nowrap; }
+.dsh .d-leg .wd.wd2 { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.15; max-width: 300px; }
