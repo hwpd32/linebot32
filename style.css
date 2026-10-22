@@ -749,3 +749,16 @@ details.info > div { margin-top: 6px; line-height: 1.5; background: var(--soft);
 .re-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px dashed #e5e9f0; }
 .re-row select { grid-column: 1 / -1; width: 100%; }
 .hist-crew { color: #475569; }
+/* v1.18 คดีหลายคัน · สืบสวนขยายผล */
+.badge.xp { background: #ecfccb; color: #3f6212; }
+.xp-line { margin: 2px 0 4px; }
+.case-card .case-team { color: #475569; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; }
+.xp-card { border-left: 4px solid #cbd5e1; }
+.xp-card.on { border-left-color: #65a30d; background: #f7fee7; }
+.xp-card .btn { margin-top: 8px; }
+.case-car { border-top: 1px solid #e2e8f0; padding: 8px 0; }
+.case-car:first-of-type { border-top: 0; }
+.case-car.here { background: #f8fafc; margin: 0 -10px; padding: 8px 10px; border-radius: 10px; }
+.case-car .hist-btns { margin-top: 6px; }
+.ct-team { align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; }
+.card h3 .right .btn { white-space: nowrap; }

@@ -1671,29 +1671,30 @@
       loading('กำลังโหลดคดี…');
       return api('arrest.detail', { id: editId, why: 'แก้ไขรายงาน' }).then(function (d) {
         var p = d.payload, sus = (d.sensitive && d.sensitive.suspects) || [];
-        renderArrestForm({ id: d.id, kind: d.kind, by: p.by || 'เอง', bwc: !!p.bwc, title: p.title || p.charge || '', occurredAt: String(d.occurredAt).slice(0, 16), cat: p.cat, catNote: p.catNote || '',
+        renderArrestForm({ id: d.id, kind: d.kind, by: p.by || 'เอง', bwc: !!p.bwc, expand: !!p.expand, title: p.title || p.charge || '', occurredAt: String(d.occurredAt).slice(0, 16), cat: p.cat, catNote: p.catNote || '',
           warrants: p.warrants || 1, warrantInfo: p.warrantInfo || '', team: (p.team || []).map(function (t) { return { pid: t.pid, role: t.role }; }), lead: p.lead || '', director: p.director || '',
           suspectList: sus.length ? sus : [], suspects: d.count, charge: p.charge || '', place: p.place || '', road: p.road || '', km: p.km || '', lat: p.lat, lng: p.lng,
-          evidence: p.evidence || [], detail: (d.sensitive && d.sensitive.detail) || '', handover: p.handover || '', car: '' }, params);
+          evidence: p.evidence || [], detail: (d.sensitive && d.sensitive.detail) || '', handover: p.handover || '', car: '' }, params, false, { groupN: (d.group || []).length, car: d.car, net: d.net });
       }, function (e) { fail(e); });
     }
     var draft = Draft.get('arrest');
     var now = bkkNow();
-    var base = draft || { kind: 'ซึ่งหน้า', by: 'เอง', bwc: false, title: '', occurredAt: isoOf(now) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes()), cat: S.boot.arrestCats[0],
+    var base = draft || { kind: 'ซึ่งหน้า', by: 'เอง', bwc: false, expand: false, title: '', occurredAt: isoOf(now) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes()), cat: S.boot.arrestCats[0],
       warrants: 1, warrantInfo: '', team: [{ pid: S.boot.me.pid, role: 'primary' }], lead: '', director: S.boot.arrestDirector || '', suspectList: [blankSuspect()], charge: '', place: '', road: '', km: '', lat: '', lng: '',
       evidence: [], detail: '', handover: '', car: '' };
     renderArrestForm(base, params, !!draft);
   };
   function blankSuspect() { return { name: '', idNo: '', nationality: 'ไทย', age: '', phone: '', address: '', note: '' }; }
-  function renderArrestForm(f, params, fromDraft) {
+  function renderArrestForm(f, params, fromDraft, ctx) {
     clear($app);
-    var editing = !!f.id;
+    var editing = !!f.id; ctx = ctx || {};
     function save() { if (!editing) Draft.set('arrest', f); }
     var timer = null; function autosave() { clearTimeout(timer); timer = setTimeout(save, 600); }
     function inp(key, attrs) { var el = h(attrs && attrs.tag || 'input', Object.assign({ value: f[key] == null ? '' : String(f[key]) }, attrs || {})); el.oninput = function () { f[key] = el.value; autosave(); }; return el; }
     // ถามก่อนออกเมื่อกรอกค้าง (ร่างของฟอร์มจับกุมเก็บเองอยู่แล้ว)
     var fbase = JSON.stringify(f), kp = { dirty: function () { return JSON.stringify(f) !== fbase; }, save: function () { save(); }, done: function () { if (!editing) Draft.del('arrest'); }, rebase: function () { fbase = JSON.stringify(f); } };
     S.keeper = kp;
+    if (ctx.groupN > 1) add($app, h('div', { class: 'note' }, h('b', { text: '🚓 คดีนี้มี ' + ctx.groupN + ' คัน' }), h('div', { class: 'small', text: 'ข้อมูลคดี (หัวข้อ ประเภท วันเวลา หมวด ข้อหา ผู้ต้องหา สถานที่ พฤติการณ์ ขยายผล) ที่แก้จะมีผลกับทุกคัน · ชุดจับกุม (ส่วนที่ 2) และของกลาง (ส่วนที่ 5) เป็นของรถ ' + (ctx.car || '-') + ' เท่านั้น' })));
     if (fromDraft) add($app, h('div', { class: 'note' }, 'กู้คืนร่างที่กรอกค้างไว้แล้ว ', h('button', { class: 'btn ghost sm', onclick: function () { Draft.del('arrest'); VIEWS.arrest(params); }, text: 'เริ่มใหม่' })));
     // รถ/ผลัด: ตั้งต้นจากผลัดปัจจุบันของผู้รายงาน และเติมชุดจับกุมจากเจ้าหน้าที่
     var m = (S.boot.myShifts || []).filter(function (x) { return params.car ? x.car === params.car && x.dutyDate === params.d : x.state === 'เข้าเวร' || (x.dutyDate === S.boot.current.dutyDate && x.shift === S.boot.current.shift); })[0];
@@ -1707,6 +1708,7 @@
     }
     rw();
     var bwc = h('input', { type: 'checkbox', checked: !!f.bwc, onchange: function () { f.bwc = bwc.checked; autosave(); } });
+    var xpc = h('input', { type: 'checkbox', checked: !!f.expand, onchange: function () { f.expand = xpc.checked; autosave(); } });
     var c1 = card('1) หัวข้อและประเภท');
     // หมวด "อื่นๆ" ต้องระบุข้อหาโดยย่อ — แสดงแทนคำว่า "อื่นๆ" ในภาพ/ข้อความรายงานผู้บังคับบัญชา
     var noteBox = field('ข้อหาโดยย่อ (หมวดอื่นๆ)', inp('catNote', { placeholder: 'เช่น พ.ร.บ.เช็ค · แจ้งความเท็จ · ทำร้ายร่างกาย', maxlength: 60 }), 'แสดงแทนคำว่า "อื่นๆ" ในรายงานผู้บังคับบัญชา');
@@ -1715,6 +1717,8 @@
       warrantBox,
       field('จับโดย', segPick([['เอง', 'จับกุมเอง'], ['ร่วม', 'จับกุมร่วม']], f.by, function (v) { f.by = v; autosave(); })),
       h('label', { class: 'cap' }, bwc, 'บันทึกด้วยกล้อง Body Worn Camera'),
+      h('label', { class: 'cap' }, xpc, '🔍 สืบสวนขยายผล (ได้ข้อมูลจากการสืบสวน/ขยายผลก่อนจับกุม)'),
+      ctx.net ? h('div', { class: 'small muted', text: '⭐ ผูกเป็นคดีเครือข่าย/OP "' + ctx.net.name + '" แล้ว — นับเป็นขยายผลอัตโนมัติ' }) : null,
       field('วันเวลาจับกุม', inp('occurredAt', { type: 'datetime-local' }), 'นับสถิติตามวันเวลานี้'),
       field('หมวดคดี (ใช้ในรายงาน บก.ทล.)', (function () { var sel = h('select', { onchange: function () { f.cat = sel.value; noteBox.hidden = f.cat !== 'อื่นๆ'; autosave(); } }); S.boot.arrestCats.forEach(function (c) { add(sel, h('option', { value: c, text: c, selected: c === f.cat })); }); return sel; })()),
       noteBox);
@@ -1808,7 +1812,7 @@
       body.suspects = body.suspectList.length;
       return api('arrest', body).then(function (r) {
         Draft.del('arrest'); refreshBoot();
-        done(editing ? (r.status === 'approved' ? 'บันทึกการแก้ไขแล้ว (คงอนุมัติ)' : 'บันทึกการแก้ไขแล้ว (รอตรวจใหม่)') : 'ส่งรายงานจับกุมแล้ว (รอตรวจ)', r.message, { next: 'case', nextParams: { id: r.eventId }, nextText: 'ดูคดีนี้',
+        done(editing ? (r.status === 'approved' ? 'บันทึกการแก้ไขแล้ว (คงอนุมัติ)' : 'บันทึกการแก้ไขแล้ว (รอตรวจใหม่)') + (r.group ? ' · ปรับข้อมูลคดีให้รถอีก ' + r.group + ' คันแล้ว' : '') : 'ส่งรายงานจับกุมแล้ว (รอตรวจ)', r.message, { next: 'case', nextParams: { id: r.eventId }, nextText: 'ดูคดีนี้',
           extra: can('pr.make') ? h('button', { class: 'btn ghost', style: 'margin-top:10px', onclick: function () { go('pr', { caseId: r.eventId }); }, text: '🖼 สร้างภาพประชาสัมพันธ์จากคดีนี้' }) : null });
       });
     })));
@@ -1823,20 +1827,30 @@
       clear($app);
       if (can('view.suspect')) add($app, h('button', { class: 'btn ghost block', style: 'margin-bottom:12px', onclick: function () { go('suspects'); }, text: '🔎 ค้นหาผู้ต้องหาจากคดีเก่า' }));
       if (!list.length) return add($app, card('ยังไม่มีคดีใน 40 วันล่าสุด'));
-      var groups = [['รอตรวจ', list.filter(function (x) { return x.status === 'pending'; })], ['ส่งกลับแก้', list.filter(function (x) { return x.status === 'returned'; })],
-        ['อนุมัติแล้ว', list.filter(function (x) { return x.status === 'approved'; })], ['ยกเลิก', list.filter(function (x) { return x.status === 'void'; })]];
-      groups.forEach(function (g) {
-        if (!g[1].length) return;
-        add($app, h('div', { class: 'section-label', text: g[0] + ' (' + g[1].length + ')' }));
-        g[1].forEach(function (x) {
-          add($app, h('button', { class: 'card clickable', onclick: function () { go('case', { id: x.id }); } },
-            h('div', { class: 'row' }, h('b', { class: 'grow', text: (KIND_LABEL[x.kind] || x.kind) + ' · ' + x.cat }), x.mine ? h('span', { class: 'badge', text: 'ของฉัน' }) : null, h('span', { class: 'badge ' + ST[x.status][1], text: ST[x.status][0] })),
-            h('div', { class: 'clamp2', text: x.title || x.charge || '-' }),
-            h('div', { class: 'muted small', text: th(x.statDate) + ' ' + hm(x.occurredAt) + ' น. · ' + x.count + ' ราย' + (x.warrants ? ' · ' + x.warrants + ' หมาย' : '') + ' · ' + x.team.map(function (t) { return t.name + (t.role === 'primary' ? '★' : ''); }).join(', ') })));
-        });
+      // v1.18: คดีเดียวกันหลายคัน (วัน/ประเภท/หมวด/เวลาเดียวกัน) = การ์ดเดียว · สถานะของการ์ด = สถานะที่ต้องทำก่อน
+      var by = {}, order = [];
+      list.forEach(function (x) { var k = x.gk ? 'g|' + x.gk : 'i|' + x.id; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(x); });
+      var cases = order.map(function (k) { var g = by[k]; return { g: g, st: ['pending', 'returned', 'approved', 'void'].filter(function (s) { return g.some(function (x) { return x.status === s; }); })[0] || g[0].status }; });
+      [['pending', 'รอตรวจ'], ['returned', 'ส่งกลับแก้'], ['approved', 'อนุมัติแล้ว'], ['void', 'ยกเลิก']].forEach(function (sec) {
+        var cs = cases.filter(function (c) { return c.st === sec[0]; });
+        if (!cs.length) return;
+        add($app, h('div', { class: 'section-label', text: sec[1] + ' (' + cs.length + ' คดี)' }));
+        cs.forEach(function (c) { add($app, caseCard(c)); });
       });
     }, function (e) { fail(e, VIEWS.cases); });
   };
+  function caseCard(c) {
+    var g = c.g, x = g[0], cars = [], names = [], seen = {}, nSt = g.filter(function (i) { return i.status === c.st; }).length;
+    g.forEach(function (i) { if (i.car && cars.indexOf(i.car) < 0) cars.push(i.car); (i.team || []).forEach(function (t) { if (!seen[t.name]) { seen[t.name] = 1; names.push(t.name + (t.role === 'primary' ? '★' : '')); } }); });
+    var xp = g.some(function (i) { return i.expand; }), net = g.map(function (i) { return i.net; }).filter(Boolean)[0], mine = g.some(function (i) { return i.mine; });
+    return h('button', { class: 'card clickable case-card', onclick: function () { go('case', { id: x.id }); } },
+      h('div', { class: 'row' }, h('b', { class: 'grow', text: (KIND_LABEL[x.kind] || x.kind) + ' · ' + x.cat }), mine ? h('span', { class: 'badge', text: 'ของฉัน' }) : null,
+        h('span', { class: 'badge ' + ST[c.st][1], text: ST[c.st][0] + (g.length > 1 && nSt < g.length ? ' ' + nSt + '/' + g.length + ' คัน' : '') })),
+      xp ? h('div', { class: 'xp-line' }, h('span', { class: 'badge xp', text: '🔍 สืบสวนขยายผล' }), net ? h('span', { class: 'small muted', text: ' ⭐ ' + net }) : null) : null,
+      h('div', { class: 'clamp2', text: x.title || x.charge || '-' }),
+      h('div', { class: 'muted small', text: th(x.statDate) + ' ' + hm(x.occurredAt) + ' น. · ' + x.count + ' ราย' + (x.warrants ? ' · ' + x.warrants + ' หมาย' : '') + (cars.length > 1 ? ' · ' + cars.length + ' คัน (' + cars.join(', ') + ')' : cars.length ? ' · รถ ' + cars[0] : '') }),
+      h('div', { class: 'small case-team', text: '👮 ชุดจับกุม' + (names.length > 3 ? ' ' + names.length + ' นาย' : '') + ': ' + names.join(', ') }));
+  }
   VIEWS.case = function (p) {
     setTitle('🚨 รายละเอียดคดี', '');
     loading();
@@ -1845,6 +1859,35 @@
       setTitle('🚨 ' + (KIND_LABEL[d.kind] || d.kind), th(d.statDate) + ' · ' + ST[d.status][0]);
       if (d.payload.review && d.payload.review.note) add($app, h('div', { class: 'note', text: (d.payload.review.approve ? '✅ ' : '↩️ ') + 'ผู้ตรวจ: ' + d.payload.review.note }));
       if (d.status === 'void' && d.payload.replacedBy) add($app, h('div', { class: 'note' }, 'ฉบับนี้ถูกแก้ไขแล้ว ', h('button', { class: 'btn ghost sm', onclick: function () { go('case', { id: d.payload.replacedBy }, true); }, text: 'ดูฉบับล่าสุด' })));
+      var reload = function (id) { apiInvalidate(); refreshBoot(); go('case', { id: id || d.id }, true); };
+      // v1.18 สืบสวนขยายผล
+      if (d.expand || d.canExpand) {
+        var xb = h('div', { class: 'card xp-card' + (d.expand ? ' on' : '') }, h('div', { class: 'row' }, h('b', { class: 'grow', text: d.expand ? '🔍 คดีสืบสวนขยายผล' : 'ยังไม่ได้ระบุว่าเป็นคดีสืบสวนขยายผล' })),
+          d.net ? h('div', { class: 'small muted', text: '⭐ ผูกเป็น' + (d.net.type === 'op' ? 'ปฏิบัติการ (OP)' : 'คดีเครือข่าย') + ' "' + d.net.name + '" — นับเป็นขยายผลอัตโนมัติ' }) : null);
+        if (d.canExpand && (d.expandSet || !d.net)) add(xb, submitBtn(d.expandSet ? '↩️ ยกเลิกการระบุขยายผล' : '🔍 ระบุว่าเป็นคดีสืบสวนขยายผล', 'ghost sm', function () {
+          return api('case.expand', { id: d.id, on: !d.expandSet }).then(function (r) { toast((r.on ? '🔍 ระบุขยายผลแล้ว' : 'ยกเลิกการระบุแล้ว') + (r.n > 1 ? ' (' + r.n + ' คัน)' : '') + ' — บันทึกในประวัติ', 3500); reload(); });
+        }));
+        add($app, xb);
+      }
+      // v1.18 คดีเดียวกันหลายคัน: รถทุกคัน + ชุดจับกุมรายคัน
+      if (d.group && d.group.length > 1) {
+        var nAll = {}; d.group.forEach(function (g) { g.team.forEach(function (t) { nAll[t.pid] = 1; }); });
+        var gc = card('🚓 รถที่ร่วมจับกุม ' + d.group.length + ' คัน · ชุดจับกุม ' + Object.keys(nAll).length + ' นาย', d.canAddCar ? h('button', { class: 'btn ghost sm', onclick: function () { CASE.addCar(d, reload); }, text: '➕ เพิ่มรถ' }) : null);
+        add(gc, h('p', { class: 'small muted', style: 'margin:0 0 8px', text: 'คดีเดียวกัน (วัน เวลา ประเภท หมวดเดียวกัน) — สถานีนับ 1 คดี · แก้ข้อมูลคดีครั้งเดียวมีผลทุกคัน · ชุดจับกุมแก้รายคัน' }));
+        d.group.forEach(function (g) {
+          var here = g.id === d.id, row = h('div', { class: 'case-car' + (here ? ' here' : '') },
+            h('div', { class: 'row' }, h('b', { class: 'grow', text: 'รถ ' + (g.car || '-') + (g.zone ? ' · เขต ' + g.zone : '') + (here ? ' (รายงานนี้)' : '') }), h('span', { class: 'badge ' + ST[g.status][1], text: ST[g.status][0] })),
+            h('div', { class: 'small', text: g.team.map(function (t) { return t.name + (t.role === 'primary' ? ' ★' : ''); }).join(', ') || '-' }),
+            g.evidence ? h('div', { class: 'small muted', text: '📦 ของกลางบันทึกที่รถคันนี้ ' + g.evidence + ' รายการ' }) : null);
+          var bb = h('div', { class: 'hist-btns' });
+          if (g.canEdit) add(bb, h('button', { class: 'btn ghost sm', onclick: function () { CASE.team(g, reload); }, text: '👥 แก้ชุดจับกุม' }));
+          if (!here) add(bb, h('button', { class: 'btn ghost sm', onclick: function () { go('case', { id: g.id }); }, text: '📄 รายงานของรถนี้' }));
+          if (g.canCut) add(bb, h('button', { class: 'btn ghost sm red-ghost', onclick: function () { CASE.cut(g, function () { reload(here ? d.group.filter(function (x) { return x.id !== g.id; })[0].id : d.id); }); }, text: '✂️ ตัดออกจากคดี' }));
+          if (bb.childNodes.length) add(row, bb);
+          add(gc, row);
+        });
+        add($app, gc);
+      }
       if (d.sensitive && d.sensitive.suspects.length) {
         var s = card('🔒 ผู้ต้องหา', 'การเปิดดูถูกบันทึก');
         d.sensitive.suspects.forEach(function (x, i) {
@@ -1865,16 +1908,62 @@
         api('export.arrestPdf', { id: d.id }).then(function (r) { var m = h('div'); add(m, fileCard(r, 'PDF รายงานจับกุม')); modal('ส่งออกแล้ว', [m]); }, function (e) { toast(e.message, 4000); });
       }));
       var inTeam = (d.team || []).some(function (t) { return t.pid === S.boot.me.pid; });
-      if (d.canEdit) add(acts, rowLink('✏️', 'แก้ไขรายงาน', d.status === 'approved' ? (can('case.approve') && (!inTeam || S.boot.perms.superadmin) ? 'ท่านเป็นผู้อนุมัติ — แก้แล้วคงอนุมัติ' : 'แก้แล้วต้องอนุมัติใหม่') : 'ฉบับเดิมจะถูกแทนที่', function () { go('arrest', { id: d.id }); }));
+      if (d.canEdit) add(acts, rowLink('✏️', 'แก้ไขรายงาน', (d.group && d.group.length > 1 ? 'ข้อมูลคดีมีผลทุก ' + d.group.length + ' คัน · ' : '') + (d.status === 'approved' ? (can('case.approve') && (!inTeam || S.boot.perms.superadmin) ? 'ท่านเป็นผู้อนุมัติ — แก้แล้วคงอนุมัติ' : 'แก้แล้วต้องอนุมัติใหม่') : 'ฉบับเดิมจะถูกแทนที่'), function () { go('arrest', { id: d.id }); }));
       add(acts, rowLink('🕘', 'ประวัติการแก้ไข', 'ใครแก้อะไร เมื่อไร' + (can('report.editOthers') ? ' · ย้อนกลับเป็นฉบับเดิม' : ''), function () { HOPS.timeline({ kind: 'arrest', id: d.id, dutyDate: d.statDate, status: d.status, title: d.payload.title || '' }, d.payload.title || '', function () { go('case', { id: d.id }, true); }); }));
       if (can('pr.make') && d.status !== 'void') add(acts, rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'ใช้ข้อมูลคดีนี้ (ตัดข้อมูลส่วนบุคคลออกให้)', function () { go('pr', { caseId: d.id }); }));
       add($app, acts);
       add($app, h('p', { class: 'muted small', text: 'ผู้รายงาน: ' + d.reporter + ' · รหัส ' + d.id }));
-      if (d.canApprove) add($app, bar(
+      if (d.canApproveAll) add($app, bar(
+        submitBtn('↩️ ส่งกลับทั้งคดี', 'gray', function () { CASE.returnAll(d, function () { refreshBoot(); go('cases', {}, true); }); }),
+        submitBtn('✅ อนุมัติทั้งคดี (' + d.pendingN + ' คัน)', 'green', function () { return api('case.decide', { id: d.id, approve: true }).then(function (r) { toast('อนุมัติแล้ว ' + r.n + ' คัน — นับยอดแล้ว'); refreshBoot(); go('cases', {}, true); }); })));
+      else if (d.canApprove) add($app, bar(
         submitBtn('↩️ ส่งกลับแก้', 'gray', function () { var n = prompt('เหตุผลที่ส่งกลับแก้ (ผู้รายงานจะเห็น)'); if (n == null) return; return api('arrest.decide', { id: d.id, approve: false, note: n }).then(function () { toast('ส่งกลับแล้ว'); refreshBoot(); go('cases', {}, true); }); }),
         submitBtn('✅ อนุมัติ', 'green', function () { return api('arrest.decide', { id: d.id, approve: true }).then(function () { toast('อนุมัติแล้ว — นับยอดแล้ว'); refreshBoot(); go('cases', {}, true); }); })));
       else if (d.status === 'pending' && can('case.approve')) add($app, h('div', { class: 'note', text: 'ท่านอยู่ในชุดจับกุมคดีนี้ — ให้ผู้ตรวจท่านอื่นอนุมัติ' }));
     }, function (e) { fail(e); });
+  };
+  /** v1.18 การทำงานกับคดีหลายคัน */
+  var CASE = {
+    team: function (g, after) {
+      var list = g.team.map(function (t) { return { pid: t.pid, role: t.role }; }), box = h('div'), reason = h('textarea', { placeholder: 'เหตุผล (จำเป็น) เช่น ตามรายงานการจับกุม' });
+      function draw() {
+        clear(box);
+        list.forEach(function (t, i) {
+          var sel = h('select', { style: 'width:auto', onchange: function () { t.role = sel.value; } }, h('option', { value: 'primary', text: 'ผู้จับหลัก', selected: t.role === 'primary' }), h('option', { value: 'joint', text: 'ร่วมจับ', selected: t.role !== 'primary' }));
+          add(box, h('div', { class: 'row ct-team' }, h('span', { class: 'grow', text: person(t.pid).name }), sel, h('button', { class: 'btn gray sm', type: 'button', 'aria-label': 'เอาออก', onclick: function () { list.splice(i, 1); draw(); }, text: '×' })));
+        });
+        add(box, h('button', { class: 'btn ghost sm', type: 'button', style: 'margin-top:6px', onclick: function () { pickPerson('เพิ่มเจ้าหน้าที่ชุดจับกุม', function (p) { if (!list.some(function (t) { return t.pid === p.pid; })) list.push({ pid: p.pid, role: 'joint' }); CASE.team(Object.assign({}, g, { team: list.map(function (t) { return { pid: t.pid, role: t.role, name: person(t.pid).name }; }) }), after); }, function (p) { return !list.some(function (t) { return t.pid === p.pid; }); }); }, text: '➕ เพิ่มเจ้าหน้าที่' }));
+      }
+      draw();
+      modal('👥 ชุดจับกุม รถ ' + (g.car || '-'), [h('p', { class: 'small muted', text: 'แก้เฉพาะรถคันนี้ · ข้อมูลคดีและรถคันอื่นไม่เปลี่ยน · ผู้ที่เอาออกจะไม่ได้ยอด/คะแนนคดีนี้' }), box, field('เหตุผล', reason)], 'บันทึกชุดจับกุม', function () {
+        if (!list.length) { toast('ต้องมีอย่างน้อย 1 คน'); return false; }
+        if (reason.value.trim().length < 3) { toast('กรุณาใส่เหตุผล'); return false; }
+        return api('case.team', { id: g.id, team: list, reason: reason.value }).then(function (r) { toast('✅ บันทึกชุดจับกุมแล้ว' + (r.status === 'approved' ? ' (คงอนุมัติ)' : ' (รอตรวจใหม่)'), 3500); after(r.id); });
+      });
+    },
+    cut: function (g, after) {
+      var reason = h('textarea', { placeholder: 'เหตุผล (จำเป็น) เช่น ไม่ได้ร่วมจับกุมตามรายงานการจับกุม' });
+      modal('✂️ ตัดรถ ' + (g.car || '-') + ' ออกจากคดี', [h('p', { class: 'small muted', text: 'รายงานของรถคันนี้จะถูกยกเลิก (ไม่ลบจริง · กู้คืนได้ 7 วัน) · รถและชุดจับกุมคันนี้ไม่ได้ยอด/คะแนนคดีนี้ · ยอดสถานียังนับคดีตามรถที่เหลือ' }), field('เหตุผล', reason)], '✂️ ตัดออก', function () {
+        if (reason.value.trim().length < 3) { toast('กรุณาใส่เหตุผล'); return false; }
+        return api('event.void', { id: g.id, reason: reason.value }).then(function () { toast('✂️ ตัดรถ ' + g.car + ' ออกแล้ว — บันทึกในประวัติ', 3500); after(); });
+      });
+    },
+    addCar: function (d, after) {
+      var have = d.group.map(function (g) { return g.car; }), dl = h('datalist', { id: 'dl-case-cars' });
+      (d.cars || []).filter(function (c) { return have.indexOf(c) < 0; }).forEach(function (c) { add(dl, h('option', { value: c })); });
+      var car = h('input', { list: 'dl-case-cars', inputmode: 'numeric', placeholder: 'เลขรถ เช่น 3212' }), reason = h('textarea', { placeholder: 'เหตุผล (จำเป็น) เช่น ร่วมจับกุมตามรายงาน' });
+      modal('➕ เพิ่มรถเข้าคดี', [h('p', { class: 'small muted', text: 'สร้างรายงานของรถคันใหม่จากข้อมูลคดีนี้ · ชุดจับกุมตั้งต้นจากเจ้าหน้าที่ของรถในวันนั้น (แก้ได้ภายหลัง)' }), field('รถ', car), dl, field('เหตุผล', reason)], 'เพิ่มรถ', function () {
+        if (!car.value.trim()) { toast('กรุณาเลือกรถ'); return false; }
+        if (reason.value.trim().length < 3) { toast('กรุณาใส่เหตุผล'); return false; }
+        return api('case.addCar', { id: d.id, car: car.value.trim(), reason: reason.value }).then(function (r) { toast('✅ เพิ่มรถ ' + car.value.trim() + ' แล้ว' + (r.status === 'approved' ? '' : ' (รอตรวจ)'), 3500); after(); });
+      });
+    },
+    returnAll: function (d, after) {
+      var note = h('textarea', { placeholder: 'เหตุผลที่ส่งกลับแก้ (ผู้รายงานจะเห็น)' });
+      modal('↩️ ส่งกลับทั้งคดี (' + d.pendingN + ' คัน)', [field('เหตุผล', note)], 'ส่งกลับ', function () {
+        return api('case.decide', { id: d.id, approve: false, note: note.value }).then(function (r) { toast('ส่งกลับแล้ว ' + r.n + ' คัน'); after(); });
+      });
+    }
   };
   VIEWS.suspects = function () {
     setTitle('🔎 ค้นหาผู้ต้องหา', 'ทุกการค้นหาถูกบันทึกในประวัติ');
@@ -2141,7 +2230,7 @@
       add(box, h('div', { class: 'cl-i' },
         h('div', { class: 'row' }, h('b', { text: th(c.date) + (c.time ? ' ' + c.time.replace(':', '.') + ' น.' : '') }), h('span', { class: 'kp ' + (KIND_PILL[c.kind] || 'amber'), text: c.kind }), h('span', { class: 'grow' }),
           h('span', { class: 'cars', text: c.cars.length ? 'รถ ' + c.cars.join(' · ') : '-' })),
-        h('div', { class: 'lb', text: (DASH_CAT[c.label] || c.label) + (c.joint ? ' · จับร่วม ' + c.cars.length + ' คัน' : '') }),
+        h('div', { class: 'lb', text: (DASH_CAT[c.label] || c.label) + (c.joint ? ' · จับร่วม ' + c.cars.length + ' คัน' : '') + (c.expand ? ' · 🔍 ขยายผล' : '') }),
         h('div', { class: 'small', text: c.title + (c.offense && c.title.indexOf(c.offense.replace(/…$/, '')) < 0 ? ' — ' + c.offense : '') }),
         c.evidence.length ? h('div', { class: 'small muted', text: '📦 ' + c.evidence.map(function (x) { return x.item + ' ' + fmtN(x.qty) + ' ' + x.unit; }).join(' · ') }) : null));
     });
@@ -2377,16 +2466,22 @@
   // ======================= ตรวจสอบ/แก้ไขรายการ (v1.17: ตัวกรอง · รายละเอียดผลัด · ย้าย · ผู้ได้ผลงาน · ย้อนกลับ) =======================
   var KIND_ICON = { shift: '🚓', escort: '🚔', assist: '🤝', arrest: '🚨', mission: '🎖️', ticket: '🧾' };
   var HK = [['shift', '🚓', 'ผลัด'], ['ticket', '🧾', 'มีใบสั่ง'], ['arrest', '🚨', 'จับกุม'], ['escort', '🚔', 'ว.42'], ['assist', '🤝', 'ช่วยเหลือ'], ['mission', '🎖️', 'ภารกิจ']];
-  var HSTAT = [['', 'ทุกสถานะ'], ['pending', '⏳ รออนุมัติ'], ['returned', '↩️ ส่งกลับแก้'], ['approved', '✅ อนุมัติแล้ว'], ['edited', '✏️ ถูกแก้ไข'], ['late', '🟠 ส่งเวรช้า'], ['open', '🟢 ยังไม่ส่งเวร/ขบวนค้าง'], ['void', '🗑 ยกเลิก']];
+  var HSTAT = [['', 'ทุกสถานะ'], ['pending', '⏳ รออนุมัติ'], ['returned', '↩️ ส่งกลับแก้'], ['approved', '✅ อนุมัติแล้ว'], ['expand', '🔍 สืบสวนขยายผล'], ['edited', '✏️ ถูกแก้ไข'], ['late', '🟠 ส่งเวรช้า'], ['open', '🟢 ยังไม่ส่งเวร/ขบวนค้าง'], ['void', '🗑 ยกเลิก']];
   var KIND_NAME = { shift: 'ผลัด', escort: 'ว.42', assist: 'ช่วยเหลือ', arrest: 'จับกุม', mission: 'ภารกิจ' };
   function histStatus(r) {
     if (r.kind === 'shift') return r.status === 'ยกเลิก' ? '🗑 ยกเลิกแล้ว' : r.status === 'ส่งเวร' ? '✅ ส่งเวรแล้ว ' + hm(r.checkoutAt) + (r.late ? ' (ช้า)' : '') : r.status === 'ไม่มีผล' ? '⚪ ส่งเวร (ไม่มีผล)' : r.status === 'ยังไม่รายงาน' ? '⚪ ยังไม่รายงาน' : '🟢 เข้าเวรแล้ว ' + hm(r.checkinAt) + ' (ยังไม่ส่งเวร)';
     var m = { void: '🗑 ยกเลิกแล้ว', active: '⏱ กำลังนำขบวน', waiting: '🟣 รอรับกลับ', scheduled: '🕒 ลงนัดไว้', pending: '⏳ รอตรวจ', approved: '✅ อนุมัติแล้ว', returned: '↩️ ส่งกลับแก้', ok: '✅ บันทึกแล้ว' };
+    if (r.mixed && r.st) return Object.keys(r.st).map(function (k) { return (m[k] || k) + ' ' + r.st[k]; }).join(' · ') + ' (คัน)';
     return (m[r.status] || r.status) + (r.at && r.kind !== 'mission' ? ' ' + hm(r.at) : '');
   }
   function histWhen(at) { at = String(at || ''); var d = at.slice(0, 10); return (d === today() ? '' : th(d) + ' ') + hm(at) + ' น.'; }
   function shiftName(s) { return s === 'N' ? 'กลางคืน' : s === 'D' ? 'กลางวัน' : ''; }
-  function histTitle(r) { return r.kind === 'shift' ? (r.shift === 'N' ? '🌙' : '☀️') + ' ผลัด' + shiftName(r.shift) + ' · รถ ' + r.car + ' · เขต ' + r.zone : r.title + (r.car ? ' · รถ ' + r.car : ''); }
+  function histTitle(r) {
+    if (r.kind === 'shift') return (r.shift === 'N' ? '🌙' : '☀️') + ' ผลัด' + shiftName(r.shift) + ' · รถ ' + r.car + ' · เขต ' + r.zone;
+    var xp = r.kind === 'arrest' && r.payload && r.payload.expand ? ' · 🔍 ขยายผล' : '';
+    return r.title + xp + (r.cars && r.cars.length > 1 ? ' · ' + r.cars.length + ' คัน' : r.car ? ' · รถ ' + r.car : '');
+  }
+  function isGroup(r) { return r.kind === 'arrest' && r.ids && r.ids.length > 1; }
   /** การทำงานกับรายการ (ใช้ร่วมกันระหว่างหน้า "ตรวจสอบ/แก้ไขรายการ" กับ "รายละเอียดผลัด") — after() = โหลดหน้าเดิมใหม่ */
   var HOPS = {
     timeline: function (r, title, after) {
@@ -2506,13 +2601,13 @@
       var l = h('div', { class: 'list' });
       function x(ic, t, sub, fn) { add(l, rowLink(ic, t, sub, function () { closeModal(); fn(); })); }
       if (r.kind === 'shift') x('📋', 'รายละเอียดผลัด', 'เจ้าหน้าที่ · ใบสั่งรายข้อหา · ทุกรายการในผลัด', function () { go('shiftDetail', { id: r.id }); });
-      if (r.kind === 'arrest') x('📄', 'เปิดคดี', 'รายละเอียด · ข้อความ CCOC', function () { go('case', { id: r.id }); });
-      if (r.canEdit) x('✏️', 'แก้ไข', r.kind === 'arrest' && r.status === 'approved' ? (can('case.approve') ? 'ผู้อนุมัติแก้เองคงอนุมัติ' : 'แก้แล้วต้องอนุมัติใหม่') : 'ต้องใส่เหตุผล', function () { HOPS.edit(r, after); });
+      if (r.kind === 'arrest') x('📄', 'เปิดคดี', isGroup(r) ? 'รถ ' + r.cars.length + ' คัน · แก้ชุดจับกุมรายคัน · เพิ่ม/ตัดรถ' : 'รายละเอียด · ข้อความ CCOC', function () { go('case', { id: r.id }); });
+      if (r.canEdit) x('✏️', 'แก้ไข', (isGroup(r) ? 'ข้อมูลคดีมีผลทุกคัน · ' : '') + (r.kind === 'arrest' && r.status === 'approved' ? (can('case.approve') ? 'ผู้อนุมัติแก้เองคงอนุมัติ' : 'แก้แล้วต้องอนุมัติใหม่') : 'ต้องใส่เหตุผล'), function () { HOPS.edit(r, after); });
       if (r.canMove) x('📅', 'ย้ายวัน/ผลัด/รถ', 'บันทึกผิดวันหรือผิดรถ (ภายในเดือนเดียวกัน)', function () { HOPS.move(r, after); });
       if (r.canPeople) x('👥', 'เจ้าหน้าที่ที่ได้ผลงาน', (r.people || []).length + ' คน · เพิ่ม/ลดได้', function () { HOPS.people(r, after); });
       x('🕘', 'ประวัติ / ย้อนกลับ', 'ใครแก้อะไร เมื่อไร · ย้อนกลับเป็นค่าเดิม', function () { HOPS.timeline(r, histTitle(r), after); });
       if (r.canRestore) x('↩️', 'กู้คืน', 'นับเข้าสถิติตามเดิม', function () { HOPS.restore(r, after); });
-      if (r.canVoid) x('🗑', 'ยกเลิกรายการ', 'ไม่ลบจริง กู้คืนได้ 7 วัน', function () { HOPS.cancel(r, after); });
+      if (r.canVoid && !isGroup(r)) x('🗑', 'ยกเลิกรายการ', 'ไม่ลบจริง กู้คืนได้ 7 วัน', function () { HOPS.cancel(r, after); });
       modal(histTitle(r), [h('div', { class: 'small muted', text: th(r.dutyDate) + ' · ' + histStatus(r) }), l]);
     }
   };
@@ -2531,13 +2626,15 @@
       h('div', { class: 'hist-main' }, h('span', { class: 'ic', text: KIND_ICON[r.kind] || '•' }), h('div', { class: 'tx' }, h('b', { text: title }), h('small', { text: sub }),
         who ? h('small', { class: 'hist-who', text: '👤 ' + who }) : null,
         r.kind === 'shift' && r.crew && r.crew.length ? h('small', { class: 'hist-crew', text: '🚓 เจ้าหน้าที่: ' + r.crew.join(', ') }) : null,
+        isGroup(r) ? h('small', { class: 'hist-crew', text: '🚓 รถที่ร่วม: ' + r.cars.join(', ') }) : null,
+        r.kind === 'arrest' && r.payload && r.payload.net ? h('small', { class: 'hist-crew', text: '⭐ คดีเครือข่าย/OP: ' + r.payload.net }) : null,
         last ? h('small', { class: 'hist-edit', text: (au.edits ? '✏️ แก้ไขแล้ว ' + au.edits + ' ครั้ง · ' : '') + 'ล่าสุด: ' + last.label + ' โดย ' + last.by + ' ' + histWhen(last.at) }) : null)));
     var btns = h('div', { class: 'hist-btns' });
     if (r.kind === 'shift' && !opt.noDetail) add(btns, h('button', { class: 'btn ghost sm', onclick: function () { go('shiftDetail', { id: r.id }); }, text: '📋 รายละเอียด' + (r.canEdit ? '/แก้ไข' : '') }));
     else if (r.kind !== 'shift' && r.canEdit) add(btns, h('button', { class: 'btn ghost sm', onclick: function () { HOPS.edit(r, after); }, text: '✏️ แก้ไข' }));
     if (r.kind === 'arrest') add(btns, h('button', { class: 'btn ghost sm', onclick: function () { go('case', { id: r.id }); }, text: '📄 เปิดคดี' }));
     if (r.canRestore) add(btns, submitBtn('↩️ กู้คืน', 'ghost sm', function () { return HOPS.restore(r, after); }));
-    if (r.canVoid && !opt.noVoid) add(btns, h('button', { class: 'btn ghost sm red-ghost', onclick: function () { HOPS.cancel(r, after); }, text: '🗑 ยกเลิก' }));
+    if (r.canVoid && !opt.noVoid && !isGroup(r)) add(btns, h('button', { class: 'btn ghost sm red-ghost', onclick: function () { HOPS.cancel(r, after); }, text: '🗑 ยกเลิก' }));
     add(btns, h('button', { class: 'btn ghost sm', onclick: function () { HOPS.timeline(r, title, after); }, text: '🕘 ประวัติ' }));
     add(btns, h('button', { class: 'btn ghost sm', 'aria-label': 'เมนูเพิ่มเติม', onclick: function () { HOPS.more(r, after); }, text: '⋯' }));
     add(el, btns);
@@ -4216,7 +4313,7 @@
         [h('b', { style: 'font-size:22px', text: String(base + i + 1) })],
         [h('b', { style: 'font-size:24px', text: thD(c.date) }), c.time ? h('small', { text: c.time.replace(':', '.') + ' น.' }) : null],
         [c.cars.length > 3 ? h('div', { class: 't', style: 'font-size:17px;font-weight:700;color:#0f2744;text-align:center;max-height:' + (rh - 26) + 'px', text: c.cars.join(' · ') }) : h('b', { style: 'font-size:' + (c.cars.length > 2 ? 20 : 24) + 'px', text: c.cars.join(' · ') || '-' }), h('small', { text: c.joint ? 'จับร่วม ' + c.cars.length + ' คัน' : c.zone ? 'เขต ' + c.zone : '' })],
-        [h('span', { class: 'pill', style: PILL[c.kind] || PILL['ซึ่งหน้า'], text: c.kind })],
+        [h('span', { class: 'pill', style: PILL[c.kind] || PILL['ซึ่งหน้า'], text: c.kind }), c.expand ? h('small', { style: 'font-size:16px;font-weight:700;color:#4d7c0f', text: 'ขยายผล' }) : null],
         [h('div', { class: 't', style: 'font-size:20px;font-weight:600;color:#0f2744;max-height:' + (rh - 8) + 'px', text: c.label })],
         [h('div', { class: 't', style: 'font-size:20px;max-height:' + (sameT ? rh - 8 : 52) + 'px', text: c.title || '-' }), sameT ? null : h('small', { style: 'font-size:16px;white-space:nowrap;overflow:hidden;max-width:560px', text: 'ข้อหา: ' + c.offense })],
         c.kind === 'ตรวจยึด' ? [h('span', { class: 'muted', text: '-' })] : [h('b', { style: 'font-size:22px', text: c.suspects + ' ราย' }), c.warrants ? h('small', { text: c.warrants + ' หมาย' }) : null],
@@ -4532,7 +4629,7 @@
     var ccols = cases.length > 4 ? 2 : 1, cper = Math.ceil(cases.length / ccols), cfs = cper > 4 ? 17 : 20, clh = Math.min(29, Math.floor(118 / Math.max(cper, 1))), ccw = (628 - (ccols - 1) * 20) / ccols;
     cases.forEach(function (x2, i) {
       var n = x2.n, cat = DASH_CAT[n.cat] || n.cat || '', ch = n.k === 'seizure' ? '' : briefCharge(n.cat, n.charge);
-      var txt = n.k === 'seizure' ? n.text : (n.kind === 'หมายจับ' ? 'หมายจับ ' : 'ซึ่งหน้า ') + cat + (ch && ccols === 1 ? ' (' + ch + ')' : '') + ' ' + fmtN(n.n || 1) + (n.kind === 'หมายจับ' ? ' หมาย' : ' ราย');
+      var txt = n.k === 'seizure' ? n.text : (n.kind === 'หมายจับ' ? 'หมายจับ ' : 'ซึ่งหน้า ') + (n.xp ? '(ขยายผล) ' : '') + cat + (ch && ccols === 1 ? ' (' + ch + ')' : '') + ' ' + fmtN(n.n || 1) + (n.kind === 'หมายจับ' ? ' หมาย' : ' ราย');
       var col = Math.floor(i / cper), xx = 18 + col * (ccw + 20), yy = (i % cper) * clh, carW = 62;
       var row = ab('dy-case', xx, yy, ccw, clh, 'font-size:' + cfs + 'px'); add(row, h('b', { text: x2.car }), h('span', { text: fitText(txt, cfs, ccw - carW - 8) })); add(cl, row);
     });
