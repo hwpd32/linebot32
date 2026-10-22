@@ -741,3 +741,11 @@ details.info > div { margin-top: 6px; line-height: 1.5; background: var(--soft);
 .sp-cases { max-height: 60vh; overflow: auto; -webkit-overflow-scrolling: touch; margin-top: 4px; }
 .sp-cases .person.muted { opacity: .6; }
 .sp-pv { border: 2px solid #4d7c0f33; background: #f7fee7; }
+/* v1.17 ตรวจสอบ/แก้ไขรายการ */
+.chip.sm { min-height: 38px; padding: 6px 11px; font-size: 14px; }
+.hf .chips { gap: 5px; }
+.hf-more { margin-top: 8px; } .hf-more summary { cursor: pointer; padding: 4px 0; }
+.hf-sum b { display: block; }
+.re-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px dashed #e5e9f0; }
+.re-row select { grid-column: 1 / -1; width: 100%; }
+.hist-crew { color: #475569; }

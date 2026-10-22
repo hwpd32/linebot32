@@ -203,7 +203,7 @@
         h('p', { class: 'muted small', style: 'margin:0 0 8px', text: 'มีรายการที่บันทึกไว้แล้วซึ่งคล้ายกัน — ตรวจก่อนว่าเป็นเรื่องเดียวกันหรือไม่' }), list,
         h('div', { class: 'row', style: 'margin-top:12px' }, h('button', { class: 'btn gray grow', onclick: function () { fin(false); }, text: '✋ ไม่บันทึก' }),
           h('button', { class: 'btn amber grow', onclick: function () { fin(true); }, text: 'ไม่ซ้ำ บันทึกต่อ' })),
-        h('button', { class: 'btn ghost block', style: 'margin-top:8px', onclick: function () { fin(false); go('history'); }, text: '📝 ดูรายการที่ส่งแล้ว' })));
+        h('button', { class: 'btn ghost block', style: 'margin-top:8px', onclick: function () { fin(false); go('history'); }, text: '🔎 ตรวจสอบ/แก้ไขรายการ' })));
       m.onclick = function (ev) { if (ev.target === m) fin(false); };
     });
   }
@@ -251,7 +251,7 @@
       card('ข้อความที่ส่ง', h('button', { class: 'btn ghost sm', onclick: function () { copyText(message).then(function () { toast('📋 คัดลอกแล้ว'); }); }, text: '📋 คัดลอก' })),
       bar(h('button', { class: 'btn gray', onclick: function () { go(opts.next || 'home', opts.nextParams || {}, !TOP[opts.next || 'home']); }, text: opts.nextText || 'ทำรายการต่อ' }), h('button', { class: 'btn', onclick: closeOrHome, text: 'ปิด' })));
     add($app.children[1], h('div', { class: 'msg-preview', text: message }));
-    add($app.children[1], h('p', { class: 'muted small', style: 'margin:8px 0 0' }, 'ส่งผิด? แก้ไขหรือยกเลิกได้ที่ ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); go('history'); }, text: 'รายการที่ส่งแล้ว' })));
+    add($app.children[1], h('p', { class: 'muted small', style: 'margin:8px 0 0' }, 'ส่งผิด? แก้ไขหรือยกเลิกได้ที่ ', h('a', { href: '#', onclick: function (e) { e.preventDefault(); go('history'); }, text: 'ตรวจสอบ/แก้ไขรายการ' })));
     if (opts.noPost) { status.textContent = 'บันทึกเรียบร้อย'; return; }
     postToChat(message).then(function (r) {
       status.textContent = r === 'sent' ? '💬 ส่งเข้ากลุ่มแล้ว' : r === 'shared' ? '💬 แชร์แล้ว' : r === 'copied' ? '📋 บันทึกแล้ว — คัดลอกข้อความไว้ วางในกลุ่มได้เลย' : 'บันทึกแล้ว (ยังไม่ได้ส่งข้อความเข้ากลุ่ม)';
@@ -583,7 +583,7 @@
     // ทางลัด
     var list = h('div', { class: 'list' });
     if (can('report.own')) add(list, rowLink('🚨', 'รายงานจับกุม', 'แบบ CCOC — ส่งให้ผู้ตรวจอนุมัติ', function () { go('arrest'); }));
-    add(list, rowLink('📝', 'รายการที่ส่งแล้ว', 'ดู · แก้ไข · ยกเลิก', function () { go('history'); }));
+    add(list, rowLink('🔎', 'ตรวจสอบ/แก้ไขรายการ', 'กรองวัน/ผลัด/รถ/ประเภท · แก้ไข · ย้อนกลับ', function () { go('history'); }));
     add(list, rowLink('📅', 'ภาพสรุปผลประจำวัน', 'ส่งให้ผู้บังคับบัญชา', function () { go('daily'); }));
     add(list, rowLink('👤', 'ผลของฉัน', 'ผลงานรายวงรอบ · คะแนนและอันดับ', function () { go('me'); }));
     if (can('pr.make')) add(list, rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'prompt สำหรับ ChatGPT + เบลอรูปบนเครื่อง', function () { go('pr'); }));
@@ -898,7 +898,7 @@
       rowLink('📅', 'ภาพสรุปผลประจำวัน', 'ภาพ 16:9 + รายละเอียดรายรถ · ส่งภาพ + ข้อความเข้าไลน์', function () { go('daily'); }),
       rowLink('📊', 'ภาพรายงานวงรอบ/เดือน', 'Dashboard · ตารางรายรถ · สัดส่วนภารกิจ · คดี', function () { go('dash'); }),
       can('export') ? rowLink('⬇️', 'ส่งออกไฟล์', 'Excel สถิติ · PDF · ข้อความ บก.ทล. · ไฟล์สำรอง', function () { go('export'); }) : null]);
-    group('ผลงานและคะแนน', [rowLink('📝', 'รายการที่ส่งแล้ว', 'ดู · แก้ไข · ยกเลิก', function () { go('history'); }),
+    group('ผลงานและคะแนน', [rowLink('🔎', 'ตรวจสอบ/แก้ไขรายการ', 'กรองวัน/ผลัด/รถ/ประเภท/เจ้าหน้าที่ · แก้ไข · ย้อนกลับ', function () { go('history'); }),
       rowLink('🏅', 'คะแนนผลการปฏิบัติ', 'เกณฑ์ · คะแนนและอันดับ', function () { go('score'); }),
       rowLink('⭐', 'คดีเครือข่าย/OP · คะแนนพิเศษ', can('case.special') ? 'ระบุคดีเครือข่าย/OP · ผู้ร่วมปฏิบัติ · คะแนนพิเศษรายคดี' : 'รายการคดีเครือข่าย/OP และคะแนนพิเศษ', function () { go('special'); }),
       can('score.manage') ? rowLink('⚙️', 'ตั้งเกณฑ์คะแนน', 'ช่วงคะแนน · เกณฑ์มาตรฐาน · ประกาศเข้ากลุ่ม', function () { go('scoreAdmin'); }) : null]);
@@ -1808,7 +1808,7 @@
       body.suspects = body.suspectList.length;
       return api('arrest', body).then(function (r) {
         Draft.del('arrest'); refreshBoot();
-        done(editing ? 'บันทึกการแก้ไขแล้ว (รอตรวจใหม่)' : 'ส่งรายงานจับกุมแล้ว (รอตรวจ)', r.message, { next: 'case', nextParams: { id: r.eventId }, nextText: 'ดูคดีนี้',
+        done(editing ? (r.status === 'approved' ? 'บันทึกการแก้ไขแล้ว (คงอนุมัติ)' : 'บันทึกการแก้ไขแล้ว (รอตรวจใหม่)') : 'ส่งรายงานจับกุมแล้ว (รอตรวจ)', r.message, { next: 'case', nextParams: { id: r.eventId }, nextText: 'ดูคดีนี้',
           extra: can('pr.make') ? h('button', { class: 'btn ghost', style: 'margin-top:10px', onclick: function () { go('pr', { caseId: r.eventId }); }, text: '🖼 สร้างภาพประชาสัมพันธ์จากคดีนี้' }) : null });
       });
     })));
@@ -1864,7 +1864,9 @@
         toast('กำลังสร้าง PDF…', 6000);
         api('export.arrestPdf', { id: d.id }).then(function (r) { var m = h('div'); add(m, fileCard(r, 'PDF รายงานจับกุม')); modal('ส่งออกแล้ว', [m]); }, function (e) { toast(e.message, 4000); });
       }));
-      if (d.canEdit) add(acts, rowLink('✏️', 'แก้ไขรายงาน', d.status === 'approved' ? 'แก้แล้วต้องอนุมัติใหม่' : 'ฉบับเดิมจะถูกแทนที่', function () { go('arrest', { id: d.id }); }));
+      var inTeam = (d.team || []).some(function (t) { return t.pid === S.boot.me.pid; });
+      if (d.canEdit) add(acts, rowLink('✏️', 'แก้ไขรายงาน', d.status === 'approved' ? (can('case.approve') && (!inTeam || S.boot.perms.superadmin) ? 'ท่านเป็นผู้อนุมัติ — แก้แล้วคงอนุมัติ' : 'แก้แล้วต้องอนุมัติใหม่') : 'ฉบับเดิมจะถูกแทนที่', function () { go('arrest', { id: d.id }); }));
+      add(acts, rowLink('🕘', 'ประวัติการแก้ไข', 'ใครแก้อะไร เมื่อไร' + (can('report.editOthers') ? ' · ย้อนกลับเป็นฉบับเดิม' : ''), function () { HOPS.timeline({ kind: 'arrest', id: d.id, dutyDate: d.statDate, status: d.status, title: d.payload.title || '' }, d.payload.title || '', function () { go('case', { id: d.id }, true); }); }));
       if (can('pr.make') && d.status !== 'void') add(acts, rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'ใช้ข้อมูลคดีนี้ (ตัดข้อมูลส่วนบุคคลออกให้)', function () { go('pr', { caseId: d.id }); }));
       add($app, acts);
       add($app, h('p', { class: 'muted small', text: 'ผู้รายงาน: ' + d.reporter + ' · รหัส ' + d.id }));
@@ -2372,135 +2374,335 @@
     return h('div', { class: 'scroll-x' }, t);
   }
 
-  // ======================= รายการที่ส่งแล้ว (แก้ไข/ยกเลิก) =======================
-  var KIND_ICON = { shift: '🚓', escort: '🚔', assist: '🤝', arrest: '🚨', mission: '🎖️' };
-  VIEWS.history = function (params) {
-    setTitle('📝 รายการที่ส่งแล้ว', can('report.editOthers') ? 'ทั้งสถานี · แก้ไข/ยกเลิกได้ทุกรายการ' : 'ของท่าน · แก้ไข/ยกเลิกได้ภายใน 24 ชม.');
-    clear($app);
-    var out = h('div'), last = null;
-    var t = today(), c = cycleOf(t);
-    var presets = [['7 วันล่าสุด', addDays(t, -6), t], ['วงรอบนี้', c.from, c.to], ['30 วัน', addDays(t, -29), t]], sel = 0, chips = h('div', { class: 'chips' });
-    function rc() { clear(chips); presets.forEach(function (p, i) { add(chips, h('button', { class: 'chip' + (i === sel ? ' on' : ''), onclick: function () { sel = i; rc(); load(); }, text: p[0] })); }); }
-    rc(); add($app, h('div', { class: 'card' }, chips), out);
-    function load(fresh) {
-      var p = presets[sel]; last = p; clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(3));
-      live('history.list', { from: p[1], to: p[2] }, function (rows) { if (last !== p) return;
-        clear(out);
-        if (!rows.length) { var e0 = card('ไม่มีรายการ'); add(e0, h('p', { class: 'muted', text: 'ยังไม่มีรายการที่ส่งในช่วงนี้' })); return add(out, e0); }
-        add(out, h('div', { class: 'center', style: 'margin:0 0 8px' }, xlBtn('รายการทั้งหมดเป็น .xlsx', function () {
-          xlsxDownload('รายการที่ส่งแล้ว_' + p[1] + '_' + p[2] + '.xlsx', [{ name: 'รายการที่ส่งแล้ว', head: ['วันที่', 'ผลัด', 'เขต', 'รถ', 'ประเภท', 'รายการ', 'สถานะ', 'ผู้ดำเนินการ', 'แก้ไข (ครั้ง)', 'แก้ไขล่าสุด'],
-            rows: rows.map(function (r) { var au = r.audit || {}, l = au.last;
-              return [r.dutyDate, r.shift === 'N' ? 'กลางคืน' : r.shift === 'D' ? 'กลางวัน' : '', r.zone || '', r.car || '', { shift: 'ผลัด', escort: 'ว.42', assist: 'ช่วยเหลือ', arrest: 'จับกุม', mission: 'ภารกิจ' }[r.kind] || r.kind,
-                r.kind === 'shift' ? 'เจ้าหน้าที่: ' + (r.crew || []).join(', ') + (r.totals && r.totals.ticket ? ' · ใบสั่ง ' + r.totals.ticket : '') : r.title, statusTxt(r).replace(/^\S+\s/, ''),
-                r.kind === 'shift' ? [r.checkinBy && 'เข้าเวร ' + r.checkinBy, r.checkoutBy && 'ส่งเวร ' + r.checkoutBy].filter(Boolean).join(' · ') : [r.reporter && 'บันทึก ' + r.reporter, r.endBy && 'จบ ' + r.endBy].filter(Boolean).join(' · '),
-                au.edits || 0, l ? l.label + ' โดย ' + l.by + ' ' + String(l.at).replace('T', ' ').slice(0, 16) : '']; }) }], [['ช่วงวันที่', th(p[1]) + ' – ' + th(p[2])]]);
-        })));
-        var byDay = {}; rows.forEach(function (r) { (byDay[r.dutyDate] = byDay[r.dutyDate] || []).push(r); });
-        Object.keys(byDay).sort().reverse().forEach(function (d) {
-          var cd = card(th(d)), list = h('div', { class: 'list' });
-          byDay[d].forEach(function (r) { add(list, row(r)); });
-          add(cd, list); add(out, cd);
-        });
-      }, function (e) { clear(out); add(out, errorBox(e.message)); });
-    }
-    function statusTxt(r) {
-      if (r.kind === 'shift') return r.status === 'ยกเลิก' ? '🗑 ยกเลิกแล้ว' : r.status === 'ส่งเวร' ? '✅ ส่งเวรแล้ว ' + hm(r.checkoutAt) : r.status === 'ไม่มีผล' ? '⚪ ส่งเวร (ไม่มีผล)' : '🟢 เข้าเวรแล้ว ' + hm(r.checkinAt) + ' (ยังไม่ส่งเวร)';
-      var m = { void: '🗑 ยกเลิกแล้ว', active: '⏱ กำลังนำขบวน', waiting: '🟣 รอรับกลับ', scheduled: '🕒 ลงนัดไว้', pending: '⏳ รอตรวจ', approved: '✅ อนุมัติแล้ว', returned: '↩️ ส่งกลับแก้', ok: '✅ บันทึกแล้ว' };
-      return (m[r.status] || r.status) + (r.at ? ' ' + hm(r.at) : '');
-    }
-    function row(r) {
-      var title = r.kind === 'shift' ? (r.shift === 'N' ? '🌙' : '☀️') + ' ผลัด' + (r.shift === 'N' ? 'กลางคืน' : 'กลางวัน') + ' · รถ ' + r.car + ' · เขต ' + r.zone : r.title + (r.car ? ' · รถ ' + r.car : '');
-      var sub = statusTxt(r) + (r.kind === 'shift' && r.totals && r.totals.ticket ? ' · ใบสั่ง ' + r.totals.ticket : '');
-      // ผู้ดำเนินการ: ใครเข้าเวร/ส่งเวร/บันทึก/จบขบวน + แก้ไขล่าสุดโดยใคร
-      var who = r.kind === 'shift' ? [r.checkinBy && 'เข้าเวร: ' + r.checkinBy, r.checkoutBy && 'ส่งเวร: ' + r.checkoutBy] : [r.reporter && 'บันทึก: ' + r.reporter, r.endBy && 'จบขบวน: ' + r.endBy];
-      who = who.filter(Boolean).join(' · ');
-      var au = r.audit || {}, last = au.last;
-      var el = h('div', { class: 'list-item hist' + (r.status === 'void' || r.status === 'ยกเลิก' ? ' off' : '') },
-        h('div', { class: 'hist-main' }, h('span', { class: 'ic', text: KIND_ICON[r.kind] || '•' }), h('div', { class: 'tx' }, h('b', { text: title }), h('small', { text: sub }),
-          who ? h('small', { class: 'hist-who', text: '👤 ' + who }) : null,
-          last ? h('small', { class: 'hist-edit', text: (au.edits ? '✏️ แก้ไขแล้ว ' + au.edits + ' ครั้ง · ' : '') + 'ล่าสุด: ' + last.label + ' โดย ' + last.by + ' ' + whenTxt(last.at) }) : null)));
-      var btns = h('div', { class: 'hist-btns' });
-      if (r.canEdit) add(btns, h('button', { class: 'btn ghost sm', onclick: function () { edit(r); }, text: '✏️ แก้ไข' }));
-      if (r.canVoid) add(btns, h('button', { class: 'btn ghost sm red-ghost', onclick: function () { cancel(r); }, text: '🗑 ยกเลิก' }));
-      if (r.canRestore) add(btns, submitBtn('↩️ กู้คืน', 'ghost sm', function () { return restore(r); }));
-      if (r.kind === 'arrest') add(btns, h('button', { class: 'btn ghost sm', onclick: function () { go('case', { id: r.id }); }, text: '📄 เปิดคดี' }));
-      add(btns, h('button', { class: 'btn ghost sm', onclick: function () { timeline(r, title); }, text: '🕘 ประวัติ' }));
-      add(el, btns);
-      return el;
-    }
-    function whenTxt(at) { at = String(at || ''); var d = at.slice(0, 10); return (d === today() ? '' : th(d) + ' ') + hm(at) + ' น.'; }
-    /** ไทม์ไลน์: ใครทำอะไร เมื่อไร แก้จากอะไรเป็นอะไร และเหตุผล */
-    function timeline(r, title) {
+  // ======================= ตรวจสอบ/แก้ไขรายการ (v1.17: ตัวกรอง · รายละเอียดผลัด · ย้าย · ผู้ได้ผลงาน · ย้อนกลับ) =======================
+  var KIND_ICON = { shift: '🚓', escort: '🚔', assist: '🤝', arrest: '🚨', mission: '🎖️', ticket: '🧾' };
+  var HK = [['shift', '🚓', 'ผลัด'], ['ticket', '🧾', 'มีใบสั่ง'], ['arrest', '🚨', 'จับกุม'], ['escort', '🚔', 'ว.42'], ['assist', '🤝', 'ช่วยเหลือ'], ['mission', '🎖️', 'ภารกิจ']];
+  var HSTAT = [['', 'ทุกสถานะ'], ['pending', '⏳ รออนุมัติ'], ['returned', '↩️ ส่งกลับแก้'], ['approved', '✅ อนุมัติแล้ว'], ['edited', '✏️ ถูกแก้ไข'], ['late', '🟠 ส่งเวรช้า'], ['open', '🟢 ยังไม่ส่งเวร/ขบวนค้าง'], ['void', '🗑 ยกเลิก']];
+  var KIND_NAME = { shift: 'ผลัด', escort: 'ว.42', assist: 'ช่วยเหลือ', arrest: 'จับกุม', mission: 'ภารกิจ' };
+  function histStatus(r) {
+    if (r.kind === 'shift') return r.status === 'ยกเลิก' ? '🗑 ยกเลิกแล้ว' : r.status === 'ส่งเวร' ? '✅ ส่งเวรแล้ว ' + hm(r.checkoutAt) + (r.late ? ' (ช้า)' : '') : r.status === 'ไม่มีผล' ? '⚪ ส่งเวร (ไม่มีผล)' : r.status === 'ยังไม่รายงาน' ? '⚪ ยังไม่รายงาน' : '🟢 เข้าเวรแล้ว ' + hm(r.checkinAt) + ' (ยังไม่ส่งเวร)';
+    var m = { void: '🗑 ยกเลิกแล้ว', active: '⏱ กำลังนำขบวน', waiting: '🟣 รอรับกลับ', scheduled: '🕒 ลงนัดไว้', pending: '⏳ รอตรวจ', approved: '✅ อนุมัติแล้ว', returned: '↩️ ส่งกลับแก้', ok: '✅ บันทึกแล้ว' };
+    return (m[r.status] || r.status) + (r.at && r.kind !== 'mission' ? ' ' + hm(r.at) : '');
+  }
+  function histWhen(at) { at = String(at || ''); var d = at.slice(0, 10); return (d === today() ? '' : th(d) + ' ') + hm(at) + ' น.'; }
+  function shiftName(s) { return s === 'N' ? 'กลางคืน' : s === 'D' ? 'กลางวัน' : ''; }
+  function histTitle(r) { return r.kind === 'shift' ? (r.shift === 'N' ? '🌙' : '☀️') + ' ผลัด' + shiftName(r.shift) + ' · รถ ' + r.car + ' · เขต ' + r.zone : r.title + (r.car ? ' · รถ ' + r.car : ''); }
+  /** การทำงานกับรายการ (ใช้ร่วมกันระหว่างหน้า "ตรวจสอบ/แก้ไขรายการ" กับ "รายละเอียดผลัด") — after() = โหลดหน้าเดิมใหม่ */
+  var HOPS = {
+    timeline: function (r, title, after) {
       var box = h('div', { class: 'tl' }, h('div', { class: 'loading' }, spinner()));
-      modal('🕘 ประวัติรายการ', [h('div', { class: 'small muted', text: th(r.dutyDate) + ' · ' + title }), box], null);
+      modal('🕘 ประวัติรายการ', [h('div', { class: 'small muted', text: th(r.dutyDate) + ' · ' + (title || histTitle(r)) }), box], null);
       api('history.timeline', { id: r.id }, { fresh: true }).then(function (list) {
         clear(box);
         if (!list.length) return add(box, h('p', { class: 'muted', text: 'ยังไม่มีประวัติ' }));
         list.forEach(function (x) {
+          var act = null;
+          if (x.revert === 'auto') act = h('button', { class: 'btn ghost sm', style: 'margin-top:6px', onclick: function () { HOPS.revert(r, x, after); }, text: '↩️ ย้อนกลับเป็นค่าก่อนแก้ครั้งนี้' });
+          else if (x.revert === 'restore' && (r.status === 'void' || r.status === 'ยกเลิก')) act = h('button', { class: 'btn ghost sm', style: 'margin-top:6px', onclick: function () { HOPS.revert(r, x, after); }, text: '↩️ กู้คืนรายการ' });
+          else if (x.revert === 'manual') act = h('div', { class: 'small muted', style: 'margin-top:4px', text: 'ย้อนอัตโนมัติไม่ได้ — การแก้ครั้งนี้บันทึกก่อน v1.17 (เก็บเฉพาะยอดรวม) · ใช้ "แก้ไขใบสั่ง" ในหน้ารายละเอียดผลัดแทน' });
           add(box, h('div', { class: 'tl-item' }, h('div', { class: 'tl-dot' }), h('div', { class: 'tl-body' },
-            h('div', null, h('b', { text: x.label }), h('span', { class: 'small muted', text: ' · ' + whenTxt(x.at) })),
+            h('div', null, h('b', { text: x.label }), h('span', { class: 'small muted', text: ' · ' + histWhen(x.at) })),
             h('div', { class: 'small', text: '👤 ' + (x.by || '-') }),
             x.lines.length ? h('ul', { class: 'tl-lines' }, x.lines.map(function (l) { return h('li', { text: l }); })) : null,
-            x.reason ? h('div', { class: 'small muted', text: 'เหตุผล: ' + x.reason }) : null)));
+            x.reason ? h('div', { class: 'small muted', text: 'เหตุผล: ' + x.reason }) : null, act)));
         });
       }, function (e) { clear(box); add(box, errorBox(e.message)); });
-    }
-    function edit(r) {
-      if (r.kind === 'shift') {
-        var q = { d: r.dutyDate, s: r.shift, car: r.car };
-        if (r.status === 'ส่งเวร' || r.status === 'ไม่มีผล') return go('checkout', q);
-        return modal('แก้ไขผลัดนี้', [h('p', { class: 'muted', text: 'เลือกสิ่งที่ต้องการแก้' }),
-          h('button', { class: 'btn block', style: 'margin-bottom:8px', onclick: function () { closeModal(); go('checkin', q); }, text: '🟢 แก้เจ้าหน้าที่/รายการตรวจ (เข้าเวร)' }),
-          h('button', { class: 'btn green block', onclick: function () { closeModal(); go('checkout', q); }, text: '✅ ส่งเวร/แก้ผลการปฏิบัติ' })]);
-      }
+    },
+    revert: function (r, x, after) {
+      var why = h('textarea', { placeholder: 'เหตุผล (จำเป็น) เช่น แก้ผิด / ผู้บังคับบัญชาสั่ง' });
+      modal(x.revert === 'restore' ? '↩️ กู้คืนรายการ' : '↩️ ย้อนกลับการแก้ไข', [h('p', { class: 'small', text: x.revert === 'restore' ? 'รายการจะกลับมานับในสถิติตามเดิม' : 'ระบบคืนค่าก่อน "' + x.label + '" เมื่อ ' + histWhen(x.at) + ' โดยบันทึกเป็นการแก้ไขครั้งใหม่ (ย้อนกลับซ้ำได้)' }),
+        x.lines.length ? h('ul', { class: 'tl-lines' }, x.lines.map(function (l) { return h('li', { text: l }); })) : null, x.revert === 'restore' ? null : field('เหตุผล', why)], x.revert === 'restore' ? 'กู้คืน' : 'ย้อนกลับ', function () {
+        if (x.revert !== 'restore' && why.value.trim().length < 3) { toast('กรุณาใส่เหตุผล'); return false; }
+        return api('history.revert', { target: x.target, key: x.key, reason: why.value || 'กู้คืน' }).then(function () { apiInvalidate(); refreshBoot(); toast('↩️ ย้อนกลับแล้ว — บันทึกในประวัติ', 3500); if (after) after(); });
+      });
+    },
+    edit: function (r, after) {
+      if (r.kind === 'shift') return go('shiftDetail', { id: r.id });
       if (r.kind === 'arrest') return go('arrest', { id: r.id });
       if (r.kind === 'escort' && /^(scheduled|active|waiting)$/.test(r.status)) return go('escort', { id: r.id }); // ขบวนที่ยังไม่จบ แก้ที่หน้า ว.42
-      if (r.kind === 'escort') return editEscort(r);
-      if (r.kind === 'assist') return editAssist(r);
+      if (r.kind === 'escort') return HOPS.editEscort(r);
+      if (r.kind === 'assist') return HOPS.editAssist(r);
+      if (r.kind === 'mission') return HOPS.editMission(r, after);
       toast('รายการประเภทนี้แก้ไขจากหน้านี้ไม่ได้');
-    }
-    function reasonBox() { return h('textarea', { placeholder: 'เหตุผลการแก้ไข (จำเป็น)' }); }
-    function afterEdit(res) { apiInvalidate(); refreshBoot(); done('แก้ไขแล้ว', res.message, { next: 'history', nextText: 'กลับไปรายการ' }); }
-    function editEscort(r) {
+    },
+    afterEdit: function (res) { apiInvalidate(); refreshBoot(); done('แก้ไขแล้ว', res.message, { next: S.view === 'shiftDetail' ? 'shiftDetail' : 'history', nextParams: S.params, nextText: 'กลับไปรายการ' }); },
+    editEscort: function (r) {
       var p = r.payload || {};
       var name = h('input', { value: p.name || '', placeholder: 'ชื่อขบวน' }), from = h('input', { value: p.from || '', placeholder: 'ต้นทาง' }), to = h('input', { value: p.to || '', placeholder: 'ปลายทาง' });
       var hf = h('input', { value: p.handoverFrom || '', placeholder: 'รับช่วงจาก' }), ht = h('input', { value: p.handoverTo || '', placeholder: 'ส่งต่อให้' }), res = h('input', { value: p.result || '', placeholder: 'ผล/หมายเหตุ' });
-      var rt = h('input', { type: 'checkbox', checked: p.trips === 2 }), reason = reasonBox();
+      var rt = h('input', { type: 'checkbox', checked: p.trips === 2 }), reason = h('textarea', { placeholder: 'เหตุผลการแก้ไข (จำเป็น)' });
       modal('แก้ไข ว.42', [h('label', { class: 'f', text: 'ชื่อขบวน' }), name, h('div', { class: 'row2' }, from, to), h('div', { class: 'row2' }, hf, ht), res,
         p.end ? h('label', { class: 'cap' }, rt, ' ไป-กลับ (นับ 1 ขบวน)') : null, h('label', { class: 'f', text: 'เหตุผล' }), reason], 'บันทึกการแก้ไข', function () {
-        return api('event.update', { id: r.id, reason: reason.value, fields: { name: name.value, from: from.value, to: to.value, handoverFrom: hf.value, handoverTo: ht.value, result: res.value, roundTrip: rt.checked } }).then(afterEdit);
+        return api('event.update', { id: r.id, reason: reason.value, fields: { name: name.value, from: from.value, to: to.value, handoverFrom: hf.value, handoverTo: ht.value, result: res.value, roundTrip: rt.checked } }).then(HOPS.afterEdit);
       });
-    }
-    function editAssist(r) {
-      var p = r.payload || {}, type = r.title, types = h('div', { class: 'chips' });
+    },
+    editAssist: function (r) {
+      var p = r.payload || {}, type = r.sub || r.title, types = h('div', { class: 'chips' });
       function rt() { clear(types); S.boot.assistTypes.forEach(function (k) { add(types, h('button', { class: 'chip' + (k === type ? ' on' : ''), onclick: function () { type = k; rt(); }, text: k })); }); }
       rt();
       var road = h('input', { value: p.road || '', placeholder: 'ทล.' }), km = h('input', { value: p.km || '', placeholder: 'กม.' }), dir = h('input', { value: p.dir || '', placeholder: 'ขาเข้า/ขาออก' });
       var dead = h('input', { type: 'number', value: p.dead || 0 }), inj = h('input', { type: 'number', value: p.injured || 0 }), dmg = h('input', { type: 'number', value: p.damage || '', placeholder: 'ความเสียหาย (บาท)' });
-      var res = h('textarea', { value: p.result || '', placeholder: 'การดำเนินการ/ผล' }), reason = reasonBox();
+      var res = h('textarea', { placeholder: 'การดำเนินการ/ผล' }), reason = h('textarea', { placeholder: 'เหตุผลการแก้ไข (จำเป็น)' });
       res.value = p.result || '';
       modal('แก้ไขช่วยเหลือ/เหตุการณ์', [types, h('div', { class: 'row2' }, road, km), dir, h('label', { class: 'f', text: 'เสียชีวิต / บาดเจ็บ' }), h('div', { class: 'row2' }, dead, inj), dmg, res, h('label', { class: 'f', text: 'เหตุผล' }), reason], 'บันทึกการแก้ไข', function () {
-        return api('event.update', { id: r.id, reason: reason.value, fields: { type: type, road: road.value, km: km.value, dir: dir.value, dead: dead.value, injured: inj.value, damage: dmg.value, result: res.value } }).then(afterEdit);
+        return api('event.update', { id: r.id, reason: reason.value, fields: { type: type, road: road.value, km: km.value, dir: dir.value, dead: dead.value, injured: inj.value, damage: dmg.value, result: res.value } }).then(HOPS.afterEdit);
       });
-    }
-    function cancel(r) {
+    },
+    editMission: function (r, after) {
+      var p = r.payload || {}, type = r.sub, types = h('div', { class: 'chips' });
+      function rt() { clear(types); (S.boot.missionTypes || []).forEach(function (k) { add(types, h('button', { class: 'chip' + (k === type ? ' on' : ''), onclick: function () { type = k; rt(); }, text: k })); }); }
+      rt();
+      var title = h('input', { value: p.title || '', placeholder: 'เรื่อง/ชื่อภารกิจ' }), place = h('input', { value: p.place || '', placeholder: 'สถานที่' }), time = h('input', { value: p.time || '', placeholder: 'เวลา เช่น 09.00–12.00 น.' });
+      var detail = h('textarea', { placeholder: 'ผลการปฏิบัติ' }), reason = h('textarea', { placeholder: 'เหตุผลการแก้ไข (จำเป็น)' });
+      detail.value = p.detail || '';
+      modal('แก้ไขภารกิจ', [h('label', { class: 'f', text: 'ประเภท' }), types, field('เรื่อง', title), h('div', { class: 'row2' }, field('สถานที่', place), field('เวลา', time)), field('ผลการปฏิบัติ', detail), field('เหตุผล', reason)], 'บันทึกการแก้ไข', function () {
+        return api('event.update', { id: r.id, reason: reason.value, fields: { type: type, title: title.value, place: place.value, time: time.value, detail: detail.value } }).then(function () { apiInvalidate(); toast('✅ แก้ไขภารกิจแล้ว'); if (after) after(); });
+      });
+    },
+    /** ย้ายวัน/ผลัด/รถ (ภายในเดือนเดียวกัน) */
+    move: function (r, after) {
+      var ym = String(r.dutyDate).slice(0, 7), last = new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7), 0)).getUTCDate();
+      var date = h('input', { type: 'date', value: r.dutyDate, min: ym + '-01', max: ym + '-' + pad(last) }), sh = r.shift || (r.kind === 'mission' ? '' : 'D'), shBox = h('div', { class: 'chips' });
+      function drawSh() { clear(shBox); (r.kind === 'mission' ? [['', 'ไม่ระบุ'], ['D', '☀️ กลางวัน'], ['N', '🌙 กลางคืน']] : [['D', '☀️ กลางวัน'], ['N', '🌙 กลางคืน']]).forEach(function (x) { add(shBox, h('button', { class: 'chip' + (sh === x[0] ? ' on' : ''), type: 'button', onclick: function () { sh = x[0]; drawSh(); }, text: x[1] })); }); }
+      drawSh();
+      var dl = h('datalist', { id: 'dl-cars' }); (S.knownCars || []).forEach(function (c) { add(dl, h('option', { value: c })); });
+      var car = h('input', { value: r.car || '', list: 'dl-cars', inputmode: 'numeric', placeholder: r.kind === 'mission' ? 'เว้นว่างได้' : 'เลขรถ เช่น 3212' }), reason = h('textarea', { placeholder: 'เหตุผล (จำเป็น) เช่น บันทึกผิดรถ' });
+      modal('📅 ย้ายวัน/ผลัด/รถ', [h('p', { class: 'small muted', text: histTitle(r) + ' — ' + th(r.dutyDate) + (r.shift ? ' ' + shiftName(r.shift) : '') }), field('วันที่ (ภายในเดือนเดียวกัน)', date), h('label', { class: 'f', text: 'ผลัด' }), shBox,
+        field('รถ', car, r.kind === 'mission' ? 'ภารกิจไม่ผูกรถก็ได้' : 'ผู้ได้ผลงานเปลี่ยนเป็นเจ้าหน้าที่ของรถผลัดใหม่ (ถ้าเคยกำหนดเองจะคงรายชื่อเดิม)'), dl, field('เหตุผล', reason)], 'ย้ายรายการ', function () {
+        return api('event.move', { id: r.id, dutyDate: date.value, shift: sh, car: car.value.trim(), reason: reason.value }).then(function () { apiInvalidate(); refreshBoot(); toast('✅ ย้ายแล้ว — บันทึกในประวัติ', 3500); if (after) after(); });
+      });
+    },
+    /** เจ้าหน้าที่ที่ได้ผลงาน */
+    people: function (r, after) {
+      var list = (r.pids || []).slice(), box = h('div');
+      function draw() {
+        clear(box);
+        add(box, h('label', { class: 'f', text: 'รายชื่อ ' + list.length + ' คน' }), h('div', { class: 'pchips' }, list.map(function (pid) { var p = person(pid); return h('span', { class: 'pc' }, p.short || p.name, h('button', { type: 'button', 'aria-label': 'เอาออก', onclick: function () { list = list.filter(function (x) { return x !== pid; }); draw(); }, text: '×' })); })),
+          h('button', { class: 'btn ghost sm', type: 'button', style: 'margin-top:6px', onclick: function () { pickPerson('เพิ่มเจ้าหน้าที่', function (p) { if (list.indexOf(p.pid) < 0) list.push(p.pid); HOPS.people(Object.assign({}, r, { pids: list }), after); }, function (p) { return list.indexOf(p.pid) < 0; }); }, text: '➕ เพิ่มคน' }));
+      }
+      var reason = h('textarea', { placeholder: 'เหตุผล (จำเป็น) เช่น มาเสริมกลางทาง' });
+      draw();
+      modal('👥 เจ้าหน้าที่ที่ได้ผลงาน', [h('p', { class: 'small muted', text: histTitle(r) + ' · ทุกคนในรายชื่อได้ผลงานรายการนี้ (นับรายคน)' }), box, field('เหตุผล', reason)], 'บันทึกรายชื่อ', function () {
+        if (!list.length) { toast('ต้องมีอย่างน้อย 1 คน'); return false; }
+        return api('event.people', { id: r.id, pids: list, reason: reason.value }).then(function () { apiInvalidate(); toast('✅ บันทึกรายชื่อแล้ว'); if (after) after(); });
+      });
+    },
+    cancel: function (r, after) {
       var reason = h('textarea', { placeholder: 'เหตุผลการยกเลิก (จำเป็น) เช่น ส่งผิดรถ / ซ้ำ' });
       var what = r.kind === 'shift' ? 'รายงานผลัดนี้ทั้งหมด (เข้าเวร + ผลการปฏิบัติ)' : r.title;
       modal('ยกเลิก ' + what, [h('p', { class: 'muted small', text: 'ระบบจะไม่นับรายการนี้ในสถิติ และเก็บประวัติไว้ว่าใครยกเลิกเมื่อไร (ไม่ลบจริง)' }), reason], '🗑 ยืนยันยกเลิก', function () {
         var call = r.kind === 'shift' ? api('shift.void', { id: r.id, reason: reason.value }) : api('event.void', { id: r.id, reason: reason.value });
         return call.then(function () {
-          apiInvalidate(); refreshBoot(); load(true);
-          toastAction('🗑 ยกเลิกแล้ว', '↩️ เลิกทำ', function () { restore(r).then(null, function (e) { toast('⚠️ ' + e.message, 4000); }); });
+          apiInvalidate(); refreshBoot(); if (after) after();
+          toastAction('🗑 ยกเลิกแล้ว', '↩️ เลิกทำ', function () { HOPS.restore(r, after).then(null, function (e) { toast('⚠️ ' + e.message, 4000); }); });
         });
       });
+    },
+    restore: function (r, after) {
+      return api(r.kind === 'shift' ? 'shift.restore' : 'event.restore', { id: r.id }).then(function () { toast('↩️ กู้คืนแล้ว — นับเข้าสถิติตามเดิม', 3500); apiInvalidate(); refreshBoot(); if (after) after(); });
+    },
+    /** เมนู ⋯ ของรายการ */
+    more: function (r, after) {
+      var l = h('div', { class: 'list' });
+      function x(ic, t, sub, fn) { add(l, rowLink(ic, t, sub, function () { closeModal(); fn(); })); }
+      if (r.kind === 'shift') x('📋', 'รายละเอียดผลัด', 'เจ้าหน้าที่ · ใบสั่งรายข้อหา · ทุกรายการในผลัด', function () { go('shiftDetail', { id: r.id }); });
+      if (r.kind === 'arrest') x('📄', 'เปิดคดี', 'รายละเอียด · ข้อความ CCOC', function () { go('case', { id: r.id }); });
+      if (r.canEdit) x('✏️', 'แก้ไข', r.kind === 'arrest' && r.status === 'approved' ? (can('case.approve') ? 'ผู้อนุมัติแก้เองคงอนุมัติ' : 'แก้แล้วต้องอนุมัติใหม่') : 'ต้องใส่เหตุผล', function () { HOPS.edit(r, after); });
+      if (r.canMove) x('📅', 'ย้ายวัน/ผลัด/รถ', 'บันทึกผิดวันหรือผิดรถ (ภายในเดือนเดียวกัน)', function () { HOPS.move(r, after); });
+      if (r.canPeople) x('👥', 'เจ้าหน้าที่ที่ได้ผลงาน', (r.people || []).length + ' คน · เพิ่ม/ลดได้', function () { HOPS.people(r, after); });
+      x('🕘', 'ประวัติ / ย้อนกลับ', 'ใครแก้อะไร เมื่อไร · ย้อนกลับเป็นค่าเดิม', function () { HOPS.timeline(r, histTitle(r), after); });
+      if (r.canRestore) x('↩️', 'กู้คืน', 'นับเข้าสถิติตามเดิม', function () { HOPS.restore(r, after); });
+      if (r.canVoid) x('🗑', 'ยกเลิกรายการ', 'ไม่ลบจริง กู้คืนได้ 7 วัน', function () { HOPS.cancel(r, after); });
+      modal(histTitle(r), [h('div', { class: 'small muted', text: th(r.dutyDate) + ' · ' + histStatus(r) }), l]);
     }
-    /** กู้คืนรายการ/ผลัดที่ยกเลิก (ภายใน 7 วัน) */
-    function restore(r) {
-      return api(r.kind === 'shift' ? 'shift.restore' : 'event.restore', { id: r.id }).then(function () {
-        toast('↩️ กู้คืนแล้ว — นับเข้าสถิติตามเดิม', 3500); apiInvalidate(); refreshBoot(); load(true);
+  };
+  /** แถวรายการ (ใช้ทั้งหน้ารายการและรายละเอียดผลัด) */
+  function histRow(r, after, opt) {
+    opt = opt || {};
+    var title = opt.short && r.kind !== 'shift' ? r.title : histTitle(r);
+    var sub = histStatus(r);
+    if (r.kind === 'shift' && r.totals) { var tt = r.totals, bits = []; if (+tt.ticket) bits.push('ใบสั่ง ' + tt.ticket); if (+tt.arrest) bits.push('จับกุม ' + tt.arrest); if (+tt.escort) bits.push('ว.42 ' + tt.escort); if (+tt.assist) bits.push('ช่วยเหลือ ' + tt.assist); if (bits.length) sub += ' · ' + bits.join(' · '); }
+    if (r.kind === 'mission' && !r.car && r.shift === '') sub += ' · ไม่ผูกรถ';
+    var who = r.kind === 'shift' ? [r.checkinBy && 'เข้าเวร: ' + r.checkinBy, r.checkoutBy && 'ส่งเวร: ' + r.checkoutBy]
+      : [r.reporter && 'บันทึก: ' + r.reporter, r.people && r.people.length ? (r.kind === 'arrest' ? 'ชุดจับกุม: ' : 'ผู้ได้ผลงาน: ') + r.people.slice(0, 8).join(', ') + (r.people.length > 8 ? ' +' + (r.people.length - 8) : '') : '', r.endBy && 'จบขบวน: ' + r.endBy];
+    who = who.filter(Boolean).join(' · ');
+    var au = r.audit || {}, last = au.last;
+    var el = h('div', { class: 'list-item hist' + (r.status === 'void' || r.status === 'ยกเลิก' ? ' off' : '') },
+      h('div', { class: 'hist-main' }, h('span', { class: 'ic', text: KIND_ICON[r.kind] || '•' }), h('div', { class: 'tx' }, h('b', { text: title }), h('small', { text: sub }),
+        who ? h('small', { class: 'hist-who', text: '👤 ' + who }) : null,
+        r.kind === 'shift' && r.crew && r.crew.length ? h('small', { class: 'hist-crew', text: '🚓 เจ้าหน้าที่: ' + r.crew.join(', ') }) : null,
+        last ? h('small', { class: 'hist-edit', text: (au.edits ? '✏️ แก้ไขแล้ว ' + au.edits + ' ครั้ง · ' : '') + 'ล่าสุด: ' + last.label + ' โดย ' + last.by + ' ' + histWhen(last.at) }) : null)));
+    var btns = h('div', { class: 'hist-btns' });
+    if (r.kind === 'shift' && !opt.noDetail) add(btns, h('button', { class: 'btn ghost sm', onclick: function () { go('shiftDetail', { id: r.id }); }, text: '📋 รายละเอียด' + (r.canEdit ? '/แก้ไข' : '') }));
+    else if (r.kind !== 'shift' && r.canEdit) add(btns, h('button', { class: 'btn ghost sm', onclick: function () { HOPS.edit(r, after); }, text: '✏️ แก้ไข' }));
+    if (r.kind === 'arrest') add(btns, h('button', { class: 'btn ghost sm', onclick: function () { go('case', { id: r.id }); }, text: '📄 เปิดคดี' }));
+    if (r.canRestore) add(btns, submitBtn('↩️ กู้คืน', 'ghost sm', function () { return HOPS.restore(r, after); }));
+    if (r.canVoid && !opt.noVoid) add(btns, h('button', { class: 'btn ghost sm red-ghost', onclick: function () { HOPS.cancel(r, after); }, text: '🗑 ยกเลิก' }));
+    add(btns, h('button', { class: 'btn ghost sm', onclick: function () { HOPS.timeline(r, title, after); }, text: '🕘 ประวัติ' }));
+    add(btns, h('button', { class: 'btn ghost sm', 'aria-label': 'เมนูเพิ่มเติม', onclick: function () { HOPS.more(r, after); }, text: '⋯' }));
+    add(el, btns);
+    return el;
+  }
+  VIEWS.history = function () {
+    var all = can('view.people') || can('report.editOthers');
+    setTitle('🔎 ตรวจสอบ/แก้ไขรายการ', can('report.editOthers') ? 'ทั้งสถานี · แก้ไข/ย้อนกลับได้ทุกรายการ (ต้องใส่เหตุผล)' : all ? 'ทั้งสถานี · แก้ไขได้เฉพาะของท่านภายใน 24 ชม.' : 'ของท่าน · แก้ไข/ยกเลิกได้ภายใน 24 ชม.');
+    clear($app);
+    var t = today(), c = cycleOf(t), pc = cycleOf(addDays(c.from, -1)), mFrom = t.slice(0, 8) + '01', pmEnd = addDays(mFrom, -1);
+    var PRE = [['today', 'วันนี้', t, t], ['yday', 'เมื่อวาน', addDays(t, -1), addDays(t, -1)], ['7d', '7 วัน', addDays(t, -6), t], ['cycle', 'วงรอบนี้', c.from, c.to], ['pcycle', 'วงรอบก่อน', pc.from, pc.to],
+      ['month', 'เดือนนี้', mFrom, t], ['pmonth', 'เดือนก่อน', pmEnd.slice(0, 8) + '01', pmEnd], ['custom', '📅 เลือกเอง', '', '']];
+    var F = S.hf = S.hf || { preset: '7d', from: addDays(t, -6), to: t, shift: '', car: '', zone: 0, kinds: [], status: '', pid: '', q: '' };
+    var out = h('div'), fc = h('div', { class: 'card hf' }), seq = 0, cars = S.knownCars || [], clearBtn = null;
+    add($app, fc, out);
+    function chip(on, text, fn) { return h('button', { class: 'chip sm' + (on ? ' on' : ''), type: 'button', onclick: fn, text: text }); }
+    function anyMore() { return !!(F.car || F.zone || F.status || F.pid); }
+    function drawF() {
+      clear(fc);
+      add(fc, h('div', { class: 'chips' }, PRE.map(function (p) { return chip(F.preset === p[0], p[1], function () { F.preset = p[0]; if (p[2]) { F.from = p[2]; F.to = p[3]; } drawF(); if (p[2]) load(); }); })));
+      if (F.preset === 'custom') {
+        var a = h('input', { type: 'date', value: F.from, max: t }), b = h('input', { type: 'date', value: F.to, max: t });
+        add(fc, h('div', { class: 'row2', style: 'margin-top:8px;align-items:flex-end' }, field('ตั้งแต่', a), field('ถึง', b), h('button', { class: 'btn sm', type: 'button', style: 'flex:0 0 auto;margin-bottom:12px', onclick: function () {
+          if (!a.value || !b.value) return toast('กรุณาเลือกวันที่');
+          if (a.value > b.value) { var x = a.value; a.value = b.value; b.value = x; }
+          if ((new Date(b.value) - new Date(a.value)) / 864e5 > 92) return toast('เลือกได้ครั้งละไม่เกิน 3 เดือน');
+          F.from = a.value; F.to = b.value; load();
+        }, text: 'ดู' })));
+      }
+      add(fc, h('div', { class: 'small muted', style: 'margin:6px 0 4px', text: 'ช่วง ' + th(F.from) + (F.to !== F.from ? ' – ' + th(F.to) : '') }));
+      add(fc, h('div', { class: 'chips' }, [['', 'ทุกผลัด'], ['D', '☀️ กลางวัน'], ['N', '🌙 กลางคืน']].map(function (x) { return chip(F.shift === x[0], x[1], function () { F.shift = x[0]; drawF(); load(); }); })));
+      add(fc, h('div', { class: 'chips', style: 'margin-top:6px' }, [chip(!F.kinds.length, 'ทุกประเภท', function () { F.kinds = []; drawF(); load(); })].concat(HK.map(function (k) {
+        var on = F.kinds.indexOf(k[0]) >= 0;
+        return chip(on, k[1] + ' ' + k[2], function () { F.kinds = on ? F.kinds.filter(function (x) { return x !== k[0]; }) : F.kinds.concat([k[0]]); drawF(); load(); });
+      }))));
+      var q = h('input', { type: 'search', value: F.q, placeholder: '🔎 ค้นหา: ข้อหา หัวข้อคดี ชื่อขบวน สถานที่ ทล./กม. ชื่อเจ้าหน้าที่ เลขรถ', enterkeyhint: 'search' }), qt = null;
+      q.oninput = function () { clearTimeout(qt); qt = setTimeout(function () { if (F.q !== q.value.trim()) { F.q = q.value.trim(); load(); } }, 700); };
+      q.onkeydown = function (e) { if (e.key === 'Enter') { clearTimeout(qt); F.q = q.value.trim(); load(); } };
+      add(fc, h('div', { class: 'search', style: 'margin-top:8px;position:static;padding:0' }, q));
+      var more = h('details', { class: 'hf-more' }, h('summary', { class: 'small', text: '⚙️ ตัวกรองเพิ่มเติม' + (anyMore() ? ' (ใช้อยู่)' : '') }));
+      if (anyMore()) more.open = true;
+      var carSel = h('select', null, h('option', { value: '', text: 'ทุกคัน' }));
+      cars.forEach(function (x) { add(carSel, h('option', { value: x, text: 'รถ ' + x, selected: F.car === x })); });
+      if (F.car && cars.indexOf(F.car) < 0) add(carSel, h('option', { value: F.car, text: 'รถ ' + F.car, selected: true }));
+      carSel.onchange = function () { F.car = carSel.value; drawF(); load(); };
+      var zSel = h('select', null, h('option', { value: '0', text: 'ทุกเขต' }));
+      for (var z = 1; z <= 6; z++) add(zSel, h('option', { value: String(z), text: (S.boot.zones && S.boot.zones[z]) || 'เขต ' + z, selected: +F.zone === z }));
+      zSel.onchange = function () { F.zone = +zSel.value; drawF(); load(); };
+      var stSel = h('select'); HSTAT.forEach(function (x) { add(stSel, h('option', { value: x[0], text: x[1], selected: F.status === x[0] })); });
+      stSel.onchange = function () { F.status = stSel.value; drawF(); load(); };
+      add(more, h('div', { class: 'grid2' }, field('รถ', carSel), field('เขต', zSel)), field('สถานะ', stSel));
+      if (all) add(more, h('label', { class: 'f', text: 'เจ้าหน้าที่ (อยู่ในรถ/ชุดจับกุม/ผู้บันทึก/ผู้แก้)' }), h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap' },
+        h('button', { class: 'btn ghost sm', type: 'button', onclick: function () { pickPerson('เลือกเจ้าหน้าที่', function (p) { F.pid = p.pid; drawF(); load(); }); }, text: F.pid ? '👤 ' + (person(F.pid).short || person(F.pid).name) : '👤 เลือกเจ้าหน้าที่' }),
+        F.pid ? h('button', { class: 'btn gray sm', type: 'button', onclick: function () { F.pid = ''; drawF(); load(); }, text: '× ล้าง' }) : null));
+      add(fc, more);
+      clearBtn = h('button', { class: 'btn ghost sm', type: 'button', style: 'margin-top:8px', onclick: function () { F.shift = ''; F.car = ''; F.zone = 0; F.kinds = []; F.status = ''; F.pid = ''; F.q = ''; drawF(); load(); }, text: '↺ ล้างตัวกรองทั้งหมด' });
+      add(fc, clearBtn); syncClear();
+    }
+    function syncClear() { if (clearBtn) clearBtn.hidden = !(anyMore() || F.q || F.shift || F.kinds.length); }
+    function load() {
+      var my = ++seq; syncClear(); clear(out); add(out, h('div', { class: 'loading' }, spinner()), skeleton(3));
+      api('history.list', { from: F.from, to: F.to, v2: 1, f: { shift: F.shift, car: F.car, zone: F.zone, kinds: F.kinds, status: F.status, pid: F.pid, q: F.q } }, { fresh: true }).then(function (d) {
+        if (my !== seq || S.view !== 'history') return;
+        if (d.cars && d.cars.length) { var had = cars.length; S.knownCars = cars = d.cars; if (!had) drawF(); }
+        render(d);
+      }, function (e) { if (my === seq) { clear(out); add(out, errorBox(e.message)); } });
+    }
+    function render(d) {
+      clear(out);
+      var rows = d.rows || [];
+      var sum = h('div', { class: 'card hf-sum' }, h('b', { text: 'พบ ' + d.total + ' รายการ' + (d.total > rows.length ? ' (แสดง ' + rows.length + ' รายการล่าสุด — กรองเพิ่มเพื่อหาให้แคบลง)' : '') }));
+      var cn = d.counts || {}, bits = HK.filter(function (k) { return cn[k[0]]; }).map(function (k) { return k[1] + ' ' + k[2] + ' ' + cn[k[0]]; });
+      if (bits.length) add(sum, h('div', { class: 'small muted', text: bits.join(' · ') }));
+      if (rows.length) add(sum, h('div', { style: 'margin-top:6px' }, xlBtn('รายการทั้งหมดเป็น .xlsx', function () {
+        xlsxDownload('ตรวจสอบรายการ_' + F.from + '_' + F.to + '.xlsx', [{ name: 'รายการ', head: ['วันที่', 'ผลัด', 'เขต', 'รถ', 'ประเภท', 'รายการ', 'สถานะ', 'ผู้ดำเนินการ', 'ผู้ได้ผลงาน/ชุดจับกุม', 'แก้ไข (ครั้ง)', 'แก้ไขล่าสุด'],
+          rows: rows.map(function (r) { var au = r.audit || {}, l = au.last;
+            return [r.dutyDate, shiftName(r.shift), r.zone || '', r.car || '', KIND_NAME[r.kind] || r.kind,
+              r.kind === 'shift' ? 'เจ้าหน้าที่: ' + (r.crew || []).join(', ') + (r.totals && r.totals.ticket ? ' · ใบสั่ง ' + r.totals.ticket : '') : r.title, histStatus(r).replace(/^\S+\s/, ''),
+              r.kind === 'shift' ? [r.checkinBy && 'เข้าเวร ' + r.checkinBy, r.checkoutBy && 'ส่งเวร ' + r.checkoutBy].filter(Boolean).join(' · ') : [r.reporter && 'บันทึก ' + r.reporter, r.endBy && 'จบ ' + r.endBy].filter(Boolean).join(' · '),
+              (r.people || []).join(', '), au.edits || 0, l ? l.label + ' โดย ' + l.by + ' ' + String(l.at).replace('T', ' ').slice(0, 16) : '']; }) }],
+          [['ช่วงวันที่', th(F.from) + ' – ' + th(F.to)], ['ตัวกรอง', [F.shift && shiftName(F.shift), F.car && 'รถ ' + F.car, F.zone && 'เขต ' + F.zone, F.kinds.length && F.kinds.join(','), F.status, F.pid && person(F.pid).name, F.q && 'ค้นหา "' + F.q + '"'].filter(Boolean).join(' · ') || '-']]);
+      })));
+      add(out, sum);
+      if (!rows.length) { add(out, h('div', { class: 'card' }, h('p', { class: 'muted', text: 'ไม่พบรายการตามตัวกรองนี้' }))); return; }
+      var byDay = {}; rows.forEach(function (r) { (byDay[r.dutyDate] = byDay[r.dutyDate] || []).push(r); });
+      Object.keys(byDay).sort().reverse().forEach(function (dd) {
+        var cd = card(th(dd), byDay[dd].length + ' รายการ'), list = h('div', { class: 'list' });
+        byDay[dd].forEach(function (r) { add(list, histRow(r, load)); });
+        add(cd, list); add(out, cd);
       });
     }
-    load();
+    drawF(); load();
+  };
+
+  // ======================= รายละเอียดผลัด (v1.17) =======================
+  VIEWS.shiftDetail = function (params) {
+    var id = (params && params.id) || '';
+    setTitle('📋 รายละเอียดผลัด', '');
+    loading();
+    function reload() { VIEWS.shiftDetail(params); }
+    api('shift.detail', { id: id }, { fresh: true }).then(function (d) {
+      if (S.view !== 'shiftDetail') return;
+      clear($app);
+      setTitle('📋 ' + (d.shift === 'N' ? '🌙 ผลัดกลางคืน' : '☀️ ผลัดกลางวัน') + ' · รถ ' + d.car, th(d.dutyDate) + ' · เขต ' + (d.zone || '-'));
+      var r0 = { kind: 'shift', id: d.id, dutyDate: d.dutyDate, shift: d.shift, car: d.car, zone: d.zone, status: d.status, checkinAt: d.checkinAt, checkoutAt: d.checkoutAt, late: d.late, canVoid: d.canVoid, canRestore: d.canRestore, canEdit: d.canEdit };
+      // ข้อมูลผลัด
+      var hc = card('🚓 ข้อมูลผลัด', histStatus(r0));
+      add(hc, h('div', { class: 'small', text: 'เข้าเวร: ' + (d.checkinAt ? histWhen(d.checkinAt) + ' โดย ' + d.checkinBy : '-') + ' · ส่งเวร: ' + (d.checkoutAt ? histWhen(d.checkoutAt) + ' โดย ' + d.checkoutBy + (d.late ? ' (ช้า)' : '') : '-') }));
+      add(hc, h('label', { class: 'f', text: 'เจ้าหน้าที่ ' + d.crew.length + ' คน' + (d.exists ? '' : ' (ตามตารางเวร)') }), h('div', { class: 'pchips' }, d.crew.map(function (c) { return h('span', { class: 'pc' }, c.name + (c.role && c.role !== 'ประจำรถ' ? ' (' + c.role + ')' : '')); })));
+      if (d.roster) add(hc, h('div', { class: 'small muted', text: d.roster }));
+      if (d.route) add(hc, h('div', { class: 'small', text: 'เส้นทาง: ' + d.route }));
+      if (d.note) add(hc, h('div', { class: 'small', text: 'หมายเหตุ: ' + d.note }));
+      var hb = h('div', { class: 'hist-btns' });
+      var q = { d: d.dutyDate, s: d.shift, car: d.car };
+      if (d.exists && d.status !== 'ยกเลิก') add(hb, h('button', { class: 'btn ghost sm', onclick: function () { go('checkin', q); }, text: '👮 แก้เจ้าหน้าที่/รายการตรวจ' }));
+      if (!d.checkoutAt && d.status !== 'ยกเลิก') add(hb, h('button', { class: 'btn ghost sm', onclick: function () { go('checkout', q); }, text: '✅ ส่งเวร' }));
+      if (d.exists) add(hb, h('button', { class: 'btn ghost sm', onclick: function () { HOPS.timeline(r0, '', reload); }, text: '🕘 ประวัติ' }));
+      if (d.canRestore) add(hb, submitBtn('↩️ กู้คืนผลัด', 'ghost sm', function () { return HOPS.restore(r0, reload); }));
+      if (d.canVoid) add(hb, h('button', { class: 'btn ghost sm red-ghost', onclick: function () { HOPS.cancel(r0, reload); }, text: '🗑 ยกเลิกผลัด' }));
+      add(hc, hb); add($app, hc);
+      // ผลใบสั่ง/ตักเตือน/ตรวจ
+      var rc = card('🧾 ใบสั่ง · ตักเตือน · ตรวจ', d.totals && d.totals.ticket ? 'ใบสั่ง ' + d.totals.ticket + ' ราย' : '');
+      if (!d.tickets.length) add(rc, h('p', { class: 'muted small', text: d.checkoutAt ? 'ไม่มีใบสั่ง' : 'ยังไม่ส่งเวร' }));
+      else add(rc, table(['พ.ร.บ.', 'ข้อหา', 'ผู้ออก', 'ราย'], d.tickets.map(function (x) { return [x.act, x.label, x.name, x.count]; })));
+      var cn = d.counts, cb = [['warning', 'ว่ากล่าวตักเตือน'], ['truck_check', 'ตรวจรถบรรทุก'], ['suspect_check', 'ตรวจบุคคล/รถต้องสงสัย']].filter(function (k) { return cn[k[0]]; }).map(function (k) { return k[1] + ' ' + cn[k[0]]; });
+      if (cb.length) add(rc, h('div', { class: 'small', style: 'margin-top:6px', text: cb.join(' · ') }));
+      if (d.canEdit) add(rc, h('button', { class: 'btn block', style: 'margin-top:8px', onclick: function () { resultEditor(d); }, text: '✏️ แก้ไขใบสั่งรายข้อหา/ผู้ออก · ตักเตือน · ตรวจ' }));
+      add($app, rc);
+      // รายการในผลัด
+      var ic = card('📌 รายการในผลัดนี้', d.items.length + ' รายการ');
+      if (!d.items.length) add(ic, h('p', { class: 'muted small', text: 'ไม่มี ว.42 ช่วยเหลือ จับกุม หรือภารกิจ' }));
+      else { var l = h('div', { class: 'list' }); d.items.forEach(function (r) { add(l, histRow(r, reload, { short: true })); }); add(ic, l); }
+      add($app, ic);
+      add($app, h('p', { class: 'muted small center', text: 'ทุกการแก้ไขต้องใส่เหตุผล · ดูย้อนหลังและย้อนกลับได้ที่ปุ่ม 🕘 ประวัติ' }));
+    }, function (e) { fail(e, reload); });
+    /** ตัวแก้ผลใบสั่งรายข้อหา/ผู้ออก */
+    function resultEditor(d) {
+      var rows = d.tickets.map(function (x) { return { code: x.code, pid: x.pid, count: x.count }; }), cnt = { warning: d.counts.warning, truck_check: d.counts.truck_check, suspect_check: d.counts.suspect_check };
+      var editor = d.editor, codes = S.boot.violations || [], box = h('div');
+      function codeSel(r) {
+        var s = h('select', { style: 'min-width:0' }); codes.forEach(function (v) { add(s, h('option', { value: v.code, text: (v.short || v.label) + ' (' + v.act + ')', selected: v.code === r.code })); });
+        s.onchange = function () { r.code = s.value; }; return s;
+      }
+      function pidSel(r) {
+        var s = h('select', { style: 'min-width:0' });
+        if (editor || !r.pid) add(s, h('option', { value: '', text: 'ยังไม่ระบุ (รอเทียบ PTM)', selected: !r.pid }));
+        d.crew.forEach(function (c) { add(s, h('option', { value: c.pid, text: c.name, selected: c.pid === r.pid })); });
+        s.onchange = function () { r.pid = s.value; }; return s;
+      }
+      function draw() {
+        clear(box);
+        rows.forEach(function (r, i) {
+          add(box, h('div', { class: 're-row' }, codeSel(r), pidSel(r), stepper(r.count, function (v) { r.count = v; }, 300), h('button', { class: 'btn gray sm', type: 'button', 'aria-label': 'ลบ', onclick: function () { rows.splice(i, 1); draw(); }, text: '×' })));
+        });
+        add(box, h('button', { class: 'btn ghost sm', type: 'button', onclick: function () { rows.push({ code: (codes[0] || {}).code || '', pid: editor ? '' : (d.crew[0] || {}).pid || '', count: 1 }); draw(); }, text: '➕ เพิ่มข้อหา' }));
+      }
+      draw();
+      var reason = h('textarea', { placeholder: 'เหตุผลการแก้ไข (จำเป็น) เช่น นับใบสั่งผิด / ใส่ผู้ออกผิดคน' });
+      var cBox = h('div', { class: 'grid3' }, [['warning', 'ตักเตือน'], ['truck_check', 'ตรวจรถบรรทุก'], ['suspect_check', 'ตรวจบุคคล']].map(function (k) { return field(k[1], stepper(cnt[k[0]], function (v) { cnt[k[0]] = v; }, 500)); }));
+      modal('✏️ แก้ไขผลการปฏิบัติ', [h('p', { class: 'small muted', text: th(d.dutyDate) + ' · ' + shiftName(d.shift) + ' · รถ ' + d.car + ' — ใบสั่งรายข้อหาและผู้ออก (ทุกคนในรถได้ผลงานใบสั่งเท่ากันตามเดิม)' }), box, cBox, field('เหตุผล', reason)], 'บันทึกการแก้ไข', function () {
+        if (reason.value.trim().length < 3) { toast('กรุณาใส่เหตุผล'); return false; }
+        return api('shift.results', { id: d.id, tickets: rows.filter(function (r) { return r.count > 0 && r.code; }).map(function (r) { return { code: r.code, pid: r.pid || '?', count: r.count }; }),
+          warnings: cnt.warning, truckChecks: cnt.truck_check, suspectChecks: cnt.suspect_check, reason: reason.value }).then(function () { apiInvalidate(); refreshBoot(); toast('✅ แก้ไขผลแล้ว — บันทึกในประวัติ', 3500); reload(); });
+      });
+    }
   };
 
   // ======================= ผลของฉัน =======================
