@@ -172,7 +172,7 @@
     });
   }
   // คำสั่งที่ประมวลผลนาน (รวบรวมข้อมูลหลายเดือน/สร้างไฟล์) รอได้นานกว่าปกติ
-  var LONG_MS = { 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000 };
+  var LONG_MS = { 'history.list': 40000, 'shift.detail': 30000, 'history.timeline': 30000, 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000 };
   function apiRaw(action, data) {
     var ctl = window.AbortController ? new AbortController() : null;
     var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken, sess: S.sess || undefined, viewAs: S.viewAs || undefined }), signal: ctl ? ctl.signal : undefined });
@@ -181,7 +181,7 @@
       .then(function (r) { return r.json().catch(function () { throw new Error('ระบบตอบกลับผิดรูปแบบ (HTTP ' + r.status + ') กรุณาลองใหม่'); }); }, function (e) { if (e.code === 'TIMEOUT') throw e; var x = new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสัญญาณแล้วลองใหม่'); x.code = 'NET'; throw x; })
       .then(function (j) {
         // คำขอถูกเปลี่ยนเป็น GET ระหว่างทาง (ได้คำตอบ health แทน) = ระบบยังไม่ได้ทำรายการ → แจ้งให้ลองใหม่ ไม่ถือว่าสำเร็จ
-        if (j && j.app && j.version && !('data' in j) && !j.error) throw new Error('การเชื่อมต่อสะดุด ระบบยังไม่ได้รับรายการ กรุณากดลองใหม่');
+        if (j && j.app && j.version && !('data' in j) && !j.error) { var gx = new Error('การเชื่อมต่อสะดุด ระบบยังไม่ได้รับรายการ กรุณากดลองใหม่'); gx.code = 'NET'; throw gx; } // คำขออ่านลองใหม่เองได้ 1 ครั้ง
         if (j.sess) sessSave(j.sess);
         if (j.ok) return j.data;
         if (j.code === 'AUTH') { sessClear(); authLost(); }
@@ -2603,7 +2603,7 @@
         if (my !== seq || S.view !== 'history') return;
         if (d.cars && d.cars.length) { var had = cars.length; S.knownCars = cars = d.cars; if (!had) drawF(); }
         render(d);
-      }, function (e) { if (my === seq) { clear(out); add(out, errorBox(e.message)); } });
+      }, function (e) { if (my === seq) { clear(out); add(out, errorBox(e.message), h('button', { class: 'btn block', type: 'button', style: 'margin-top:8px', onclick: load, text: '🔄 ลองใหม่' })); } });
     }
     function render(d) {
       clear(out);
