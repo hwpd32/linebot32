@@ -79,7 +79,7 @@
   // แคชคำตอบระยะสั้นสำหรับคำขออ่านอย่างเดียว (เปิดหน้าเดิมซ้ำไม่ต้องรอเซิร์ฟเวอร์) + รวมคำขอซ้ำที่กำลังรอ
   // คำขออ่านอย่างเดียว: ไม่ล้างแคช · ลองใหม่อัตโนมัติ 1 ครั้งเมื่อเน็ตสะดุด/ตอบช้า (คำขอบันทึกไม่ลองซ้ำเอง)
   var READS = {}; ['bootstrap', 'dash', 'home', 'shift.list', 'shift.get', 'arrest.list', 'arrest.detail', 'history.list', 'history.timeline', 'duty.board', 'duty.week', 'daily.report', 'fine.dash', 'fine.badges',
-    'now', 'summary', 'texts', 'roster.day', 'admin.people', 'admin.meta', 'codes.list', 'admin.registrations', 'score.get', 'score.text', 'admin.audit', 'settings.get', 'export.daily', 'export.events',
+    'now', 'summary', 'texts', 'roster.day', 'admin.people', 'admin.meta', 'codes.list', 'admin.registrations', 'score.get', 'score.text', 'score.item', 'score.preview', 'score.pending', 'score.impact', 'admin.audit', 'settings.get', 'export.daily', 'export.events',
     'escort.open', 'file.list', 'suspect.search', 'special.list', 'special.cases'].forEach(function (a) { READS[a] = 1; });
   // ---------- บัตรผ่านของระบบ (v1.13): ใช้แทน ID token ของ LINE ที่หมดอายุเร็ว อายุ 24 ชม. ----------
   var SESS_KEY = 'sess:' + (CFG.LIFF_ID || '');
@@ -172,7 +172,7 @@
     });
   }
   // คำสั่งที่ประมวลผลนาน (รวบรวมข้อมูลหลายเดือน/สร้างไฟล์) รอได้นานกว่าปกติ
-  var LONG_MS = { 'history.list': 40000, 'shift.detail': 30000, 'history.timeline': 30000, 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000 };
+  var LONG_MS = { 'score.impact': 90000, 'score.item': 30000, 'history.list': 40000, 'shift.detail': 30000, 'history.timeline': 30000, 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000 };
   function apiRaw(action, data) {
     var ctl = window.AbortController ? new AbortController() : null;
     var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken, sess: S.sess || undefined, viewAs: S.viewAs || undefined }), signal: ctl ? ctl.signal : undefined });
@@ -1224,8 +1224,9 @@
     modal(title, [h('div', { class: 'search' }, q), list]);
     setTimeout(function () { q.focus(); }, 50);
   }
+  var MODAL_SEQ = 0;
   function modal(title, body, okText, onOk) {
-    var m = document.getElementById('modal'); clear(m); m.hidden = false;
+    var m = document.getElementById('modal'); clear(m); m.hidden = false; MODAL_SEQ++;
     var sheet = h('div', { class: 'sheet' }, h('h3', { text: title }), body);
     var btns = h('div', { class: 'row', style: 'margin-top:12px' }, h('button', { class: 'btn gray grow', onclick: closeModal, text: 'ปิด' }));
     if (okText) add(btns, h('button', { class: 'btn grow', onclick: function (e) {
@@ -1336,6 +1337,8 @@
         add(body, c);
       }
       add(body, ticketsCard);
+      add(body, SCORE.previewBox(function () { var by = {}; Object.keys(state.tickets).forEach(function (p) { Object.keys(state.tickets[p] || {}).forEach(function (k) { by[k] = (by[k] || 0) + (+state.tickets[p][k] || 0); }); }); return { type: 'tickets', date: cur ? cur.dutyDate : today(), tickets: Object.keys(by).filter(function (k) { return by[k]; }).map(function (k) { return { code: k, count: by[k] }; }) }; },
+        { note: 'ปรับคะแนนใบสั่งรายข้อหาได้หลังส่งเวร ที่ 📋 รายละเอียดผลัด → ⭐ คะแนนใบสั่งรายข้อหา' }));
       var other = card('📋 งานอื่นในผลัด');
       [['warnings', '🗣️ ว่ากล่าวตักเตือน', 'ราย'], ['truckChecks', '🚛 ตรวจสอบรถบรรทุก', 'คัน'], ['suspectChecks', '🔎 ตรวจรถต้องสงสัย', 'คัน']].forEach(function (x) {
         add(other, h('div', { class: 'vrow' }, h('div', { class: 'lbl' }, x[1], h('small', { text: x[2] })), stepper(state[x[0]], function (v) { state[x[0]] = v; updateBar(); })));
@@ -1624,10 +1627,12 @@
     var f = card('รายละเอียด');
     add(f, h('label', { class: 'f', text: 'ประเภท' }), types, h('div', { class: 'row' }, h('div', { class: 'grow' }, h('label', { class: 'f', text: 'ทล.' }), road), h('div', { class: 'grow' }, h('label', { class: 'f', text: 'กม.' }), km)),
       h('label', { class: 'f', text: 'ทิศทาง/สถานที่' }), dir, acc, h('label', { class: 'f', text: 'ผล' }), result, h('div', { style: 'margin-top:8px' }, geoBtn));
-    add($app, shiftPicker('checkin', params, function (s) { cur = s; }), f, bar(submitBtn('💾 บันทึก', 'green', function () {
+    var spv = SCORE.previewBox(function () { return { type: 'assist', date: cur ? cur.dutyDate : today() }; }, { propose: true });
+    add($app, shiftPicker('checkin', params, function (s) { cur = s; }), f, spv, bar(submitBtn('💾 บันทึก', 'green', function () {
       if (!cur) throw new Error('กรุณาเลือกผลัดและรถ');
+      var prop = spv.proposal();
       return api('assist', { dutyDate: cur.dutyDate, shift: cur.shift, car: cur.car, type: type, road: road.value, km: km.value, dir: dir.value, dead: dead.v, injured: inj.v, damage: damage.value, result: result.value, lat: geo.lat, lng: geo.lng })
-        .then(function (r) { done('บันทึกแล้ว', r.message, { next: 'assist' }); });
+        .then(function (r) { done('บันทึกแล้ว', r.message, { next: 'assist' }); spv.submitAfter(prop, r.eventId && { id: r.eventId }, type); });
     })));
     keep('assist', function () { return { type: type, road: road.value, km: km.value, dir: dir.value, dead: dead.v, inj: inj.v, damage: damage.value, result: result.value }; },
       function (d) { if (S.boot.assistTypes.indexOf(d.type) >= 0) { type = d.type; rt(); } road.value = d.road || ''; km.value = d.km || ''; dir.value = d.dir || ''; deadSt._set(d.dead || 0); injSt._set(d.inj || 0); damage.value = d.damage || ''; result.value = d.result || ''; }).start();
@@ -1647,9 +1652,11 @@
     rp();
     var f = card('รายละเอียด'); add(f, h('label', { class: 'f', text: 'ประเภท' }), types, h('label', { class: 'f', text: 'ชื่อ' }), title, h('div', { class: 'row' }, h('div', { class: 'grow' }, h('label', { class: 'f', text: 'วันที่' }), date), h('div', { class: 'grow' }, h('label', { class: 'f', text: 'เวลา' }), time)),
       h('label', { class: 'f', text: 'สถานที่' }), place, h('label', { class: 'f', text: 'ผู้ร่วมปฏิบัติ' }), pl, h('label', { class: 'f', text: 'รายละเอียด' }), detail);
-    add($app, f, bar(submitBtn('💾 บันทึก', 'green', function () {
+    var spv = SCORE.previewBox(function () { return { type: 'mission', date: date.value }; }, { propose: true });
+    add($app, f, spv, bar(submitBtn('💾 บันทึก', 'green', function () {
       if (!title.value.trim()) throw new Error('กรุณาใส่ชื่อภารกิจ');
-      return api('mission', { type: type, title: title.value, date: date.value, time: time.value, place: place.value, participants: parts, detail: detail.value }).then(function (r) { done('บันทึกภารกิจแล้ว', r.message); });
+      var prop = spv.proposal();
+      return api('mission', { type: type, title: title.value, date: date.value, time: time.value, place: place.value, participants: parts, detail: detail.value }).then(function (r) { done('บันทึกภารกิจแล้ว', r.message); spv.submitAfter(prop, r.eventId && { id: r.eventId }, title.value); });
     })));
     keep('mission', function () { return { type: type, title: title.value, date: date.value, time: time.value, place: place.value, parts: parts, detail: detail.value }; },
       function (d) { if (S.boot.missionTypes.indexOf(d.type) >= 0) { type = d.type; rt(); } title.value = d.title || ''; if (d.date) date.value = d.date; time.value = d.time || ''; place.value = d.place || ''; if (d.parts && d.parts.length) { parts = d.parts; rp(); } detail.value = d.detail || ''; }).start();
@@ -1800,7 +1807,9 @@
     var c6 = card('6) พฤติการณ์และการส่งต่อ');
     add(c6, field('พฤติการณ์', inp('detail', { tag: 'textarea', rows: 6, placeholder: 'วันนี้ (…) เวลาประมาณ … น. ชุดจับกุม…' })), field('การดำเนินการส่งต่อ', inp('handover', { placeholder: 'เช่น สภ.เมืองพัทยา' })));
     var reason = editing ? field('เหตุผลการแก้ไข', inp('reason', { placeholder: 'เช่น แก้ข้อหา/เพิ่มของกลาง' })) : null;
-    add($app, c1, c2, c3, c4, c5, c6, reason ? card(null) : null);
+    var spv = SCORE.previewBox(function () { return { type: 'arrest', kind: f.kind, cat: f.cat, count: f.suspectList.filter(function (x) { return String(x.name || x.idNo).trim(); }).length, warrants: f.warrants || 1, evidence: f.evidence, date: String(f.occurredAt || '').slice(0, 10) || today() }; },
+      { propose: true, note: editing ? 'คะแนนที่ปรับไว้แล้วตามไปยังรายงานฉบับแก้ไข · ดู/ปรับได้ที่ ⭐ คะแนนคดีนี้' : '' });
+    add($app, c1, c2, c3, c4, c5, spv, c6, reason ? card(null) : null);
     if (reason) add($app.lastChild, reason);
     add($app, bar(submitBtn(editing ? '💾 บันทึกการแก้ไข' : '🚨 ส่งรายงานจับกุม', 'red', function () {
       if (!String(f.title || '').trim()) throw new Error('กรุณาใส่หัวข้อ (ส่วนที่ 1)');
@@ -1810,7 +1819,9 @@
       if (!f.team.some(function (t) { return t.role === 'primary'; })) throw new Error('กรุณาเลือกผู้จับหลักอย่างน้อย 1 คน (ส่วนที่ 2)');
       var body = Object.assign({}, f, { suspectList: f.suspectList.filter(function (x) { return String(x.name || x.idNo).trim(); }), evidence: f.evidence.filter(function (x) { return x.item || x.detail; }) });
       body.suspects = body.suspectList.length;
+      var prop = spv.proposal();
       return api('arrest', body).then(function (r) {
+        spv.submitAfter(prop, r.eventId && { id: r.eventId }, f.title);
         Draft.del('arrest'); refreshBoot();
         done(editing ? (r.status === 'approved' ? 'บันทึกการแก้ไขแล้ว (คงอนุมัติ)' : 'บันทึกการแก้ไขแล้ว (รอตรวจใหม่)') + (r.group ? ' · ปรับข้อมูลคดีให้รถอีก ' + r.group + ' คันแล้ว' : '') : 'ส่งรายงานจับกุมแล้ว (รอตรวจ)', r.message, { next: 'case', nextParams: { id: r.eventId }, nextText: 'ดูคดีนี้',
           extra: can('pr.make') ? h('button', { class: 'btn ghost', style: 'margin-top:10px', onclick: function () { go('pr', { caseId: r.eventId }); }, text: '🖼 สร้างภาพประชาสัมพันธ์จากคดีนี้' }) : null });
@@ -1909,6 +1920,7 @@
       }));
       var inTeam = (d.team || []).some(function (t) { return t.pid === S.boot.me.pid; });
       if (d.canEdit) add(acts, rowLink('✏️', 'แก้ไขรายงาน', (d.group && d.group.length > 1 ? 'ข้อมูลคดีมีผลทุก ' + d.group.length + ' คัน · ' : '') + (d.status === 'approved' ? (can('case.approve') && (!inTeam || S.boot.perms.superadmin) ? 'ท่านเป็นผู้อนุมัติ — แก้แล้วคงอนุมัติ' : 'แก้แล้วต้องอนุมัติใหม่') : 'ฉบับเดิมจะถูกแทนที่'), function () { go('arrest', { id: d.id }); }));
+      if (d.status !== 'void') add(acts, rowLink('⭐', 'คะแนนคดีนี้', 'กติกา · เกณฑ์ ณ วันนั้น · แบ่งรถ/คน · ปรับคะแนน', function () { SCORE.sheet({ id: d.id }, function () { apiInvalidate(); }); }));
       add(acts, rowLink('🕘', 'ประวัติการแก้ไข', 'ใครแก้อะไร เมื่อไร' + (can('report.editOthers') ? ' · ย้อนกลับเป็นฉบับเดิม' : ''), function () { HOPS.timeline({ kind: 'arrest', id: d.id, dutyDate: d.statDate, status: d.status, title: d.payload.title || '' }, d.payload.title || '', function () { go('case', { id: d.id }, true); }); }));
       if (can('pr.make') && d.status !== 'void') add(acts, rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'ใช้ข้อมูลคดีนี้ (ตัดข้อมูลส่วนบุคคลออกให้)', function () { go('pr', { caseId: d.id }); }));
       add($app, acts);
@@ -2605,6 +2617,7 @@
       if (r.canEdit) x('✏️', 'แก้ไข', (isGroup(r) ? 'ข้อมูลคดีมีผลทุกคัน · ' : '') + (r.kind === 'arrest' && r.status === 'approved' ? (can('case.approve') ? 'ผู้อนุมัติแก้เองคงอนุมัติ' : 'แก้แล้วต้องอนุมัติใหม่') : 'ต้องใส่เหตุผล'), function () { HOPS.edit(r, after); });
       if (r.canMove) x('📅', 'ย้ายวัน/ผลัด/รถ', 'บันทึกผิดวันหรือผิดรถ (ภายในเดือนเดียวกัน)', function () { HOPS.move(r, after); });
       if (r.canPeople) x('👥', 'เจ้าหน้าที่ที่ได้ผลงาน', (r.people || []).length + ' คน · เพิ่ม/ลดได้', function () { HOPS.people(r, after); });
+      if (SCORE_KINDS[r.kind] && r.id) x('⭐', 'คะแนนรายการนี้', 'กติกา · เกณฑ์ ณ วันนั้น · ปรับคะแนน', function () { SCORE.sheet({ id: r.id }, after); });
       x('🕘', 'ประวัติ / ย้อนกลับ', 'ใครแก้อะไร เมื่อไร · ย้อนกลับเป็นค่าเดิม', function () { HOPS.timeline(r, histTitle(r), after); });
       if (r.canRestore) x('↩️', 'กู้คืน', 'นับเข้าสถิติตามเดิม', function () { HOPS.restore(r, after); });
       if (r.canVoid && !isGroup(r)) x('🗑', 'ยกเลิกรายการ', 'ไม่ลบจริง กู้คืนได้ 7 วัน', function () { HOPS.cancel(r, after); });
@@ -2612,6 +2625,7 @@
     }
   };
   /** แถวรายการ (ใช้ทั้งหน้ารายการและรายละเอียดผลัด) */
+  var SCORE_KINDS = { arrest: 1, escort: 1, assist: 1, mission: 1 };
   function histRow(r, after, opt) {
     opt = opt || {};
     var title = opt.short && r.kind !== 'shift' ? r.title : histTitle(r);
@@ -2635,6 +2649,7 @@
     if (r.kind === 'arrest') add(btns, h('button', { class: 'btn ghost sm', onclick: function () { go('case', { id: r.id }); }, text: '📄 เปิดคดี' }));
     if (r.canRestore) add(btns, submitBtn('↩️ กู้คืน', 'ghost sm', function () { return HOPS.restore(r, after); }));
     if (r.canVoid && !opt.noVoid && !isGroup(r)) add(btns, h('button', { class: 'btn ghost sm red-ghost', onclick: function () { HOPS.cancel(r, after); }, text: '🗑 ยกเลิก' }));
+    if (SCORE_KINDS[r.kind] && r.id && r.status !== 'void' && r.status !== 'ยกเลิก') add(btns, h('button', { class: 'btn ghost sm', onclick: function () { SCORE.sheet({ id: r.id }, after); }, text: '⭐ คะแนน' }));
     add(btns, h('button', { class: 'btn ghost sm', onclick: function () { HOPS.timeline(r, title, after); }, text: '🕘 ประวัติ' }));
     add(btns, h('button', { class: 'btn ghost sm', 'aria-label': 'เมนูเพิ่มเติม', onclick: function () { HOPS.more(r, after); }, text: '⋯' }));
     add(el, btns);
@@ -2758,7 +2773,11 @@
       // ผลใบสั่ง/ตักเตือน/ตรวจ
       var rc = card('🧾 ใบสั่ง · ตักเตือน · ตรวจ', d.totals && d.totals.ticket ? 'ใบสั่ง ' + d.totals.ticket + ' ราย' : '');
       if (!d.tickets.length) add(rc, h('p', { class: 'muted small', text: d.checkoutAt ? 'ไม่มีใบสั่ง' : 'ยังไม่ส่งเวร' }));
-      else add(rc, table(['พ.ร.บ.', 'ข้อหา', 'ผู้ออก', 'ราย'], d.tickets.map(function (x) { return [x.act, x.label, x.name, x.count]; })));
+      else {
+        add(rc, table(['พ.ร.บ.', 'ข้อหา', 'ผู้ออก', 'ราย'], d.tickets.map(function (x) { return [x.act, x.label, x.name, x.count]; })));
+        var tcs = {}, tco = []; d.tickets.forEach(function (x) { if (!tcs[x.code]) { tcs[x.code] = { label: x.label, n: 0 }; tco.push(x.code); } tcs[x.code].n += +x.count || 0; });
+        if (d.status !== 'ยกเลิก') add(rc, h('div', { class: 'small muted', style: 'margin-top:8px', text: '⭐ คะแนนใบสั่งรายข้อหา (แตะเพื่อดู/ปรับ)' }), h('div', { class: 'chips' }, tco.map(function (k) { return h('button', { class: 'chip', onclick: function () { SCORE.sheet({ shiftId: d.id, code: k }, reload); }, text: '⭐ ' + tcs[k].label + ' ×' + tcs[k].n }); })));
+      }
       var cn = d.counts, cb = [['warning', 'ว่ากล่าวตักเตือน'], ['truck_check', 'ตรวจรถบรรทุก'], ['suspect_check', 'ตรวจบุคคล/รถต้องสงสัย']].filter(function (k) { return cn[k[0]]; }).map(function (k) { return k[1] + ' ' + cn[k[0]]; });
       if (cb.length) add(rc, h('div', { class: 'small', style: 'margin-top:6px', text: cb.join(' · ') }));
       if (d.canEdit) add(rc, h('button', { class: 'btn block', style: 'margin-top:8px', onclick: function () { resultEditor(d); }, text: '✏️ แก้ไขใบสั่งรายข้อหา/ผู้ออก · ตักเตือน · ตรวจ' }));
@@ -2822,6 +2841,185 @@
     }), out);
   };
 
+  // ======================= v1.19 คะแนนรายรายการ · ปรับคะแนน · สรุปผลกระทบก่อนบันทึก =======================
+  var SCORE = {
+    MODES: [['set', '🎯 กำหนดเอง'], ['add', '± บวก/ลด'], ['none', '↺ ตามเกณฑ์']],
+    critText: function (c) { return c ? (c.std ? 'เกณฑ์มาตรฐาน' : 'ช่วง "' + c.name + '" ' + th(c.from) + ' – ' + th(c.to) + (c.partial ? ' (ปรับเฉพาะบางหมวด)' : '')) : ''; },
+    adjResult: function (base, mode, value) { var v = +value || 0; return Math.round((mode === 'set' ? v : mode === 'add' ? (+base || 0) + v : +base || 0) * 100) / 100; },
+    /** ชุดกรอกการปรับ: วิธี (กำหนดเอง/บวก-ลด/ตามเกณฑ์) + คะแนน + เหตุผล */
+    form: function (opt) {
+      opt = opt || {};
+      var st = { mode: opt.mode || 'set' }, val = h('input', { type: 'number', inputmode: 'decimal', step: '0.5', placeholder: 'คะแนน', value: opt.value != null ? String(opt.value) : '' });
+      var reason = h('textarea', { rows: 2, placeholder: 'เหตุผลการปรับ (จำเป็น) เช่น ขยายผลถึงตัวการ / ผู้บาดเจ็บสาหัส' }), hint = h('div', { class: 'hint' });
+      function paint() {
+        val.hidden = st.mode === 'none'; val.placeholder = st.mode === 'add' ? 'เช่น 5 หรือ -5' : 'คะแนนที่ต้องการ';
+        hint.textContent = st.mode === 'none' ? 'ยกเลิกการปรับ กลับไปคิดตามเกณฑ์' : opt.base != null && val.value !== '' ? 'จาก ' + fmtPts(opt.base) + ' เป็น ' + fmtPts(SCORE.adjResult(opt.base, st.mode, val.value)) + (opt.unit ? ' ต่อ' + opt.unit : '') : st.mode === 'add' ? 'บวก/ลดจากคะแนนตามเกณฑ์ (ถ้าแก้เกณฑ์ภายหลัง จะบวก/ลดจากเกณฑ์ใหม่)' : 'คงค่านี้แม้แก้เกณฑ์ภายหลัง';
+      }
+      val.oninput = paint;
+      var seg = segPick(opt.noNone ? SCORE.MODES.slice(0, 2) : SCORE.MODES, st.mode, function (v) { st.mode = v; paint(); });
+      paint();
+      var el = h('div', { class: 'adj-form' }, field('วิธีปรับ', seg), val, hint, field('เหตุผล', reason));
+      el.get = function (strict) {
+        var empty = st.mode !== 'none' && val.value === '';
+        if (!strict && empty && !reason.value.trim()) return null;
+        if (empty) throw new Error('กรุณาใส่คะแนนที่ต้องการปรับ');
+        if (reason.value.trim().length < 3) throw new Error('กรุณาใส่เหตุผลการปรับคะแนน');
+        return { mode: st.mode, value: st.mode === 'none' ? 0 : +val.value, reason: reason.value.trim() };
+      };
+      return el;
+    },
+    /** หน้าต่างสรุปผลกระทบ → ยืนยันแล้วจึงบันทึกจริง */
+    impact: function (req, title, doSave, extra) {
+      var box = h('div', null, h('div', { class: 'loading' }, spinner()), h('p', { class: 'small muted center', text: 'กำลังคำนวณผลกระทบ…' }));
+      var ready = false;
+      modal('⚠️ ตรวจสอบก่อนบันทึก', [box], 'ยืนยันบันทึก', function () {
+        if (!ready) { toast('รอคำนวณผลกระทบสักครู่'); return false; }
+        var seq = MODAL_SEQ;
+        return Promise.resolve(doSave()).then(function () { return MODAL_SEQ !== seq ? false : undefined; });
+      });
+      api('score.impact', req, { fresh: true }).then(function (r) {
+        ready = true; clear(box);
+        if (title) add(box, h('p', { class: 'small', style: 'margin:0 0 8px', text: title }));
+        var ch = card('1) สิ่งที่เปลี่ยน (ก่อน → หลัง)');
+        if (!r.changes || !r.changes.length) add(ch, h('p', { class: 'muted small', text: 'ไม่มีค่าที่เปลี่ยน' }));
+        else r.changes.forEach(function (x) { var f = function (v) { return typeof v === 'number' ? fmtPts(v) : String(v); }; add(ch, h('div', { class: 'chg-row' }, h('span', { class: 'grow', text: x.label }), h('b', { class: 'chg-v', text: f(x.before) + ' → ' + f(x.after) }))); });
+        add(box, ch);
+        var rg = r.range ? th(r.range.from) + ' – ' + th(r.range.to) : '-';
+        var ef = card('2) ผลที่เกิดขึ้น', rg);
+        add(ef, h('div', { class: 'kpis' },
+          h('div', { class: 'kpi' }, h('div', { class: 'n', text: String(r.affected || 0) }), h('div', { class: 't', text: 'รายการที่คะแนนเปลี่ยน' })),
+          h('div', { class: 'kpi' }, h('div', { class: 'n', text: String(r.peopleN || 0) }), h('div', { class: 't', text: 'เจ้าหน้าที่ที่คะแนนเปลี่ยน' })),
+          h('div', { class: 'kpi' }, h('div', { class: 'n', text: String(r.carsN || 0) }), h('div', { class: 't', text: 'รถที่คะแนนเปลี่ยน' }))));
+        function dl(v) { v = Math.round(v * 100) / 100; return (v > 0 ? '+' : '') + fmtPts(v); }
+        if ((r.people || []).length) add(ef, h('details', { open: r.people.length <= 6 }, h('summary', { class: 'small', text: 'รายคน' + (r.peopleN > r.people.length ? ' (แสดง ' + r.people.length + ' จาก ' + r.peopleN + ')' : '') }),
+          table(['ชื่อ', 'ก่อน', 'หลัง', 'ต่าง', 'อันดับ'], r.people.map(function (p) { return [p.name, fmtPts(p.before), fmtPts(p.after), dl(p.after - p.before), p.rankBefore === p.rankAfter ? (p.rankAfter || '-') : (p.rankBefore || '-') + '→' + (p.rankAfter || '-')]; }))));
+        if ((r.cars || []).length) add(ef, h('details', null, h('summary', { class: 'small', text: 'รายรถ' + (r.carsN > r.cars.length ? ' (แสดง ' + r.cars.length + ' จาก ' + r.carsN + ')' : '') }),
+          table(['รถ', 'ก่อน', 'หลัง', 'ต่าง'], r.cars.map(function (c) { return [c.car + (c.zone ? ' · เขต ' + c.zone : ''), fmtPts(c.before), fmtPts(c.after), dl(c.after - c.before)]; }))));
+        if (!r.affected && r.range) add(ef, h('p', { class: 'small muted', text: 'ยังไม่มีคะแนนที่เปลี่ยนในช่วงนี้ (เช่น ยังไม่มีรายการ หรือคดียังไม่อนุมัติ)' }));
+        add(box, ef);
+        var warn = [];
+        if (r.past) warn.push('มีผลย้อนหลังกับวันที่ผ่านมาแล้ว — คะแนน/อันดับที่เจ้าหน้าที่เคยเห็นจะเปลี่ยน');
+        if (r.clash) warn.push('ช่วงวันที่ทับกับช่วงคะแนนอื่น — ระบบจะไม่ให้บันทึก ต้องแก้วันที่ก่อน');
+        if (r.note) warn.push(r.note);
+        (extra || []).forEach(function (x) { warn.push(x); });
+        var sw = card('3) ข้อควรระวัง');
+        warn.forEach(function (x) { add(sw, h('div', { class: 'small', text: '• ' + x })); });
+        if ((r.sent || []).length) {
+          var K = { dash: '🖼 ภาพวงรอบ/สรุป', daily: '📅 ภาพประจำวัน', announce: '📣 ประกาศคะแนน' };
+          add(sw, h('div', { class: 'note small', style: 'margin-top:6px' }, h('b', { text: '📤 เคยส่งเข้ากลุ่มแล้ว ' + r.sent.length + ' ครั้ง — ภาพ/ประกาศที่ส่งไปแล้วจะไม่เปลี่ยนตาม ควรส่งใหม่หลังบันทึก' }),
+            r.sent.map(function (s) { return h('div', { text: (K[s.kind] || s.kind) + ' ' + th(s.from) + (s.to !== s.from ? '–' + th(s.to) : '') + ' · ส่งเมื่อ ' + histWhen(s.at) + ' โดย ' + s.by }); })));
+        }
+        if (!warn.length && !(r.sent || []).length) add(sw, h('p', { class: 'small muted', text: 'ไม่พบภาพ/ประกาศที่ส่งไปแล้วในช่วงนี้' }));
+        add(box, sw);
+        add(box, h('p', { class: 'small muted', text: 'ทุกการบันทึกเก็บในประวัติ (ใคร · เมื่อไร · เหตุผล) และย้อนกลับได้' }));
+      }, function (e) { ready = true; clear(box); add(box, h('div', { class: 'note', text: '⚠️ คำนวณผลกระทบไม่ได้ (' + e.message + ') — ยังบันทึกได้ แต่โปรดตรวจสอบเอง' })); });
+    },
+    /** หน้าต่างคะแนนของรายการ: กติกา · เกณฑ์ ณ วันนั้น · การปรับ · แบ่งคะแนน · เสนอ/อนุมัติ */
+    sheet: function (q, after) {
+      var box = h('div', null, h('div', { class: 'loading' }, spinner()), skeleton(2));
+      modal('⭐ คะแนนของรายการ', [box]);
+      function reload() { apiInvalidate(); SCORE.sheet(q, after); if (after) after(); }
+      api('score.item', q, { fresh: true }).then(function (it) {
+        clear(box);
+        add(box, h('p', { class: 'small', style: 'margin:0 0 6px', text: it.title }));
+        add(box, h('div', { class: 'crit-chip', text: '📋 ' + SCORE.critText(it.crit) }));
+        var hero = h('div', { class: 'score-hero' }, h('div', { class: 'n' + (it.final < 0 ? ' neg' : ''), text: fmtPts(it.final) }), h('div', null,
+          h('b', { text: it.adj ? 'คะแนนที่ปรับแล้ว' : 'คะแนนตามเกณฑ์' }), h('div', { class: 'small muted', text: it.rule || '' }),
+          it.adj ? h('div', { class: 'small', text: 'ตามเกณฑ์ ' + fmtPts(it.std) + ' → ' + it.adj.text + ' · ' + it.adj.reason + ' (' + it.adj.by + ')' }) : null));
+        add(box, hero);
+        (it.notes || []).forEach(function (n) { add(box, h('div', { class: 'note small', text: n })); });
+        // รออนุมัติ
+        (it.pending || []).forEach(function (p) {
+          var pc = h('div', { class: 'card adj-pending' }, h('b', { text: '⏳ รออนุมัติ: ' + p.text }), h('div', { class: 'small', text: p.reason + ' · เสนอโดย ' + p.by + ' ' + histWhen(p.at) }));
+          if (p.canDecide) add(pc, h('div', { class: 'row', style: 'margin-top:6px' },
+            h('button', { class: 'btn gray sm grow', onclick: function () { var n = prompt('เหตุผลที่ไม่อนุมัติ (ผู้เสนอจะเห็น)'); if (n == null) return; api('score.decide', { id: p.id, approve: false, note: n }).then(function () { toast('ไม่อนุมัติแล้ว'); reload(); }, function (e) { toast('⚠️ ' + e.message, 4000); }); }, text: '↩️ ไม่อนุมัติ' }),
+            h('button', { class: 'btn green sm grow', onclick: function () {
+              SCORE.impact({ kind: 'decide', adjId: p.id }, 'อนุมัติการปรับ "' + it.title + '" ' + p.text, function () { return api('score.decide', { id: p.id, approve: true }).then(function () { toast('✅ อนุมัติแล้ว — คะแนนเปลี่ยนทันที', 3500); reload(); }); });
+            }, text: '✅ อนุมัติ' })));
+          else if (it.canApprove) add(pc, h('div', { class: 'small muted', text: 'ท่านเกี่ยวข้องกับรายการนี้ — ให้ผู้ตรวจท่านอื่นอนุมัติ' }));
+          add(box, pc);
+        });
+        // แบ่งคะแนน
+        if ((it.split || []).length) {
+          var sc = card('👥 การแบ่งคะแนน', it.splitRule ? '' : '');
+          if (it.splitRule) add(sc, h('p', { class: 'small muted', style: 'margin:0 0 6px', text: it.splitRule }));
+          it.split.forEach(function (s) {
+            add(sc, h('div', { class: 'case-car' }, h('div', { class: 'row' }, h('b', { class: 'grow', text: s.label + (s.share != null && it.split.length > 1 ? ' · ' + s.share + '%' : '') }), h('b', { text: fmtPts(s.pts) })),
+              h('div', { class: 'small', text: (s.people || []).map(function (p) { return p.name + ' ' + fmtPts(p.pts) + (p.note ? ' (' + p.note + ')' : ''); }).join(' · ') || '-' })));
+          });
+          add(box, sc);
+        }
+        // ประวัติการปรับ
+        if ((it.history || []).length) add(box, h('details', null, h('summary', { class: 'small', text: '🕘 ประวัติการปรับ ' + it.history.length + ' ครั้ง' }),
+          it.history.map(function (x) { var S2 = { approved: '✅', rejected: '↩️ ไม่อนุมัติ', replaced: '⤴︎ ถูกแทนที่' }; return h('div', { class: 'small', style: 'padding:3px 0;border-bottom:1px dashed #e5e9f0', text: (S2[x.status] || x.status) + ' ' + x.text + ' · ' + x.reason + ' · ' + x.by + (x.decidedBy && x.decidedBy !== x.by ? ' (อนุมัติ ' + x.decidedBy + ')' : '') + ' ' + histWhen(x.at) }); })));
+        // เสนอ/ปรับ
+        if (it.canPropose) {
+          var f = SCORE.form({ base: it.kind === 'case' ? it.std : it.stdPer, unit: it.kind === 'case' ? '' : it.unit, mode: it.adj ? it.adj.mode : 'set', value: it.adj && it.adj.mode !== 'none' ? it.adj.value : null });
+          var pc2 = card(it.autoApprove ? '✏️ ปรับคะแนน (มีผลทันที)' : '✏️ เสนอปรับคะแนน', it.autoApprove ? 'ท่านเป็นผู้ตรวจ' : 'ผู้ตรวจอนุมัติก่อนมีผล');
+          if (it.kind !== 'case' && it.count) add(pc2, h('p', { class: 'small muted', style: 'margin:0 0 6px', text: 'ปรับเป็นคะแนนต่อ' + it.unit + ' (ตามเกณฑ์ ' + fmtPts(it.stdPer) + ') × ' + it.count + ' ' + it.unit }));
+          add(pc2, f, h('button', { class: 'btn block', style: 'margin-top:8px', onclick: function () {
+            var m; try { m = f.get(true); } catch (e) { return toast(e.message, 3500); }
+            var req = Object.assign({}, it.target, m);
+            SCORE.impact(Object.assign({ kind: 'adjust' }, req), (it.autoApprove ? 'ปรับ' : 'เสนอปรับ') + ' "' + it.title + '"', function () {
+              return api('score.adjust', req).then(function (r) { toast(r.status === 'approved' ? '✅ ปรับคะแนนแล้ว — มีผลทันที' : '⏳ ส่งคำขอแล้ว — รอผู้ตรวจอนุมัติ', 3500); reload(); });
+            }, it.autoApprove ? [] : ['เป็นการเสนอ — คะแนนจะเปลี่ยนเมื่อผู้ตรวจอนุมัติ']);
+          }, text: '🔎 ตรวจผลกระทบแล้วบันทึก' }));
+          add(box, pc2);
+        } else if (!it.bound) add(box, h('p', { class: 'small muted', text: 'ปรับคะแนนได้เฉพาะผู้บันทึก/ผู้เกี่ยวข้อง หรือผู้ตรวจ' }));
+      }, function (e) { clear(box); add(box, errorBox(e.message)); });
+    },
+    /** การ์ดคะแนนตัวอย่างระหว่างบันทึก + เสนอปรับ (ไม่บังคับ) */
+    previewBox: function (getReq, opt) {
+      opt = opt || {};
+      var res = h('div'), c = card('⭐ คะแนนตามเกณฑ์', 'ณ วันที่ของรายการ');
+      function run() {
+        var q; try { q = getReq(); } catch (e) { return toast(e.message); }
+        clear(res); add(res, h('div', { class: 'loading' }, spinner()));
+        api('score.preview', q, { fresh: true }).then(function (p) {
+          clear(res);
+          add(res, h('div', { class: 'crit-chip', text: '📋 ' + SCORE.critText(p.crit) }));
+          if (p.lines && p.lines.length) add(res, table(['ข้อหา', 'ต่อใบ', 'ใบ', 'คะแนน'], p.lines.map(function (x) { return [(x.emph ? '⭐ ' : '') + x.label, fmtPts(x.per), x.count, fmtPts(x.pts)]; })));
+          add(res, h('div', { class: 'row', style: 'margin-top:6px' }, h('span', { class: 'grow small', text: p.rule }), h('b', { text: fmtPts(p.pts) + ' คะแนน' })));
+          (p.notes || []).forEach(function (n) { add(res, h('div', { class: 'small muted', text: n })); });
+          base = p.pts;
+        }, function (e) { clear(res); add(res, h('div', { class: 'small muted', text: '⚠️ ' + e.message })); });
+      }
+      var base = null;
+      add(c, h('button', { class: 'btn ghost sm', type: 'button', onclick: run, text: '🔄 คำนวณคะแนน' }), res);
+      var form = null;
+      if (opt.propose) {
+        form = SCORE.form({ noNone: true });
+        add(c, h('details', { class: 'adj-dt' }, h('summary', { class: 'small', text: '✏️ เสนอปรับคะแนนรายการนี้ (ไม่บังคับ)' }),
+          h('p', { class: 'small muted', text: (can('case.approve') ? 'ผู้ตรวจที่ไม่ได้อยู่ในรายการ ปรับแล้วมีผลทันที · ' : 'ส่งให้ผู้ตรวจอนุมัติหลังบันทึก · ') + 'ระบบสรุปผลกระทบให้ตรวจก่อนส่ง' }), form));
+      }
+      if (opt.note) add(c, h('p', { class: 'small muted', text: opt.note }));
+      c.proposal = function () { return form ? form.get(false) : null; };
+      /** หลังบันทึกรายการแล้ว: ถ้ามีการเสนอปรับ → สรุปผลกระทบ → ส่ง */
+      c.submitAfter = function (prop, target, title) {
+        if (!prop || !target) return;
+        var req = Object.assign({}, target, prop);
+        setTimeout(function () {
+          SCORE.impact(Object.assign({ kind: 'adjust' }, req), 'เสนอปรับคะแนน "' + (title || 'รายการที่บันทึก') + '"', function () {
+            return api('score.adjust', req).then(function (r) { toast(r.status === 'approved' ? '✅ ปรับคะแนนแล้ว' : '⏳ ส่งคำขอปรับคะแนนแล้ว — รอผู้ตรวจอนุมัติ', 3500); });
+          });
+        }, 300);
+      };
+      c.run = run;
+      return c;
+    },
+    /** รายการรออนุมัติ (หน้า คะแนน) */
+    pendingCard: function (list, after) {
+      var c = card('⏳ คำขอปรับคะแนนรออนุมัติ', list.length + ' รายการ');
+      list.forEach(function (x) {
+        add(c, h('div', { class: 'list-item', style: 'cursor:pointer;display:block', onclick: function () { SCORE.sheet(x.open, after); } },
+          h('b', { text: x.title || x.target }), h('div', { class: 'small', text: x.text + ' · ' + x.reason }), h('div', { class: 'small muted', text: 'เสนอโดย ' + x.by + ' ' + histWhen(x.at) + ' · แตะเพื่อดู/อนุมัติ' })));
+      });
+      return c;
+    }
+  };
+  /** บันทึกว่าส่งภาพ/ประกาศเข้ากลุ่มแล้ว (ใช้เตือนเมื่อแก้คะแนนย้อนหลัง) */
+  function logSent(kind, from, to, title) { try { api('sent.log', { kind: kind, from: from, to: to || from, title: title || '' }).then(null, function () { }); } catch (e) { } }
+
   // ======================= คะแนนผลการปฏิบัติ =======================
   function fmtPts(n) { n = Math.round((+n || 0) * 100) / 100; return (n > 0 ? '' : '') + n.toLocaleString('th-TH'); }
   /** แถบคะแนน (รองรับค่าติดลบ — แสดงเป็นแถบสีแดง) */
@@ -2834,8 +3032,9 @@
     });
     return box;
   }
-  function announceScore(id) {
+  function announceScore(id, w) {
     return api('score.text', { id: id }).then(function (t) { return postToChat(t); }).then(function (r) {
+      if (r === 'sent' || r === 'shared') logSent('announce', (w && w.from) || today(), (w && w.to) || today(), 'ประกาศเกณฑ์ ' + ((w && w.name) || ''));
       toast(r === 'sent' ? 'ส่งประกาศเข้ากลุ่มแล้ว' : r === 'shared' ? 'แชร์ประกาศแล้ว' : r === 'copied' ? '📋 คัดลอกประกาศแล้ว — วางในกลุ่มรายงานได้เลย' : 'ยกเลิก', 3500);
     });
   }
@@ -2862,7 +3061,7 @@
     items.forEach(function (i) { add(tbl, h('div', { class: 'ci' }, h('span', { text: i[0] }), h('b', { class: i[1] < 0 ? 'neg' : '', text: fmtPts(i[1]) + ' / ' + i[2] }))); });
     add(c, tbl, h('p', { class: 'muted small', text: 'ใบสั่ง: เจ้าหน้าที่ทุกคนในรถได้คะแนนเท่ากัน · จับกุม: หมายจับคิดต่อหมาย (1 ราย 3 หมาย = 3 หมาย) ซึ่งหน้าคิดต่อราย · ยาเสพติดคิดต่อคดีตามของกลางรวม (ไม่คูณจำนวนผู้ต้องหา หลายชนิดใช้ขั้นสูงสุด) · คดีร่วมหลายคัน: รถผู้จับหลักได้ ' + fmtPts(x.primaryPct != null ? x.primaryPct : 60) + '% รถที่ร่วมแบ่งส่วนที่เหลือ (รวม 100%) ระบุรถหลักไม่ได้หารเท่ากัน · ทุกคนในรถได้เท่าส่วนของรถ · คดีเครือข่าย/OP (ผู้บังคับบัญชาระบุ): ผู้ร่วมปฏิบัติทุกคนได้เต็มคดี ไม่แบ่งตามรถ' }));
     if (w.note) add(c, h('p', { class: 'small', text: 'หมายเหตุ: ' + w.note }));
-    if (canManage) add(c, h('div', { class: 'row', style: 'margin-top:8px' }, submitBtn('📣 ประกาศเกณฑ์นี้เข้ากลุ่ม', 'ghost sm grow', function () { return announceScore(w.id); })));
+    if (canManage) add(c, h('div', { class: 'row', style: 'margin-top:8px' }, submitBtn('📣 ประกาศเกณฑ์นี้เข้ากลุ่ม', 'ghost sm grow', function () { return announceScore(w.id, w); })));
     return c;
   }
   VIEWS.score = function () {
@@ -2907,6 +3106,9 @@
           m.specials.map(function (x) { return h('div', { text: th(x.date) + ' ' + x.name + ' — ' + (x.pts > 0 ? '+' : '') + fmtPts(x.pts) + (x.extra ? ' (พิเศษเฉพาะบุคคล)' : '') }); })));
       }
       add(out, mc);
+      // v1.19 คำขอปรับคะแนนรออนุมัติ
+      var pend = h('div'); add(out, pend);
+      api('score.pending', {}, { fresh: true }).then(function (list) { clear(pend); if (list && list.length) add(pend, SCORE.pendingCard(list, function () { apiInvalidate(); })); }, function () { });
       // คดีเครือข่าย/OP + คะแนนพิเศษในช่วงนี้
       if ((d.specials || []).length || d.canSpecial) {
         var spc = card('⭐ คดีเครือข่าย/OP · คะแนนพิเศษ', h('button', { class: 'linkbtn', onclick: function () { go('special', { month: d.to.slice(0, 7) }); }, text: d.canSpecial ? 'จัดการ ›' : 'ดูทั้งหมด ›' }));
@@ -2970,7 +3172,7 @@
         add(c, h('div', { class: 'row', style: 'margin-top:8px;flex-wrap:wrap' },
           h('button', { class: 'btn sm', onclick: function () { editor(w); }, text: '✏️ แก้ไข' }),
           isStd ? null : h('button', { class: 'btn ghost sm', onclick: function () { editor(null, w); }, text: '📄 คัดลอกเป็นช่วงใหม่' }),
-          submitBtn('📣 ประกาศ', 'ghost sm', function () { return announceScore(w.id); }),
+          submitBtn('📣 ประกาศ', 'ghost sm', function () { return announceScore(w.id, w); }),
           isStd ? null : submitBtn('ลบ', 'gray sm', function () { if (!confirm('ลบช่วง "' + w.name + '"? วันที่ในช่วงนี้จะกลับไปใช้เกณฑ์มาตรฐาน')) return; return api('score.delete', { id: w.id }).then(function () { toast('ลบแล้ว'); VIEWS.scoreAdmin(); }); })));
         return c;
       }
@@ -3050,6 +3252,29 @@
           add(nc, h('label', { class: 'f', text: g[1] }), gr);
         });
         add($app, nc);
+        // v1.19 ช่วงคะแนนพิเศษ: เก็บเฉพาะค่าที่ต่างจากมาตรฐาน (ไฮไลต์) · ค่าอื่นตามมาตรฐาน
+        var partial = h('input', { type: 'checkbox', checked: !(w && w.id !== 'default' && w.partial === false) });
+        if (!isStd) {
+          var SW = d.standard.weights, pairs = [];
+          ['T', 'C', 'R'].forEach(function (k) { pairs.push([actIn[k], SW.act[k]]); });
+          pairs.push([war, SW.warrant], [flag, SW.flag], [joint, SW.primaryPct != null ? SW.primaryPct : 60], [missed, Math.abs(SW.missed)]);
+          L.cats.forEach(function (k) { pairs.push([catIn[k], Object.prototype.hasOwnProperty.call(SW.cat || {}, k) ? SW.cat[k] : '']); });
+          Object.keys(dIn).forEach(function (k) { pairs.push([dIn[k], (SW.drug || {})[k]]); });
+          L.items.forEach(function (i) { pairs.push([itIn[i[0]], SW[i[0]]]); });
+          ['net', 'op'].forEach(function (g) { Object.keys(netIn[g]).forEach(function (k) { pairs.push([netIn[g][k], (SW[g] || {})[k]]); }); });
+          var nDiff = h('b');
+          var markDiff = function () {
+            var n = 0;
+            pairs.forEach(function (pr) { var a = pr[0].value, b = pr[1] == null ? '' : String(pr[1]); var df = a === '' ? b !== '' : b === '' ? true : +a !== +b; if (df) n++; pr[0].classList.toggle('diff-std', !!df); if (df) pr[0].title = 'มาตรฐาน: ' + (b === '' ? 'ใช้ค่าซึ่งหน้า' : b); else pr[0].removeAttribute('title'); });
+            nDiff.textContent = n ? 'ต่างจากมาตรฐาน ' + n + ' ช่อง (ไฮไลต์สีเหลือง)' + (Object.keys(x.code).length ? ' + เน้นย้ำ ' + Object.keys(x.code).length + ' ข้อหา' : '') : 'ยังไม่ต่างจากมาตรฐาน' + (Object.keys(x.code).length ? ' (มีเน้นย้ำ ' + Object.keys(x.code).length + ' ข้อหา)' : '');
+          };
+          pairs.forEach(function (pr) { pr[0].addEventListener('input', markDiff); });
+          markDiff();
+          var pc = card('🎯 ปรับเฉพาะบางหมวด');
+          add(pc, h('label', { class: 'cap' }, partial, 'ค่าที่ไม่ได้ปรับ ให้ตามเกณฑ์มาตรฐาน (แนะนำ)'), h('div', { class: 'small' }, nDiff),
+            h('p', { class: 'small muted', text: 'ระบบเก็บเฉพาะช่องที่ต่างจากมาตรฐาน ช่องอื่นจะตามเกณฑ์มาตรฐานเสมอ แม้แก้มาตรฐานภายหลัง · ไม่ติ๊ก = คงทุกค่าตามที่เห็นตอนนี้' }));
+          add($app, pc);
+        }
         var note = h('textarea', { placeholder: 'ข้อความเน้นย้ำถึงเจ้าหน้าที่ (แสดงในประกาศ)' }); note.value = w ? w.note || '' : (copyFrom && copyFrom.note) || '';
         var reason = h('input', { placeholder: 'เหตุผลการแก้ไข (บันทึกในประวัติ)' });
         var ncard = card('📝 หมายเหตุ'); add(ncard, note); if (w) add(ncard, field('เหตุผลการแก้ไข', reason)); add($app, ncard);
@@ -3059,9 +3284,12 @@
           var wts = { act: { T: actIn.T.value, C: actIn.C.value, R: actIn.R.value }, code: x.code, warrant: war.value, flag: flag.value, cat: cat, primaryPct: joint.value, missed: missed.value, drug: drug };
           L.items.forEach(function (i) { wts[i[0]] = itIn[i[0]].value; });
           ['net', 'op'].forEach(function (g) { var o = {}; Object.keys(netIn[g]).forEach(function (k) { o[k] = netIn[g][k].value; }); wts[g] = o; });
-          return api('score.save', { id: w ? w.id : '', name: name.value, from: from.value, to: to.value, weights: wts, note: note.value, reason: reason.value }).then(function (r) {
-            apiInvalidate(); go('scoreAdmin', { saved: r.id, savedName: r.name }, true);
-          });
+          var req = { id: w ? w.id : '', name: name.value, from: from.value, to: to.value, weights: wts, note: note.value, reason: reason.value, partial: isStd ? undefined : partial.checked };
+          if (!isStd && (!from.value || !to.value || from.value > to.value)) throw new Error('กรุณาเลือกช่วงวันที่ให้ถูกต้อง');
+          SCORE.impact({ kind: 'criteria', id: isStd ? 'default' : req.id, name: req.name, from: req.from, to: req.to, weights: wts, partial: req.partial },
+            (isStd ? 'แก้เกณฑ์มาตรฐาน (ใช้กับวันที่ไม่อยู่ในช่วงพิเศษ)' : 'ช่วง "' + (name.value || 'ใหม่') + '" ' + th(from.value) + ' – ' + th(to.value) + ' — มีผลเฉพาะช่วงนี้'), function () {
+              return api('score.save', req).then(function (r) { apiInvalidate(); closeModal(); go('scoreAdmin', { saved: r.id, savedName: r.name }, true); });
+            });
         })));
       }
     }, function (e) { fail(e, VIEWS.scoreAdmin); });
@@ -4481,6 +4709,7 @@
           var msgs = rs.map(function (r) { return { type: 'image', originalContentUrl: r.direct, previewImageUrl: r.direct }; });
           msgs.push({ type: 'text', text: data.text.slice(0, 4900) });
           return sendToChat(msgs, data.text).then(function (x) {
+            if (x === 'sent' || x === 'shared') logSent('dash', data.from, data.to, 'ภาพสรุป');
             toast(x === 'sent' ? '✅ ส่งเข้ากลุ่มแล้ว' : x === 'shared' ? '✅ ส่งแล้ว' : x === 'cancel' ? 'ยกเลิก' : '📋 คัดลอกข้อความแล้ว — เปิดลิงก์รูปเพื่อบันทึก');
             showFiles(rs);
           });
@@ -4795,7 +5024,7 @@
         submitBtn('📤 ส่งภาพ' + (ps.length > 1 ? ' ' + ps.length + ' ภาพ' : '') + ' + ข้อความเข้าไลน์', 'green block', function () { return make().then(function (rs) {
           var msgs = rs.map(function (r) { return { type: 'image', originalContentUrl: r.direct, previewImageUrl: r.direct }; });
           msgs.push({ type: 'text', text: data.text.slice(0, 4900) });
-          return sendToChat(msgs, data.text).then(function (x) { toast(x === 'sent' ? '✅ ส่งเข้ากลุ่มแล้ว' : x === 'shared' ? '✅ ส่งแล้ว' : x === 'cancel' ? 'ยกเลิก' : '📋 คัดลอกข้อความแล้ว — เปิดลิงก์รูปเพื่อบันทึก'); show(rs); });
+          return sendToChat(msgs, data.text).then(function (x) { if (x === 'sent' || x === 'shared') logSent('daily', data.date, data.date, 'ภาพประจำวัน'); toast(x === 'sent' ? '✅ ส่งเข้ากลุ่มแล้ว' : x === 'shared' ? '✅ ส่งแล้ว' : x === 'cancel' ? 'ยกเลิก' : '📋 คัดลอกข้อความแล้ว — เปิดลิงก์รูปเพื่อบันทึก'); show(rs); });
         }); }),
         h('div', { class: 'row', style: 'margin-top:8px' },
           submitBtn('🖼 บันทึกรูป', 'ghost grow', function () { return make().then(function (rs) { show(rs); rs.forEach(function (r) { if (r.b64) downloadB64(r.b64, r.name, 'image/png'); }); }); }),

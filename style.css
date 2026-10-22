@@ -762,3 +762,17 @@ details.info > div { margin-top: 6px; line-height: 1.5; background: var(--soft);
 .case-car .hist-btns { margin-top: 6px; }
 .ct-team { align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #e2e8f0; }
 .card h3 .right .btn { white-space: nowrap; }
+
+/* v1.19 คะแนนรายรายการ · ปรับคะแนน · สรุปผลกระทบ */
+.crit-chip { display: inline-block; font-size: 12.5px; background: #eef4ff; color: #1d4ed8; border: 1px solid #cfe0ff; border-radius: 999px; padding: 3px 10px; margin: 0 0 8px; }
+.adj-form { margin-top: 4px; }
+.adj-form .seg { flex-wrap: wrap; }
+.adj-form input[type=number] { margin-top: 6px; }
+.adj-pending { border-left: 4px solid #f59e0b; background: #fffbeb; }
+.adj-dt { margin-top: 8px; }
+.adj-dt summary { cursor: pointer; color: #1d4ed8; }
+input.diff-std { background: #fff7cc; border-color: #f59e0b; }
+#modal .kpis { grid-template-columns: repeat(3, 1fr); }
+#modal table { font-size: 13px; }
+.chg-row { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed #e5e9f0; font-size: 14px; }
+.chg-row .chg-v { white-space: nowrap; color: #b45309; }
