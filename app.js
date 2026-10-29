@@ -79,7 +79,7 @@
   // แคชคำตอบระยะสั้นสำหรับคำขออ่านอย่างเดียว (เปิดหน้าเดิมซ้ำไม่ต้องรอเซิร์ฟเวอร์) + รวมคำขอซ้ำที่กำลังรอ
   // คำขออ่านอย่างเดียว: ไม่ล้างแคช · ลองใหม่อัตโนมัติ 1 ครั้งเมื่อเน็ตสะดุด/ตอบช้า (คำขอบันทึกไม่ลองซ้ำเอง)
   var READS = {}; ['bootstrap', 'dash', 'home', 'shift.list', 'shift.get', 'arrest.list', 'arrest.detail', 'history.list', 'history.timeline', 'duty.board', 'duty.week', 'daily.report', 'fine.dash', 'fine.badges',
-    'now', 'summary', 'texts', 'roster.day', 'admin.people', 'admin.meta', 'codes.list', 'admin.registrations', 'score.get', 'score.text', 'score.item', 'score.preview', 'score.pending', 'score.impact', 'admin.audit', 'settings.get', 'export.daily', 'export.events',
+    'now', 'summary', 'texts', 'roster.day', 'admin.people', 'admin.meta', 'codes.list', 'admin.registrations', 'score.get', 'score.text', 'backfill.status', 'score.item', 'score.preview', 'score.pending', 'score.impact', 'admin.audit', 'settings.get', 'export.daily', 'export.events',
     'escort.open', 'file.list', 'suspect.search', 'special.list', 'special.cases'].forEach(function (a) { READS[a] = 1; });
   // ---------- บัตรผ่านของระบบ (v1.13): ใช้แทน ID token ของ LINE ที่หมดอายุเร็ว อายุ 24 ชม. ----------
   var SESS_KEY = 'sess:' + (CFG.LIFF_ID || '');
@@ -172,7 +172,7 @@
     });
   }
   // คำสั่งที่ประมวลผลนาน (รวบรวมข้อมูลหลายเดือน/สร้างไฟล์) รอได้นานกว่าปกติ
-  var LONG_MS = { 'import.update': 170000, 'score.impact': 90000, 'score.item': 30000, 'history.list': 40000, 'shift.detail': 30000, 'history.timeline': 30000, 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000 };
+  var LONG_MS = { 'backfill.preview': 170000, 'backfill.confirm': 170000, 'import.update': 170000, 'score.impact': 90000, 'score.item': 30000, 'history.list': 40000, 'shift.detail': 30000, 'history.timeline': 30000, 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000 };
   function apiRaw(action, data) {
     var ctl = window.AbortController ? new AbortController() : null;
     var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken, sess: S.sess || undefined, viewAs: S.viewAs || undefined }), signal: ctl ? ctl.signal : undefined });
@@ -291,7 +291,7 @@
     window.scrollTo(0, 0);
     try { VIEWS[view](S.params); } catch (e) { clear($app); add($app, errorBox(e.message)); }
   }
-  function pendingTotal() { var p = S.boot && S.boot.pending; return (p ? (can('case.approve') ? p.arrest : 0) + (can('people.manage') ? p.reg : 0) : 0) + ((S.boot && S.boot.filesPending) || 0); }
+  function pendingTotal() { var p = S.boot && S.boot.pending; return (p ? (can('case.approve') ? p.arrest : 0) + (can('people.manage') ? p.reg : 0) : 0) + ((S.boot && S.boot.filesPending) || 0) + (S.boot && S.boot.backfill ? 1 : 0); }
   function renderTabs(active) {
     var nav = document.getElementById('tabs'); clear(nav); nav.hidden = !active;
     if (!active) return;
@@ -576,6 +576,7 @@
     // งานรอดำเนินการของผู้ตรวจ/ผู้ดูแล
     var pend = S.boot.pending || {};
     if (can('case.approve') && pend.arrest) add($app, h('button', { class: 'alert red', onclick: function () { go('cases'); } }, h('b', { text: '📥 คดีจับกุมรอตรวจ ' + pend.arrest + ' คดี' }), h('small', { text: 'แตะเพื่อตรวจและอนุมัติ (คดีที่ท่านอยู่ในชุดจับกุมอนุมัติเองไม่ได้)' })));
+    if (S.boot.backfill) add($app, h('button', { class: 'alert amber', onclick: function () { go('backfill', { from: S.boot.backfill.date, to: S.boot.backfill.date }); } }, h('b', { text: S.boot.backfill.status === 'empty' ? '📊 ตารางผลการปฏิบัติ ' + th(S.boot.backfill.date) + ' ยังว่าง' : '📊 ตารางผลการปฏิบัติ ' + th(S.boot.backfill.date) + ' กรอกแล้ว — รอยืนยันนำเข้า' }), h('small', { text: 'แตะเพื่อดูตัวอย่างแล้วกดยืนยัน' })));
     if (S.boot.filesPending) add($app, h('button', { class: 'alert amber', onclick: function () { go('files'); } }, h('b', { text: '📥 ไฟล์รอตรวจนำเข้า ' + S.boot.filesPending + ' ไฟล์' }), h('small', { text: 'คำสั่งเวร/แบ่งตามสายงาน/รายชื่อที่เจ้าหน้าที่ส่งมา — ตรวจแล้วกดยืนยัน' })));
     if (can('people.manage') && pend.reg) add($app, h('button', { class: 'alert red', onclick: function () { go('registrations'); } }, h('b', { text: '📝 คำขอลงทะเบียน ' + pend.reg + ' รายการ' }), h('small', { text: 'ตรวจว่าชื่อ LINE ตรงตัวก่อนอนุมัติ' })));
     // ภาพรวมสถานี (ทุกคนเห็น) แบบย่อ — โหลดตามหลัง ไม่หน่วงปุ่มเข้าเวร/ส่งเวร · กราฟเต็มอยู่หน้า "ภาพรวม"
@@ -911,6 +912,7 @@
       can('pr.make') ? rowLink('🖼', 'สร้างภาพประชาสัมพันธ์', 'prompt + เบลอรูป', function () { go('pr'); }) : null]);
     group('ตารางเวรและเอกสาร', [
       can('view.now') ? rowLink('🗓', 'ตารางเวร', 'ใครเข้าผลัดไหน · สลับเวร', function () { go('roster'); }) : null,
+      S.boot.canBackfill ? rowLink('📊', 'นำเข้าผลการปฏิบัติย้อนหลัง', 'ตาราง Google Sheet/Excel + แชท', function () { go('backfill'); }, S.boot.backfill ? '1' : '') : null,
       rowLink('📥', 'นำเข้าไฟล์ / คลังเอกสาร', 'คำสั่งเวร · แบ่งตามสายงาน · รายชื่อ · PDF/รูป', function () { go('files'); }, S.boot.filesPending ? String(S.boot.filesPending) : '')]);
     var pm = can('people.manage'), ad = S.boot.perms.admin;
     group('บุคลากร', [
@@ -5397,6 +5399,149 @@
       })));
     }, function (e) { clear(body); add(body, errorBox(e.message)); });
   }
+  // ======================= v1.20 นำเข้าผลการปฏิบัติย้อนหลัง (ตาราง Google Sheet/Excel + แชท) =======================
+  var BF_KEYS = [['T', 'ขส'], ['C', 'รย'], ['truck', 'ตรวจบรรทุก'], ['suspect', 'ตรวจสงสัย'], ['assist', 'ช่วยเหลือ'], ['warrant', 'หมายจับ'], ['crime', 'อาญา'], ['escort', 'ว.42'], ['mission', 'ภารกิจ']];
+  function readText(file) {
+    return new Promise(function (res, rej) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result || '')); }; rd.onerror = function () { rej(new Error('อ่านไฟล์ ' + file.name + ' ไม่ได้')); }; rd.readAsText(file, 'utf-8'); });
+  }
+  /** ตัดแชทส่งออกเหลือเฉพาะช่วงวันที่ (ถึงวันสุดท้าย + 3 วัน สำหรับรายงานผลัดคืน/รายงานคดีที่ส่งทีหลัง) · ตัดบรรทัดรูป/วิดีโอ/สติกเกอร์ */
+  function trimChat(text, from, to) {
+    var last = addDays(to, 3), out = [], keep = false;
+    String(text || '').split(/\r?\n/).forEach(function (l) {
+      var m = /^(\d{4})\.(\d{2})\.(\d{2}) /.exec(l);
+      if (m) { var d = m[1] + '-' + m[2] + '-' + m[3]; keep = d >= from && d <= last; }
+      if (keep && !/^\d{2}:\d{2} .+ (Photos|Videos|Stickers|Files|Albums?)$|unsent a message\.$/.test(l)) out.push(l);
+    });
+    return out.join('\n');
+  }
+  function bfLinks(after) {
+    api('backfill.status', {}, { fresh: true }).then(function (st) {
+      var rows = (st.links.length ? st.links : [{ url: '', label: '' }]).map(function (x) { return { url: x.url, label: x.label }; }), box = h('div');
+      function draw() {
+        clear(box);
+        rows.forEach(function (r, i) {
+          var u = h('input', { value: r.url, placeholder: 'ลิงก์ Google Sheet เช่น https://docs.google.com/spreadsheets/d/…' }), l = h('input', { value: r.label, placeholder: 'ชื่อ เช่น ต.ค. 69' });
+          u.oninput = function () { r.url = u.value; }; l.oninput = function () { r.label = l.value; };
+          add(box, h('div', { class: 'subcard' }, h('div', { class: 'row' }, h('b', { class: 'grow', text: 'ลิงก์ที่ ' + (i + 1) }), h('button', { class: 'btn gray sm', type: 'button', onclick: function () { rows.splice(i, 1); draw(); }, text: 'ลบ' })), l, u));
+        });
+        add(box, h('button', { class: 'btn ghost sm', type: 'button', onclick: function () { rows.push({ url: '', label: '' }); draw(); }, text: '➕ เพิ่มลิงก์ (เช่น ไฟล์เดือนใหม่)' }));
+      }
+      draw();
+      modal('⚙️ ลิงก์ Google Sheet ผลการปฏิบัติ', [h('p', { class: 'small muted', text: 'ระบบหาแท็บตามวันที่ (เช่น "21 ต.ค. 69") จากลิงก์ล่าสุดก่อน · ไฟล์ต้องแชร์ "ทุกคนที่มีลิงก์ดูได้" หรือแชร์ให้บัญชีระบบ · ถ้าเดือนใหม่เป็นไฟล์ใหม่ ให้เพิ่มลิงก์' }), box], 'บันทึก', function () {
+        return api('backfill.links', { links: rows.filter(function (r) { return String(r.url).trim(); }) }).then(function () { apiInvalidate(); toast('บันทึกลิงก์แล้ว'); if (after) after(); });
+      });
+    }, function (e) { toast('⚠️ ' + e.message, 4000); });
+  }
+  VIEWS.backfill = function (params) {
+    params = params || {};
+    setTitle('📊 นำเข้าผลย้อนหลัง', 'ตารางผลการปฏิบัติ (Google Sheet/Excel) + แชท');
+    loading();
+    api('backfill.status', {}, { fresh: true }).then(function (st) {
+      clear($app);
+      var src = st.links.length ? 'sheet' : 'excel', xl = null, chats = [], res = null, fix = {};
+      var from = h('input', { type: 'date', value: params.from || st.from, max: st.to }), to = h('input', { type: 'date', value: params.to || st.to, max: st.to });
+      var srcBox = h('div'), out = h('div');
+      function drawSrc() {
+        clear(srcBox);
+        if (src === 'sheet') {
+          if (!st.links.length) add(srcBox, h('div', { class: 'note small', text: 'ยังไม่ได้ตั้งลิงก์ Google Sheet — กด ⚙️ จัดการลิงก์' }));
+          st.links.forEach(function (l) { add(srcBox, h('div', { class: 'small' }, '🔗 ', h('a', { href: l.url, target: '_blank', rel: 'noopener', text: l.label || 'Google Sheet' }))); });
+          add(srcBox, h('button', { class: 'btn ghost sm', type: 'button', style: 'margin-top:6px', onclick: function () { bfLinks(function () { VIEWS.backfill(params); }); }, text: '⚙️ จัดการลิงก์' }));
+        } else {
+          var fi = h('input', { type: 'file', accept: '.xlsx' });
+          fi.onchange = function () { var f = fi.files && fi.files[0]; if (!f) return; readB64(f).then(function (b) { xl = { name: f.name, b64: b }; info.textContent = '✅ ' + f.name + ' (' + fileSize(f.size) + ')'; }); };
+          var info = h('div', { class: 'small muted', text: xl ? '✅ ' + xl.name : 'ไฟล์ Excel แบบเดียวกับตาราง (แท็บรายวัน)' });
+          add(srcBox, fi, info);
+        }
+      }
+      var ci = h('input', { type: 'file', accept: '.txt,text/plain', multiple: true }), cinfo = h('div', { class: 'small muted', text: 'ไม่บังคับ — ใช้หาชื่อขบวน ว.42 และคดีจากรายงาน CCOC' });
+      ci.onchange = function () {
+        var fs = [].slice.call(ci.files || []); chats = [];
+        Promise.all(fs.map(function (f) { return readText(f).then(function (t) { return { name: f.name, text: t }; }); })).then(function (list) {
+          chats = list; cinfo.textContent = list.length ? '✅ ' + list.map(function (x) { return x.name; }).join(', ') + ' — ระบบส่งเฉพาะข้อความในช่วงวันที่ที่เลือก' : '';
+        }, function (e) { toast(e.message); });
+      };
+      function req() {
+        if (!from.value || !to.value || from.value > to.value) throw new Error('เลือกช่วงวันที่ให้ถูกต้อง');
+        if (src === 'excel' && !xl) throw new Error('เลือกไฟล์ Excel ก่อน');
+        var q = { from: from.value, to: to.value, source: src, chats: chats.map(function (c) { return trimChat(c.text, from.value, to.value); }).filter(String), fix: fix };
+        if (src === 'excel') q.excel = { b64: xl.b64 };
+        return q;
+      }
+      var c1 = card('1) ช่วงวันที่และแหล่งข้อมูล', st.last ? 'นำเข้าล่าสุดถึง ' + th(st.last) : '');
+      add(c1, h('div', { class: 'row2' }, field('ตั้งแต่', from), field('ถึง', to)),
+        field('ตัวเลข', segPick([['sheet', '🔗 Google Sheet'], ['excel', '📗 ไฟล์ Excel']], src, function (v) { src = v; drawSrc(); })), srcBox,
+        field('ไฟล์แชทส่งออก (.txt) — ทล.ชลบุรี / CCOC', ci), cinfo);
+      drawSrc();
+      if (st.auto && st.auto.date && (st.auto.status === 'notified' || st.auto.status === 'empty')) add($app, h('div', { class: 'note' + (st.auto.status === 'empty' ? '' : ' success'), text: st.auto.status === 'empty' ? '⚠️ ตารางของ ' + th(st.auto.date) + ' ยังว่าง (ถึง 12.00 น.) — ถ้าวันนั้นไม่มีผลจริง ดูตัวอย่างแล้วยืนยันได้' : '📥 ตารางของ ' + th(st.auto.date) + ' กรอกแล้ว — ดูตัวอย่างแล้วกดยืนยัน' }));
+      add(c1, h('div', { style: 'margin-top:10px' }, submitBtn('🔎 ดูตัวอย่าง', 'block', function () {
+        var q = req(); clear(out); add(out, h('div', { class: 'loading' }, spinner(), h('p', { text: 'กำลังอ่านตารางและเทียบกับข้อมูลในแอป… (อาจใช้เวลาถึง 1 นาที)' })));
+        return api('backfill.preview', q, { fresh: true }).then(function (r) { res = r; draw(); out.scrollIntoView({ behavior: 'smooth' }); }, function (e) { clear(out); add(out, errorBox(e.message)); throw e; });
+      })));
+      add($app, c1, out);
+      // ประวัติ
+      if (st.history.length) add($app, h('details', { class: 'card' }, h('summary', { text: '🕘 ประวัติการนำเข้า ' + st.history.length + ' รายการล่าสุด' }),
+        st.history.map(function (x) { return h('div', { class: 'small', style: 'padding:3px 0;border-bottom:1px dashed #e5e9f0', text: th(x.date) + ' · ' + (x.status === 'done' ? '✅ นำเข้าแล้ว' : 'ไม่พบตาราง') + ' · ' + (x.source || '') + ' · ' + x.by + ' ' + histWhen(x.at) }); })));
+      function draw() {
+        clear(out);
+        var p = res.plan || {}, warnN = res.days.filter(function (d) { return d.warnings.length; }).length;
+        add(out, h('div', { class: 'card' }, h('h3', { text: '2) ตัวอย่างก่อนนำเข้า ' + th(res.from) + (res.to !== res.from ? ' – ' + th(res.to) : '') }),
+          h('div', { class: 'kpis' }, [['ผลัดใหม่', p.newShifts], ['เติมผลัดเดิม', p.filledShifts], ['รายการที่เพิ่ม', p.events], ['คดี (รอตรวจ)', res.arrests.filter(function (a) { return !a.skip; }).length]].map(function (k) { return h('div', { class: 'kpi' }, h('div', { class: 'n', text: String(k[1] || 0) }), h('div', { class: 't', text: k[0] })); })),
+          h('p', { class: 'small muted', text: 'เติมเฉพาะส่วนที่ขาด — ของที่เจ้าหน้าที่บันทึกในแอปไว้แล้วคงเดิม · สำรองฐานข้อมูลก่อนเขียน · รันซ้ำได้ไม่เกิดรายการซ้ำ' + (res.haveChat ? '' : ' · ไม่ได้แนบแชท: ชื่อขบวน ว.42 จะเป็น "ไม่ระบุ" และไม่มีคดีจาก CCOC') }),
+          p.unmatchedNames && Object.keys(p.unmatchedNames).length ? h('div', { class: 'note small', text: 'ชื่อที่จับคู่เจ้าหน้าที่ไม่ได้: ' + Object.keys(p.unmatchedNames).join(', ') }) : null,
+          warnN ? h('div', { class: 'note small', text: '⚠️ มีข้อควรตรวจ ' + warnN + ' วัน (ดูในแต่ละวันด้านล่าง)' }) : null));
+        res.days.forEach(function (d) {
+          var bad = !d.found || !d.totalsOk, more = d.cars.filter(function (c) { return c.more.length; }).length;
+          var dc = h('details', { class: 'card bf-day' + (bad ? ' bad' : ''), open: bad || res.days.length === 1 },
+            h('summary', null, h('b', { text: th(d.date) + ' ' }), h('span', { class: 'small', text: !d.found ? '❌ ไม่พบตาราง' : !d.filled ? '⚪ ตารางว่าง → ไม่มีผล' : d.totalsOk ? '✅ ยอดตรงแถวรวม' : '⚠️ ยอดไม่ตรงแถวรวม' }),
+              more ? h('span', { class: 'badge amber', style: 'margin-left:6px', text: 'แอปมากกว่าตาราง ' + more + ' คัน' }) : null));
+          if (d.src) add(dc, h('div', { class: 'small muted', text: d.src }));
+          d.warnings.forEach(function (w) { add(dc, h('div', { class: 'small', style: 'color:#b45309', text: '• ' + w })); });
+          if (d.total) add(dc, h('div', { class: 'small', text: 'แถวรวม: ' + BF_KEYS.filter(function (k) { return d.total[k[0]]; }).map(function (k) { return k[1] + ' ' + d.total[k[0]]; }).join(' · ') || '0' }));
+          if (d.found) add(dc, table(['รถ', 'ใบสั่งรายข้อหา', 'อื่นๆ'], d.cars.map(function (c) {
+            var oth = BF_KEYS.slice(2).filter(function (k) { return c.sheet[k[0]]; }).map(function (k) { return k[1] + ' ' + c.sheet[k[0]]; });
+            if (c.escorts.length) oth.push('ว.42: ' + c.escorts.join(', ')); if (c.missions.length) oth.push('ภารกิจ: ' + c.missions.join(', '));
+            return [c.car + ' ' + (c.shift === 'N' ? '🌙' : '☀️') + (c.more.length ? ' ⚠️' : ''), c.tickets.map(function (t) { return t.label + ' ' + t.count; }).join(', ') || (c.note === '(ไม่มีในตาราง)' ? 'ไม่มีในตาราง' : '-'),
+              oth.join(' · ') + (c.more.length ? ' · ' + c.more.join(' · ') : '')];
+          })));
+          add(out, dc);
+        });
+        if (res.arrests.length) {
+          var ac = card('🚨 คดีจาก CCOC ' + res.arrests.length + ' คดี', 'เข้า "รอตรวจ" ให้ผู้ตรวจอนุมัติ');
+          res.arrests.forEach(function (a) {
+            var f = fix[a.key] = fix[a.key] || { primary: a.car, joint: a.joint.slice(), cat: a.cat, skip: a.skip };
+            var day = res.days.filter(function (d) { return d.date === a.date; })[0], allCars = day ? day.cars.map(function (c) { return c.car; }) : [];
+            [a.car].concat(a.joint).forEach(function (c) { if (c && allCars.indexOf(c) < 0) allCars.push(c); });
+            var prim = h('select', null, h('option', { value: '', text: '— เลือกรถหลัก —' }), allCars.map(function (c) { return h('option', { value: c, text: c + (a.hits[c] ? ' (ชุดจับกุม ' + a.hits[c] + ' คน)' : ''), selected: c === f.primary }); }));
+            var cat = h('select', null, res.cats.map(function (c) { return h('option', { value: c, text: c, selected: c === f.cat }); }));
+            var jbox = h('div', { class: 'chips' });
+            function drawJ() { clear(jbox); allCars.filter(function (c) { return c !== f.primary; }).forEach(function (c) { var on = f.joint.indexOf(c) >= 0; add(jbox, h('button', { class: 'chip' + (on ? ' on' : ''), type: 'button', onclick: function () { if (on) f.joint = f.joint.filter(function (x) { return x !== c; }); else f.joint.push(c); drawJ(); }, text: (on ? '✅ ' : '') + c + (a.hits[c] ? ' (' + a.hits[c] + ')' : '') })); }); }
+            prim.onchange = function () { f.primary = prim.value; f.joint = f.joint.filter(function (x) { return x !== f.primary; }); drawJ(); };
+            cat.onchange = function () { f.cat = cat.value; };
+            var sk = h('input', { type: 'checkbox', checked: !!f.skip, onchange: function () { f.skip = sk.checked; } });
+            drawJ();
+            add(ac, h('div', { class: 'subcard' }, h('b', { text: th(a.date) + ' ' + a.time + ' น. · ' + (a.kind === 'หมายจับ' ? '📜 หมายจับ' : '⚡ ' + a.kind) + ' ' + a.count + ' ราย' }),
+              h('div', { class: 'small', text: a.title }), a.place ? h('div', { class: 'small muted', text: '📍 ' + a.place }) : null,
+              h('div', { class: 'small muted', text: 'ชุดจับกุม ' + a.team.length + ' นาย' + (a.unmatched.length ? ' · จับคู่ไม่ได้: ' + a.unmatched.join(', ') : '') + ' · ผู้ต้องหา ' + a.suspects + ' ราย (เก็บในไฟล์ข้อมูลจำกัด)' }),
+              field('หมวดคดี', cat), field('รถผู้จับหลัก (ได้ 60%)', prim), h('label', { class: 'f', text: 'รถที่ร่วมจับกุม' }), jbox,
+              h('label', { class: 'cap' }, sk, 'ไม่นำเข้าคดีนี้ (เช่น บันทึกในแอปแล้ว)')));
+          });
+          add(out, ac);
+        }
+        add(out, bar(submitBtn('✅ ยืนยันนำเข้า', 'green grow', function () {
+          var q = req(); q.fix = {};
+          Object.keys(fix).forEach(function (k) { q.fix[k] = { primary: fix[k].primary, joint: fix[k].joint, cat: fix[k].cat, skip: fix[k].skip || !fix[k].primary }; });
+          if (res.days.some(function (d) { return !d.totalsOk; }) && !confirm('มีวันที่ยอดรายรถไม่ตรงแถว "รวม" ของตาราง — ยืนยันนำเข้าตามตัวเลขรายรถ?')) return;
+          return api('backfill.confirm', q).then(function (r) {
+            apiInvalidate(); refreshBoot();
+            done('นำเข้าผลย้อนหลังแล้ว', th(res.from) + (res.to !== res.from ? ' – ' + th(res.to) : '') + '\nผลัดใหม่ ' + r.plan.newShifts + ' · เติม ' + r.plan.filledShifts + ' · รายการ ' + r.plan.events + ' · คดีรอตรวจ ' + r.arrests + '\nสำรองข้อมูลก่อนเขียน: ' + (r.plan.backup || '-'),
+              { next: r.arrests ? 'cases' : 'home', nextText: r.arrests ? 'ไปตรวจคดี' : 'กลับหน้าแรก' });
+          });
+        })));
+      }
+    }, function (e) { fail(e, function () { VIEWS.backfill(params); }); });
+  };
+
   VIEWS.files = function (params) {
     params = params || {};
     setTitle('📥 นำเข้าไฟล์', 'ส่งไฟล์ให้ระบบ · คลังเอกสาร');
@@ -5405,6 +5550,7 @@
     var drop = h('label', { class: 'drop' }, input, h('div', { class: 'drop-ic', text: '📤' }), h('b', { text: 'แตะเพื่อเลือกไฟล์' }),
       h('small', { text: 'Word · Excel (.xlsx) · CSV · PDF · รูปภาพ — ไม่เกิน 10 MB ต่อไฟล์ เลือกหลายไฟล์พร้อมกันได้' }));
     var status = h('div');
+    if (S.boot.canBackfill) add($app, h('div', { class: 'list' }, rowLink('📊', 'นำเข้าผลการปฏิบัติย้อนหลัง', 'ตาราง Google Sheet/Excel ที่เจ้าหน้าที่กรอก + ไฟล์แชท', function () { go('backfill'); }, S.boot.backfill ? '1' : '')));
     add($app, h('div', { class: 'card' }, drop, status,
       h('details', { class: 'small', style: 'margin-top:10px' }, h('summary', { text: 'ระบบทำอะไรกับไฟล์แต่ละแบบ' }),
         h('ul', { class: 'small', style: 'padding-left:18px;margin:6px 0' },

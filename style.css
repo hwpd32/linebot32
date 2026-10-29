@@ -776,3 +776,8 @@ input.diff-std { background: #fff7cc; border-color: #f59e0b; }
 #modal table { font-size: 13px; }
 .chg-row { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed #e5e9f0; font-size: 14px; }
 .chg-row .chg-v { white-space: nowrap; color: #b45309; }
+
+/* v1.20 นำเข้าผลย้อนหลัง */
+.bf-day summary { cursor: pointer; }
+.bf-day.bad { border-left: 4px solid #f59e0b; }
+.bf-day table { font-size: 12.5px; }
