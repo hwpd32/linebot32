@@ -172,7 +172,7 @@
     });
   }
   // คำสั่งที่ประมวลผลนาน (รวบรวมข้อมูลหลายเดือน/สร้างไฟล์) รอได้นานกว่าปกติ
-  var LONG_MS = { 'score.impact': 90000, 'score.item': 30000, 'history.list': 40000, 'shift.detail': 30000, 'history.timeline': 30000, 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000 };
+  var LONG_MS = { 'import.update': 170000, 'score.impact': 90000, 'score.item': 30000, 'history.list': 40000, 'shift.detail': 30000, 'history.timeline': 30000, 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000 };
   function apiRaw(action, data) {
     var ctl = window.AbortController ? new AbortController() : null;
     var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken, sess: S.sess || undefined, viewAs: S.viewAs || undefined }), signal: ctl ? ctl.signal : undefined });
