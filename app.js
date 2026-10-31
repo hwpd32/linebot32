@@ -5405,12 +5405,35 @@
     return new Promise(function (res, rej) { var rd = new FileReader(); rd.onload = function () { res(String(rd.result || '')); }; rd.onerror = function () { rej(new Error('อ่านไฟล์ ' + file.name + ' ไม่ได้')); }; rd.readAsText(file, 'utf-8'); });
   }
   /** ตัดแชทส่งออกเหลือเฉพาะช่วงวันที่ (ถึงวันสุดท้าย + 3 วัน สำหรับรายงานผลัดคืน/รายงานคดีที่ส่งทีหลัง) · ตัดบรรทัดรูป/วิดีโอ/สติกเกอร์ */
+  /** แชทส่งออกจาก LINE เดสก์ท็อป ("Fri, 30/10/2569 BE" + "HH:MM<TAB>ผู้ส่ง<TAB>ข้อความ") → รูปแบบมือถือ (ฝั่งเซิร์ฟเวอร์รองรับทั้งสองแบบ) */
+  function normChat(t) {
+    t = String(t || '').replace(/\r/g, '').replace(/[\u2068\u2069\uFEFF]/g, '');
+    var DATE = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2})\/(\d{2})\/(\d{4})(?: BE)?\s*$/, MSG = /^(\d{2}:\d{2})\t([^\t]*)\t(.*)$/;
+    if (!/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2}\/\d{2}\/\d{4}/m.test(t)) return t;
+    var L = t.split('\n'), out = [];
+    function closed(b) { var m = /"+$/.exec(b); return !!m && m[0].length % 2 === 1; }
+    for (var i = 0; i < L.length; i++) {
+      var ln = L[i], d = DATE.exec(ln), m;
+      if (d) { var y = +d[3]; if (y > 2400) y -= 543; out.push(y + '.' + d[2] + '.' + d[1] + ' ' + ln); continue; }
+      if ((m = MSG.exec(ln))) {
+        var txt = m[3];
+        if (txt.charAt(0) === '"') {
+          var buf = txt.slice(1), n = 0;
+          while (!closed(buf) && i + 1 < L.length && n < 600 && !MSG.test(L[i + 1]) && !DATE.test(L[i + 1])) { i++; n++; buf += '\n' + L[i]; }
+          txt = buf.replace(/"$/, '').replace(/""/g, '"');
+        }
+        out.push(m[1] + ' ' + (m[2] || '-') + ' ' + txt); continue;
+      }
+      out.push(ln);
+    }
+    return out.join('\n');
+  }
   function trimChat(text, from, to) {
     var last = addDays(to, 3), out = [], keep = false;
-    String(text || '').split(/\r?\n/).forEach(function (l) {
+    normChat(text).split(/\r?\n/).forEach(function (l) {
       var m = /^(\d{4})\.(\d{2})\.(\d{2}) /.exec(l);
       if (m) { var d = m[1] + '-' + m[2] + '-' + m[3]; keep = d >= from && d <= last; }
-      if (keep && !/^\d{2}:\d{2} .+ (Photos|Videos|Stickers|Files|Albums?)$|unsent a message\.$/.test(l)) out.push(l);
+      if (keep && !/^\d{2}:\d{2} .+ (Photos|Videos|Stickers|Files|Albums?|\[(Photo|Video|Sticker|File|Album|Voice message|Contact|Location)\])$|unsent a message\.$/.test(l)) out.push(l);
     });
     return out.join('\n');
   }
@@ -5486,7 +5509,7 @@
         clear(out);
         var p = res.plan || {}, warnN = res.days.filter(function (d) { return d.warnings.length; }).length;
         add(out, h('div', { class: 'card' }, h('h3', { text: '2) ตัวอย่างก่อนนำเข้า ' + th(res.from) + (res.to !== res.from ? ' – ' + th(res.to) : '') }),
-          h('div', { class: 'kpis' }, [['ผลัดใหม่', p.newShifts], ['เติมผลัดเดิม', p.filledShifts], ['รายการที่เพิ่ม', p.events], ['คดี (รอตรวจ)', res.arrests.filter(function (a) { return !a.skip; }).length]].map(function (k) { return h('div', { class: 'kpi' }, h('div', { class: 'n', text: String(k[1] || 0) }), h('div', { class: 't', text: k[0] })); })),
+          h('div', { class: 'kpis' }, [['ผลัดใหม่', p.newShifts], ['เติมผลัดเดิม', p.filledShifts], ['รายการที่เพิ่ม', p.events], ['คดี (รอตรวจ)', res.arrests.filter(function (a) { return !a.skip; }).length]].concat(p.renamed ? [['เติมชื่อขบวน', p.renamed]] : []).map(function (k) { return h('div', { class: 'kpi' }, h('div', { class: 'n', text: String(k[1] || 0) }), h('div', { class: 't', text: k[0] })); })),
           h('p', { class: 'small muted', text: 'เติมเฉพาะส่วนที่ขาด — ของที่เจ้าหน้าที่บันทึกในแอปไว้แล้วคงเดิม · สำรองฐานข้อมูลก่อนเขียน · รันซ้ำได้ไม่เกิดรายการซ้ำ' + (res.haveChat ? '' : ' · ไม่ได้แนบแชท: ชื่อขบวน ว.42 จะเป็น "ไม่ระบุ" และไม่มีคดีจาก CCOC') }),
           p.unmatchedNames && Object.keys(p.unmatchedNames).length ? h('div', { class: 'note small', text: 'ชื่อที่จับคู่เจ้าหน้าที่ไม่ได้: ' + Object.keys(p.unmatchedNames).join(', ') }) : null,
           warnN ? h('div', { class: 'note small', text: '⚠️ มีข้อควรตรวจ ' + warnN + ' วัน (ดูในแต่ละวันด้านล่าง)' }) : null));
@@ -5534,7 +5557,7 @@
           if (res.days.some(function (d) { return !d.totalsOk; }) && !confirm('มีวันที่ยอดรายรถไม่ตรงแถว "รวม" ของตาราง — ยืนยันนำเข้าตามตัวเลขรายรถ?')) return;
           return api('backfill.confirm', q).then(function (r) {
             apiInvalidate(); refreshBoot();
-            done('นำเข้าผลย้อนหลังแล้ว', th(res.from) + (res.to !== res.from ? ' – ' + th(res.to) : '') + '\nผลัดใหม่ ' + r.plan.newShifts + ' · เติม ' + r.plan.filledShifts + ' · รายการ ' + r.plan.events + ' · คดีรอตรวจ ' + r.arrests + '\nสำรองข้อมูลก่อนเขียน: ' + (r.plan.backup || '-'),
+            done('นำเข้าผลย้อนหลังแล้ว', th(res.from) + (res.to !== res.from ? ' – ' + th(res.to) : '') + '\nผลัดใหม่ ' + r.plan.newShifts + ' · เติม ' + r.plan.filledShifts + ' · รายการ ' + r.plan.events + ' · คดีรอตรวจ ' + r.arrests + (r.plan.renamed ? ' · เติมชื่อขบวน ' + r.plan.renamed : '') + '\nสำรองข้อมูลก่อนเขียน: ' + (r.plan.backup || '-'),
               { next: r.arrests ? 'cases' : 'home', nextText: r.arrests ? 'ไปตรวจคดี' : 'กลับหน้าแรก' });
           });
         })));
