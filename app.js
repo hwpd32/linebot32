@@ -2502,19 +2502,35 @@
           h('div', { class: 'zb' }, h('i', { style: 'width:' + Math.max(z.n ? 6 : 0, z.n / zmax * 100) + '%;background:#2563eb' }), h('b', { class: z.n ? '' : 'zero', text: fmtN(z.n) }))));
       });
       add(c, h('div', { class: 'small muted', style: 'margin:10px 0 4px', text: 'รายเขต' }), zt);
-      if (!brief) {
-        var cmax = Math.max.apply(null, [1].concat(w.cars.map(function (x) { return x.n; }))), ct = h('div', { class: 'zrows wn-c' });
-        w.cars.forEach(function (x) {
-          var parts = WARN_ACTS.concat([['X', 'ไม่ระบุ']]).filter(function (a) { return x.act[a[0]]; }).map(function (a) { return a[1].replace('พ.ร.บ.', '') + ' ' + x.act[a[0]]; }).join(' · ');
-          add(ct, h('div', { class: 'zl' }, h('span', null, h('b', { class: 'cno', text: x.car }), h('small', { text: x.zone ? ' เขต ' + x.zone : '' })),
-            h('div', { class: 'zb' }, h('i', { style: 'width:' + Math.max(x.n ? 6 : 0, x.n / cmax * 100) + '%;background:#60a5fa' }), h('b', { class: x.n ? '' : 'zero', text: fmtN(x.n) })),
-            h('small', { class: 'muted', text: (parts ? parts + ' · ' : '') + (x.shifts ? x.shifts + ' ผลัด' : '') })));
-        });
-        add(c, h('div', { class: 'small muted', style: 'margin:10px 0 4px', text: 'รายรถ (เรียงมาก→น้อย)' }), ct);
-      }
+      if (!brief) add(c, h('div', { class: 'small muted', style: 'margin:12px 0 4px', text: 'รายรถ รายวัน' }), warnGrid(w));
       add(c, info('นับจากรายงานส่งเวรของเจ้าหน้าที่ (ว่ากล่าวตักเตือนหน้างาน) แยกตาม พ.ร.บ. · ไม่นำไปคิดคะแนน · ข้อมูลก่อน 13 พ.ย. 69 บางส่วนไม่ระบุ พ.ร.บ.'));
     }, function (e) { clear(c); add(c, errorBox(e.message)); });
     return c;
+  }
+  /** ตารางตักเตือนหน้างาน รายรถ × รายวัน (v1.22.2): ตัวเลข = จำนวนราย · ✗ = มีเวรแต่ไม่มีตักเตือน · ว่าง = ไม่มีเวร */
+  function warnRows(w) {
+    var t = today();
+    return w.cars.filter(function (x) { return /^\d{4}$/.test(x.car); }).slice().sort(function (a, b) { return (a.zone || 9) - (b.zone || 9) || (a.car < b.car ? -1 : 1); }).map(function (x) {
+      var duty = {}; (x.duty || []).forEach(function (d) { duty[d] = 1; });
+      return { car: x.car, zone: x.zone, n: x.n, cells: w.dates.map(function (d) { var n = (x.d || {})[d] || 0; return { d: d, n: n, st: n > 0 ? 'y' : d > t ? 'f' : duty[d] ? (d === t ? 'p' : 'x') : 'o' }; }) };
+    });
+  }
+  function warnGrid(w) {
+    var rows = warnRows(w), DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'], tb = h('table', { class: 'wg' }), hr = h('tr', null, h('th', { class: 'wg-car', text: 'รถ' }));
+    w.dates.forEach(function (d) { var dt = new Date(d + 'T00:00:00'); add(hr, h('th', { class: dt.getDay() === 0 || dt.getDay() === 6 ? 'we' : '' }, h('b', { text: String(+d.slice(8)) }), h('small', { text: DOW[dt.getDay()] }))); });
+    add(hr, h('th', { class: 'wg-sum', text: 'รวม' })); add(tb, h('thead', null, hr));
+    var body = h('tbody'), z0 = null, col = {};
+    rows.forEach(function (r) {
+      if (r.zone !== z0) { z0 = r.zone; add(body, h('tr', { class: 'wg-z' }, h('td', { colspan: String(w.dates.length + 2), text: r.zone ? 'เขต ' + r.zone + ' ' + String((S.boot.zones || {})[r.zone] || '').replace(/^เขต\s*\d+\s*/, '') : 'ไม่ระบุเขต' }))); }
+      var tr = h('tr', null, h('td', { class: 'wg-car', text: r.car }));
+      r.cells.forEach(function (x) { col[x.d] = (col[x.d] || 0) + x.n; add(tr, h('td', { class: 'c-' + x.st, title: th(x.d), text: x.st === 'y' ? String(x.n) : x.st === 'x' ? '✗' : x.st === 'p' ? '·' : '' })); });
+      add(tr, h('td', { class: 'wg-sum' + (r.n ? '' : ' zero'), text: fmtN(r.n) })); add(body, tr);
+    });
+    var fr = h('tr', { class: 'wg-foot' }, h('td', { class: 'wg-car', text: 'รวม' }));
+    w.dates.forEach(function (d) { add(fr, h('td', { text: col[d] ? String(col[d]) : '' })); });
+    add(fr, h('td', { class: 'wg-sum', text: fmtN(w.total) })); add(body, fr); add(tb, body);
+    return h('div', null, h('div', { class: 'wg-wrap' }, tb),
+      h('div', { class: 'wg-key small muted' }, h('span', null, h('i', { class: 'c-y', text: '2' }), ' ตักเตือน (ราย)'), h('span', null, h('i', { class: 'c-x', text: '✗' }), ' มีเวร ไม่มีตักเตือน'), h('span', null, h('i', { class: 'c-o' }), ' ไม่มีเวร'), h('span', null, h('i', { class: 'c-p', text: '·' }), ' วันนี้ (ยังไม่ส่งเวร)')));
   }
   /** การ์ดใบสั่งกล้อง (สถานี) จากข้อมูล PTM (v1.22) — ไม่ลงรถสายตรวจ */
   function cameraCard(from, to) {
@@ -2524,8 +2540,7 @@
       if (!m.have) { add(c, h('p', { class: 'muted small', text: 'ให้ธุรการค่าปรับนำเข้า "รายงานประจำวันสรุปการใช้ใบสั่ง" ที่เมนู 📥 นำเข้า PTM' })); return; }
       var d = m.camera - m.prevCamera, kp = h('div', { class: 'kpis' });
       add(kp, h('div', { class: 'kpi', style: 'border-top:3px solid #0ea5e9' }, h('div', { class: 'n', text: fmtN(m.camera) }), h('div', { class: 't', text: '📷 ใบสั่งกล้อง ' + (d > 0 ? '▲' + d : d < 0 ? '▼' + (-d) : '') })),
-        h('div', { class: 'kpi', style: 'border-top:3px solid #2563eb' }, h('div', { class: 'n', text: fmtN(m.patrol) }), h('div', { class: 't', text: '🧾 ใบสั่งสายตรวจใน PTM' })),
-        h('div', { class: 'kpi', style: 'border-top:3px solid #94a3b8' }, h('div', { class: 'n', text: fmtN(m.cancel) }), h('div', { class: 't', text: '✖️ ยกเลิกใบสั่ง' })));
+        h('div', { class: 'kpi', style: 'border-top:3px solid #2563eb' }, h('div', { class: 'n', text: fmtN(m.patrol) }), h('div', { class: 't', text: '🧾 ใบสั่งสายตรวจใน PTM' })));
       add(c, kp);
       add(c, h('div', { class: 'small', style: 'margin-top:8px', text: m.types.map(function (t) { return t.label + ' ' + fmtN(t.n); }).join(' · ') }));
       if (m.offenses.length) { add(c, h('div', { class: 'small muted', style: 'margin:10px 0 4px', text: 'ข้อหาใบสั่งกล้อง' }));
@@ -4559,7 +4574,7 @@
     var cars = b.cars.filter(function (c) { return /^\d{4}$/.test(c.car); }).slice().sort(function (a, c) { return (c.warning || 0) - (a.warning || 0) || (a.zone || 9) - (c.zone || 9) || (a.car < c.car ? -1 : 1); });
     var tot = { n: 0, prev: 0, T: 0, C: 0, R: 0, X: 0 }, zones = {};
     cars.forEach(function (c) { var w = c.wAct || {}; tot.n += c.warning || 0; tot.prev += (c.prev && c.prev.warning) || 0; ['T', 'C', 'R', 'X'].forEach(function (k) { tot[k] += w[k] || 0; }); if (c.zone) zones[c.zone] = (zones[c.zone] || 0) + (c.warning || 0); });
-    var zero = cars.filter(function (c) { return !c.warning; }).map(function (c) { return c.car; }); cars = cars.filter(function (c) { return c.warning > 0; });
+    var zero = cars.filter(function (c) { return !c.warning; }).map(function (c) { return c.car; }); cars = d.warn && d.warn.dates ? [] : cars.filter(function (c) { return c.warning > 0; });
     var ch = 818, rh = cars.length > 11 && cars.length <= 13 ? 46 : 52, per = Math.floor((ch - 140 - 110) / rh), pages = pager(cars.length ? cars : [null], function () { return 1; }, per);
     var keys = ['T', 'C', 'R'].concat(tot.X ? ['X'] : []), cmax = Math.max(1, Math.max.apply(null, cars.map(function (c) { return c.warning || 0; })));
     return pages.map(function (pg, pi) {
@@ -4585,6 +4600,7 @@
         var v = ab('d-kv', 240 + Math.max(z.n ? 8 : 0, z.n / zmax * 280) + 10, y, 90, 44, 'font-size:28px;font-weight:700;color:' + (z.n ? DK.navy : '#dc2626')); v.textContent = fmtN(z.n); add(L, v);
       });
       var R = ab('d-card', 706, 222, 1168, ch); add(st, R);
+      if (d.warn && d.warn.dates) { dashWarnGrid(R, d.warn, ch); return st; }
       var t2 = ab('d-h2', 30, 22, null, null, 'font-size:36px'); t2.textContent = 'รายรถ (เรียงมาก→น้อย)'; add(R, t2);
       var lg = ab('mx-key', 30, 78, 1110, 40); keys.forEach(function (k) { add(lg, h('span', null, h('i', { style: 'background:' + WC[k] }), WL[k])); }); add(R, lg);
       var bx = 250, bw = 760;
@@ -4601,6 +4617,37 @@
       var ft = ab('d-note', 30, ch - 50, 1110, null, 'font-size:20px;white-space:normal'); ft.textContent = 'นับจากรายงานส่งเวร (ว่ากล่าวตักเตือนหน้างาน) แยกตาม พ.ร.บ. · ไม่นำไปคิดคะแนน · เทียบกับช่วงก่อนหน้าความยาวเท่ากัน'; add(R, ft);
       return st;
     });
+  }
+  /** ตารางรายรถ × รายวันในภาพผู้บังคับบัญชา (v1.22.2) */
+  function dashWarnGrid(R, w, ch) {
+    var rows = warnRows(w), n = w.dates.length, DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+    var t2 = ab('d-h2', 30, 22, null, null, 'font-size:36px'); t2.textContent = 'รายรถ รายวัน'; add(R, t2);
+    var x0 = 30, cw0 = 150, sw = 90, gw = 1168 - 60 - cw0 - sw, cw = gw / n, y0 = 84, hh = 56, foot = 44, keyH = 46;
+    var rh = Math.max(24, Math.min(46, Math.floor((ch - y0 - hh - foot - keyH - 20) / Math.max(1, rows.length)))), fs = Math.min(24, Math.floor(rh * 0.55), Math.floor(cw * 0.6));
+    var COL = { y: ['#dcfce7', '#166534'], x: ['#fef2f2', '#dc2626'], o: ['#eef2f7', '#94a3b8'], f: ['#f8fafc', '#cbd5e1'], p: ['#f8fafc', '#94a3b8'] };
+    add(R, ab('sb-band', x0 - 14, y0, 1168 - 32, hh, 'background:#e6edf7'));
+    var hc = ab('d-kv', x0, y0, cw0, hh, 'font-size:22px;font-weight:700;display:flex;align-items:center'); hc.textContent = 'รถ'; add(R, hc);
+    w.dates.forEach(function (d, i) { var dt = new Date(d + 'T00:00:00'), we = dt.getDay() === 0 || dt.getDay() === 6;
+      var e = ab('d-kv', x0 + cw0 + i * cw, y0 + 2, cw, hh, 'text-align:center;line-height:1.05'); add(e, h('b', { style: 'display:block;font-size:' + Math.min(22, cw * 0.55) + 'px', text: String(+d.slice(8)) }), h('small', { style: 'font-size:' + Math.min(15, cw * 0.4) + 'px;color:' + (we ? '#dc2626' : '#64748b'), text: DOW[dt.getDay()] })); add(R, e); });
+    var hs = ab('d-kv', x0 + cw0 + gw, y0, sw, hh, 'font-size:22px;font-weight:700;text-align:center;line-height:' + hh + 'px'); hs.textContent = 'รวม'; add(R, hs);
+    var col = {};
+    rows.forEach(function (r, j) {
+      var y = y0 + hh + 6 + j * rh;
+      if (j % 2 === 1) add(R, ab('sb-band', x0 - 14, y, 1168 - 32, rh));
+      var lc = ab('d-kv', x0, y, cw0, rh, 'display:flex;align-items:center;gap:8px'); add(lc, h('b', { style: 'font-size:' + Math.min(26, rh * 0.6) + 'px', text: r.car }), h('small', { style: 'font-size:' + Math.min(16, rh * 0.38) + 'px;color:#64748b', text: r.zone ? 'เขต ' + r.zone : '' })); add(R, lc);
+      r.cells.forEach(function (x, i) { col[x.d] = (col[x.d] || 0) + x.n; var c = COL[x.st];
+        var e = ab('d-kv', x0 + cw0 + i * cw + 2, y + 3, cw - 4, rh - 6, 'border-radius:5px;background:' + c[0] + ';color:' + c[1] + ';text-align:center;font-weight:700;font-size:' + fs + 'px;line-height:' + (rh - 6) + 'px');
+        e.textContent = x.st === 'y' ? String(x.n) : x.st === 'x' ? '✗' : ''; add(R, e); });
+      var se = ab('d-kv', x0 + cw0 + gw, y, sw, rh, 'text-align:center;font-weight:700;font-size:' + Math.min(26, rh * 0.6) + 'px;line-height:' + rh + 'px;color:' + (r.n ? DK.navy : '#dc2626')); se.textContent = fmtN(r.n); add(R, se);
+    });
+    var fy = y0 + hh + 6 + rows.length * rh + 4;
+    add(R, ab('sb-band', x0 - 14, fy, 1168 - 32, foot, 'background:#e6edf7'));
+    var fl = ab('d-kv', x0, fy, cw0, foot, 'font-size:22px;font-weight:700;line-height:' + foot + 'px'); fl.textContent = 'รวม'; add(R, fl);
+    w.dates.forEach(function (d, i) { var e = ab('d-kv', x0 + cw0 + i * cw, fy, cw, foot, 'text-align:center;font-weight:700;font-size:' + Math.min(20, cw * 0.55) + 'px;line-height:' + foot + 'px'); e.textContent = col[d] ? String(col[d]) : ''; add(R, e); });
+    var fs2 = ab('d-kv', x0 + cw0 + gw, fy, sw, foot, 'text-align:center;font-weight:700;font-size:24px;line-height:' + foot + 'px'); fs2.textContent = fmtN(w.total); add(R, fs2);
+    var key = ab('mx-key', x0, ch - 52, 1110, 40);
+    [['y', '2', 'ตักเตือน (ราย)'], ['x', '✗', 'มีเวร ไม่มีตักเตือน'], ['o', '', 'ไม่มีเวร']].forEach(function (k) { add(key, h('span', null, h('i', { style: 'background:' + COL[k[0]][0] + ';color:' + COL[k[0]][1] + ';text-align:center;font-style:normal;font-weight:700;font-size:16px;line-height:22px', text: k[1] }), k[2])); });
+    add(key, h('span', { style: 'color:#64748b', text: '· ไม่คิดคะแนน' })); add(R, key);
   }
   /** ภาพที่ 4: สัดส่วนภารกิจทั้งสถานี + แท่ง 100% รายรถ (เรียงตามคะแนน) — 16:9 แบ่งหน้าเมื่อรถมาก → [node, ...] */
   function dashMix(d) {
@@ -4891,7 +4938,7 @@
     }
     function load(a, b, kind) {
       var my = ++seq; clear(out); add(out, h('div', { class: 'loading' }, spinner(), h('p', { text: 'กำลังรวมผล ' + th(a) + (a !== b ? ' – ' + th(b) : '') + '…' })));
-      api('dash', { from: a, to: b }).then(function (d) { if (my !== seq) return; d._kind = kind; data = d; draw(); }, function (e) { if (my === seq) { clear(out); add(out, errorBox(e.message)); } });
+      Promise.all([api('dash', { from: a, to: b }), api('warn.board', { from: a, to: b }).catch(function () { return null; })]).then(function (r) { var d = r[0]; if (my !== seq) return; d._kind = kind; d.warn = r[1]; data = d; draw(); }, function (e) { if (my === seq) { clear(out); add(out, errorBox(e.message)); } });
     }
     var shots = [], drawN = 0;
     function draw() {

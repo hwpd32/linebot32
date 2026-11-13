@@ -791,3 +791,21 @@ input.diff-std { background: #fff7cc; border-color: #f59e0b; }
 .wn-z .zl{grid-template-columns:minmax(92px,1.3fr) 3fr}.wn-c .zl{grid-template-columns:110px 1fr}.wn-c .zl>small{grid-column:2;display:block;margin-top:-2px}
 .zb b.zero{color:var(--red,#dc2626)}
 .drop.over { border-color: var(--navy); background: #eef2ff; }
+/* v1.22.2 ตารางตักเตือนรายวัน */
+.wg-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e2e8f0; border-radius: 10px; }
+.wg { border-collapse: separate; border-spacing: 0; font-size: 13px; width: max-content; min-width: 100%; }
+.wg th, .wg td { text-align: center; padding: 3px 0; min-width: 28px; border-bottom: 1px solid #eef2f7; }
+.wg th { background: #f1f5f9; font-weight: 600; line-height: 1.1; padding: 4px 0; }
+.wg th b { display: block; font-size: 13px; } .wg th small { display: block; font-size: 10px; color: #64748b; font-weight: 400; }
+.wg th.we small { color: #dc2626; }
+.wg .wg-car { position: sticky; left: 0; background: #fff; text-align: left; padding: 3px 8px; font-weight: 700; min-width: 50px; z-index: 1; box-shadow: 1px 0 0 #e2e8f0; }
+.wg th.wg-car { background: #f1f5f9; }
+.wg .wg-sum { font-weight: 700; min-width: 40px; background: #f8fafc; } .wg .wg-sum.zero { color: #dc2626; }
+.wg tr.wg-z td { text-align: left; font-size: 12px; color: #475569; background: #f8fafc; padding: 4px 8px; font-weight: 600; position: sticky; left: 0; }
+.wg td.c-y, .wg-key i.c-y { background: #dcfce7; color: #166534; font-weight: 700; }
+.wg td.c-x, .wg-key i.c-x { color: #dc2626; background: #fef2f2; }
+.wg td.c-o, .wg-key i.c-o { background: #f1f5f9; }
+.wg td.c-p, .wg-key i.c-p { color: #94a3b8; }
+.wg tr.wg-foot td { font-weight: 700; background: #f8fafc; border-top: 1px solid #cbd5e1; }
+.wg-key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+.wg-key i { display: inline-block; min-width: 18px; height: 16px; line-height: 16px; text-align: center; border-radius: 3px; font-style: normal; font-size: 11px; border: 1px solid #e2e8f0; vertical-align: middle; }
