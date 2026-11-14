@@ -172,7 +172,7 @@
     });
   }
   // คำสั่งที่ประมวลผลนาน (รวบรวมข้อมูลหลายเดือน/สร้างไฟล์) รอได้นานกว่าปกติ
-  var LONG_MS = { 'backfill.preview': 170000, 'backfill.confirm': 170000, 'backfill.royal': 170000, 'backfill.rosterSpecial': 120000, 'import.update': 170000, 'score.impact': 90000, 'score.item': 30000, 'history.list': 40000, 'shift.detail': 30000, 'history.timeline': 30000, 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000, 'ptm.ingest': 170000, 'backfill.warnings': 170000 };
+  var LONG_MS = { 'backfill.preview': 170000, 'backfill.confirm': 170000, 'backfill.royal': 170000, 'backfill.rosterSpecial': 120000, 'import.update': 170000, 'score.impact': 90000, 'score.item': 30000, 'history.list': 40000, 'shift.detail': 30000, 'history.timeline': 30000, 'export.backup': 150000, 'fine.match': 170000, 'export.xlsx': 120000, 'export.pdf': 120000, 'file.upload': 170000, 'file.get': 120000, 'file.preview': 150000, 'file.confirm': 170000, 'ptm.ingest': 170000, 'ptm.reconcile': 170000, 'backfill.warnings': 170000 };
   function apiRaw(action, data) {
     var ctl = window.AbortController ? new AbortController() : null;
     var req = fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, data: data || {}, idToken: S.idToken, sess: S.sess || undefined, viewAs: S.viewAs || undefined }), signal: ctl ? ctl.signal : undefined });
@@ -1130,7 +1130,31 @@
           h('li', { text: 'รายงานสรุปการยกเลิกใบสั่ง (รายวัน) · รายงานสรุปการว่ากล่าว/ตักเตือน (รายวัน)' }),
           h('li', { text: 'รายงานการรับชำระค่าปรับประจำวัน (ตามประเภท พ.ร.บ.) → ยอดชำระรายใบ (ชุดเดียวกับโปรแกรมทะเบียนค่าปรับ)' }),
           h('li', { text: '🔒 เลขประจำตัว 13 หลัก ชื่อผู้ครอบครองรถ และชื่อ/เลขบัตรผู้มาชำระเงิน ถูกตัดทิ้งในเครื่องนี้ ไม่ถูกส่งเข้าระบบ' })))));
-    add($app, h('div', { class: 'section-label', text: 'สถานะข้อมูลในระบบ' }), stBox);
+    var rcBox = h('div');
+    add($app, h('div', { class: 'section-label', text: 'สถานะข้อมูลในระบบ' }), stBox, h('div', { class: 'section-label', text: 'ปรับใบสั่ง/ตักเตือนตาม PTM' }), rcBox);
+    (function () {
+      var c = card('⚖️ ปรับผลงานตาม PTM'), res = h('div'), from = h('input', { type: 'date', value: addDays(today(), -14) }), to = h('input', { type: 'date', value: addDays(today(), -1) });
+      add(c, h('p', { class: 'small muted', style: 'margin:0 0 6px', text: 'ใบสั่งสายตรวจ (ตามวันที่เกิดเหตุ หักใบยกเลิก/ใบที่เปลี่ยนเป็นตักเตือน) และตักเตือน (ตั้งแต่วันที่เริ่มลง POS) แทนยอดที่รายงานไว้ จับผู้ออกจากรหัสหมวก → ผลัดที่อยู่วันนั้น · รายการเดิมถูกยกเลิก (กู้คืนได้) · ทำอัตโนมัติทุกครั้งที่นำเข้าไฟล์' }),
+        h('div', { class: 'row', style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap' }, from, h('span', { text: 'ถึง' }), to));
+      var go1 = submitBtn('⚖️ ปรับตาม PTM ช่วงนี้', 'block', function () {
+        var a = from.value, b = to.value, parts = [], x = a; if (!a || !b || a > b) { toast('เลือกช่วงวันที่ให้ถูกต้อง'); return Promise.resolve(); }
+        while (x <= b) { var e = addDays(x, 30) < b ? addDays(x, 30) : b; parts.push([x, e]); x = addDays(e, 1); }
+        clear(res); var all = { changed: 0, days: [], unmatched: [], unmatchedN: 0 };
+        return parts.reduce(function (p, q, i) { return p.then(function () { add(res, h('div', { class: 'small muted', text: 'กำลังปรับ ' + th(q[0]) + ' – ' + th(q[1]) + ' (' + (i + 1) + '/' + parts.length + ')…' }));
+          return api('ptm.reconcile', { from: q[0], to: q[1] }).then(function (r) { all.changed += r.changed || 0; all.days = all.days.concat(r.days || []); all.unmatched = all.unmatched.concat(r.unmatched || []); all.unmatchedN += r.unmatchedN || 0; all.note = r.note; all.tt = r.ticketThrough || all.tt; }); }); }, Promise.resolve())
+          .then(function () { apiInvalidate(); clear(res); renderRc(res, all); });
+      });
+      add(c, h('div', { style: 'margin-top:8px' }, go1), res); add(rcBox, c);
+    })();
+    function renderRc(box, r) {
+      if (r.note) add(box, h('p', { class: 'small', text: r.note }));
+      add(box, h('p', { class: 'small' }, h('b', { text: r.changed ? '✅ ปรับแล้ว ' + r.changed + ' ผลัด' : '✅ ตรงกับ PTM อยู่แล้ว ไม่มีการเปลี่ยนแปลง' })));
+      if (r.days.length) add(box, table(['วันที่', 'รถ/ผลัด', 'ใบสั่ง เดิม→PTM', 'ตักเตือน เดิม→PTM'], [].concat.apply([], r.days.map(function (d) { return d.cars.map(function (c) { return [th(d.date), c.car, d.tickets ? c.before.ticket + ' → ' + c.after.ticket : '–', d.warnings ? c.before.warning + ' → ' + c.after.warning : '–']; }); })).slice(0, 300)));
+      if (r.unmatchedN) {
+        add(box, h('p', { class: 'small', style: 'color:#b45309;margin-top:8px', text: '⚠️ หาผลัดของผู้ออกไม่พบ ' + r.unmatchedN + ' ใบ — นับในยอดสถานีแต่ไม่ลงรถ (แก้: จับคู่รหัสหมวกที่เมนู 🎫 หรือแก้ตารางเวร แล้วกดปรับใหม่)' }));
+        add(box, table(['วันที่', 'รหัสหมวก/ชื่อใน PTM', 'สาเหตุ'], r.unmatched.slice(0, 60).map(function (u) { return [th(u.date), (u.badge || '') + ' ' + (u.officer || '') + (u.person ? ' (' + u.person + ')' : ''), u.why]; })));
+      }
+    }
     function loadStatus() {
       clear(stBox); add(stBox, h('div', { class: 'card' }, spinner()));
       api('ptm.status', {}, { fresh: true }).then(function (d) {
@@ -1149,13 +1173,13 @@
       var batches = [], cur = [], n = 0;
       days.forEach(function (d) { if (cur.length && (cur.length >= 7 || n + d.rows.length > 4000)) { batches.push(cur); cur = []; n = 0; } cur.push(d); n += d.rows.length; });
       if (cur.length) batches.push(cur);
-      var done = 0, rows = 0, total = 0;
+      var done = 0, rows = 0, total = 0, rc = 0, um = 0;
       return batches.reduce(function (p, b) {
         return p.then(function () {
           line.lastChild.textContent = PTM_KIND[kind] + ' — กำลังส่ง ' + (done + 1) + '/' + batches.length + ' ชุด…';
-          return api('ptm.ingest', { kind: kind, days: b }).then(function (r) { done++; rows += r.rows || 0; total += r.total || 0; });
+          return api('ptm.ingest', { kind: kind, days: b }).then(function (r) { done++; rows += r.rows || 0; total += r.total || 0; if (r.reconcile && !r.reconcile.error) { rc += r.reconcile.changed || 0; um = Math.max(um, r.reconcile.unmatchedN || 0); } });
         });
-      }, Promise.resolve()).then(function () { return { batches: batches.length, rows: rows, total: total }; });
+      }, Promise.resolve()).then(function () { return { batches: batches.length, rows: rows, total: total, rc: rc, um: um }; });
     }
     input.onchange = function () { var l = [].slice.call(input.files || []); input.value = ''; handle(l); };
     function handle(list) {
@@ -1180,7 +1204,7 @@
               var days = Object.keys(by[kind]).sort().map(function (d) { return by[kind][d]; });
               var line = h('div', { class: 'up-line' }, spinner(), h('span', { text: PTM_KIND[kind] })); add(status, line);
               return send(kind, days, line).then(function (r) {
-                clear(line); add(line, h('span', { text: '✅ ' + PTM_KIND[kind] + ' ' + days.length + ' วัน (' + th(days[0].date) + (days.length > 1 ? ' – ' + th(days[days.length - 1].date) : '') + ') · ' + fmtN(r.total) + ' รายการ' + (kind === 'used' ? ' (ใบสั่งสายตรวจ ' + fmtN(r.rows) + ' ใบ · กล้องเก็บเป็นยอดสรุป)' : '') }));
+                clear(line); add(line, h('span', { text: '✅ ' + PTM_KIND[kind] + ' ' + days.length + ' วัน (' + th(days[0].date) + (days.length > 1 ? ' – ' + th(days[days.length - 1].date) : '') + ') · ' + fmtN(r.total) + ' รายการ' + (kind === 'used' ? ' (ใบสั่งสายตรวจ ' + fmtN(r.rows) + ' ใบ · กล้องเก็บเป็นยอดสรุป)' : '') + (r.rc ? ' · ปรับผลงานตาม PTM ' + r.rc + ' ผลัด' : '') + (r.um ? ' · ⚠️ หาผลัดผู้ออกไม่พบ ' + r.um + ' ใบ (ดูปุ่มปรับตาม PTM ด้านล่าง)' : '') }));
               }, function (e) { clear(line); line.classList.add('bad'); add(line, h('span', { text: '⚠️ ' + PTM_KIND[kind] + ': ' + e.message })); });
             });
           }, Promise.resolve());
@@ -2543,6 +2567,7 @@
         h('div', { class: 'kpi', style: 'border-top:3px solid #2563eb' }, h('div', { class: 'n', text: fmtN(m.patrol) }), h('div', { class: 't', text: '🧾 ใบสั่งสายตรวจใน PTM' })));
       add(c, kp);
       add(c, h('div', { class: 'small', style: 'margin-top:8px', text: m.types.map(function (t) { return t.label + ' ' + fmtN(t.n); }).join(' · ') }));
+      if (m.verified && m.verified.ticketThrough) add(c, h('div', { class: 'small', style: 'margin-top:6px;color:#0f766e', text: '✅ ใบสั่งสายตรวจในระบบยืนยันตาม PTM ถึง ' + th(m.verified.ticketThrough) + (m.verified.ticketThrough < to ? ' · หลังจากนั้นเป็นยอดตามรายงาน (รอ PTM)' : '') + (m.verified.warnThrough && m.verified.warnThrough >= m.verified.warnFrom ? ' · ตักเตือนยืนยันตาม PTM ' + th(m.verified.warnFrom) + '–' + th(m.verified.warnThrough) : '') }));
       if (m.offenses.length) { add(c, h('div', { class: 'small muted', style: 'margin:10px 0 4px', text: 'ข้อหาใบสั่งกล้อง' }));
         var mx = m.offenses[0].n, ol = h('div', { class: 'zrows wn-z' });
         m.offenses.forEach(function (o) { add(ol, h('div', { class: 'zl' }, h('span', { class: 'small', text: o.label }), h('div', { class: 'zb' }, h('i', { style: 'width:' + Math.max(6, o.n / mx * 100) + '%;background:#0ea5e9' }), h('b', { text: fmtN(o.n) })))); });
@@ -5778,7 +5803,8 @@
           if (d.found) add(dc, table(['รถ', 'ใบสั่งรายข้อหา', 'อื่นๆ'], d.cars.map(function (c) {
             var oth = BF_KEYS.slice(2).filter(function (k) { return c.sheet[k[0]]; }).map(function (k) { return k[1] + ' ' + c.sheet[k[0]]; });
             if (c.escorts.length) oth.push('ว.42: ' + c.escorts.join(', ')); if (c.missions.length) oth.push('ภารกิจ: ' + c.missions.join(', '));
-            return [c.car + ' ' + (c.shift === 'N' ? '🌙' : '☀️') + (c.more.length ? ' ⚠️' : ''), c.tickets.map(function (t) { return t.label + ' ' + t.count; }).join(', ') || (c.note === '(ไม่มีในตาราง)' ? 'ไม่มีในตาราง' : '-'),
+            if (c.warn) { var wp = [['T', 'ขส'], ['C', 'รย'], ['R', 'จร'], ['X', 'ไม่ระบุ']].filter(function (k) { return c.warn[k[0]]; }).map(function (k) { return k[1] + ' ' + c.warn[k[0]]; }); if (wp.length) oth.unshift('ตักเตือน: ' + wp.join(' ')); }
+            return [c.car + ' ' + (c.shift === 'N' ? '🌙' : '☀️') + (c.more.length ? ' ⚠️' : ''), (c.tickets.map(function (t) { return t.label + ' ' + t.count; }).join(', ') || (c.note === '(ไม่มีในตาราง)' ? 'ไม่มีในตาราง' : '-')) + (c.ticketSrc === 'chat' ? ' (แชท)' : ''),
               oth.join(' · ') + (c.more.length ? ' · ' + c.more.join(' · ') : '')];
           })));
           add(out, dc);
