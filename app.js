@@ -2564,7 +2564,7 @@
     live('policy.board', { from: from, to: to }, function (p) {
       clear(c); var s = p.station, g = p.goal || { green: 80, amber: 50 };
       add(c, h('h3', null, '🎯 นโยบาย "เตือนก่อน ใบสั่งทีหลัง"', h('span', { class: 'right', text: p.through ? 'PTM ถึง ' + th(p.end) : 'ยังไม่มี PTM' })));
-      add(c, polHead(s, g), polMatrix(s));
+      add(c, polHead(s, g), polMatrix(s), warnMsgBox(function () { return warnMsg(p, from, to); }));
       var rows = brief ? p.zones.map(function (z) { z._lab = 'เขต ' + z.zone; return z; }) : p.cars.map(function (x) { x._lab = x.car; x._sub = x.zone ? 'เขต ' + x.zone : ''; return x; });
       var box = h('div', { class: 'pl' });
       rows.forEach(function (o) { add(box, h('div', { class: 'pl-r' }, h('span', { class: 'pl-l' }, h('b', { text: o._lab }), o._sub ? h('small', { class: 'muted', style: 'font-size:11px', text: ' ' + o._sub.replace('เขต ', 'ข.') }) : null), polBar(o),
@@ -2598,6 +2598,37 @@
       add(c, info(POL_NOTE));
     }, function (e) { clear(c); add(c, errorBox(e.message)); });
     return c;
+  }
+  // ===== v1.27 ข้อความสั้น "ว่ากล่าวตักเตือน" สำหรับส่งผู้บังคับบัญชาทาง LINE (ตามช่วงวันที่เลือก) =====
+  function warnMsg(p, from, to, kind) {
+    var s = p.station, g = p.goal || { green: 80, amber: 50 }, b = p.bench, L = [];
+    L.push('ส.ทล.2 กก.3 บก.ทล.');
+    L.push('รายงานการว่ากล่าวตักเตือน ' + dashTitle(from, to, false, kind).replace(/^ผลการปฏิบัติงาน/, '').trim());
+    if (p.through) L.push('(ข้อมูล PTM ถึง ' + th(p.warnEnd > p.end ? p.warnEnd : p.end) + ')');
+    L.push('');
+    L.push('1) ใบเตือนก่อนปรับ ' + fmtN(s.w) + ' ใบ');
+    L.push('   ใบสั่งสายตรวจ ' + fmtN(s.all) + ' ใบ · สัดส่วนเตือน ' + pct(s.wr));
+    if (b && (b.bk != null || b.kk != null)) L.push('   (เทียบรายงาน บก.ทล.: ' + [b.bk != null ? 'บก.ทล. ' + b.bk + '%' : '', b.kk != null ? 'กก.3 ' + b.kk + '%' : ''].filter(Boolean).join(' · ') + ')');
+    var zs = (p.zones || []).filter(function (z) { return z.w || z.all; });
+    if (zs.length) L.push('   รายเขต: ' + zs.map(function (z) { return 'ข.' + z.zone + ' ' + z.w; }).join(' · '));
+    L.push('2) นโยบายเตือนก่อนออกใบสั่ง');
+    L.push('   ทำถูก ' + pct(s.comp) + ' ' + compIcon(s.comp, g) + ' (' + fmtN(s.ok) + '/' + fmtN(s.dec) + ' · เป้า ≥ ' + g.green + '%)');
+    L.push('   - ตักเตือนผู้ไม่เคยถูกเตือน ' + fmtN(s.f) + ' ราย');
+    L.push('   - ออกใบสั่งผู้ยังไม่เคยถูกเตือน ' + fmtN(s.n) + ' ใบ');
+    if (s.r || s.y) L.push('   - เตือนซ้ำ ' + fmtN(s.r) + ' · ใบสั่งผู้เคยถูกเตือนแล้ว ' + fmtN(s.y));
+    var wk = (p.weeks || []).filter(function (w) { return w.comp != null; }).slice(-3);
+    if (wk.length > 1) L.push('   แนวโน้มรายสัปดาห์: ' + wk.map(function (w) { return pct(w.comp); }).join(' → '));
+    L.push('ไม่นับใบสั่งกล้อง · รถเร็ว · ฝ่าไฟแดง · ย้อนศร');
+    return L.join('\n');
+  }
+  function warnMsgBox(getText, open) {
+    var pre = h('div', { class: 'msg-preview', style: 'margin-top:6px' }), d = h('details', { class: 'pol-list' }, h('summary', { text: '💬 ข้อความสั้นส่งผู้บังคับบัญชา (ตามช่วงที่เลือก)' }));
+    if (open) d.open = true;
+    pre.textContent = getText();
+    add(d, pre, h('div', { class: 'row', style: 'margin-top:8px' },
+      h('button', { class: 'btn green grow', onclick: function () { postToChat(getText()).then(function (x) { toast(x === 'sent' ? '✅ ส่งเข้ากลุ่มแล้ว' : x === 'shared' ? '✅ ส่งแล้ว' : x === 'cancel' ? 'ยกเลิก' : '📋 คัดลอกข้อความแล้ว'); }); }, text: '💬 ส่งเข้าไลน์' }),
+      h('button', { class: 'btn ghost grow', onclick: function () { copyText(getText()).then(function () { toast('📋 คัดลอกข้อความแล้ว'); }); }, text: '📋 คัดลอก' })));
+    return d;
   }
   // ===== v1.26 ใบเตือนก่อนปรับ แบบรายงาน บก.ทล. (แยกเขต × รถ · เทียบใบสั่งสายตรวจทั้งหมด) =====
   var BK = { navy: '#0f2a5c', navy2: '#2350a8', gold: '#f5c518', goldD: '#8a6a00', track: '#e3e9f3' };
@@ -2729,6 +2760,7 @@
       add(c, h('h3', null, '🟨 ใบเตือนก่อนปรับ (แบบรายงาน บก.ทล.)', h('span', { class: 'right', text: p.through ? 'PTM ถึง ' + th(p.warnEnd) : '' })));
       add(c, h('div', { class: 'bk-kpi' }, [[fmtN(s.w), 'ใบเตือนก่อนปรับ'], [fmtN(s.all), 'ใบสั่งสายตรวจ'], [pct(s.wr), 'สัดส่วนเตือน']].map(function (k) { return h('div', null, h('b', { text: k[0] }), h('small', { text: k[1] })); })));
       if (D.bench) add(c, h('div', { class: 'note small', style: 'margin-top:8px', text: '📌 ' + bkBenchText(D.bench) }));
+      add(c, warnMsgBox(function () { return warnMsg(p, from, to); }));
       var zmax = Math.max.apply(null, D.zones.map(function (z) { return z.w; }).concat([1])), zb = h('div', { class: 'bk-z' });
       D.zones.forEach(function (z) { add(zb, h('div', { class: 'bk-r' }, h('b', { text: z.key }), h('div', { class: 'bk-t' }, h('i', { style: 'width:' + (z.w * 100 / zmax) + '%;background:' + (z.w === zmax && z.w ? BK.gold : BK.navy2) })), h('span', null, h('b', { text: fmtN(z.w) }), ' · ' + bkShare(z.w, s.w)))); });
       add(c, h('div', { class: 'small muted', style: 'margin:12px 0 4px', text: 'แยกตามเขตตรวจ (แท่งเหลือง = สูงสุด)' }), zb);
@@ -5269,6 +5301,7 @@
         h('div', { style: 'margin-top:8px' }, xlBtn('ตารางเป็น .xlsx', function () { dashXlsx(data); })),
         res));
       add(out, card('ข้อความรายงาน (ส่งคู่กับภาพ)'), h('div', { class: 'msg-preview', text: data.text }));
+      if (data.policy && data.policy.station) add(out, h('div', { class: 'card' }, h('h3', { text: '🗣️ ข้อความสั้น: ว่ากล่าวตักเตือน' }), warnMsgBox(function () { return warnMsg(data.policy, data.from, data.to, data._kind); }, true)));
       var made = null;
       /** ถ่ายภาพทีละหน้า → เก็บใน Drive ของสถานี */
       function make() {
