@@ -2635,7 +2635,7 @@
     var navyG = 'linear-gradient(90deg,' + BK.navy2 + ',' + BK.navy + ')';
     // 1) แยกตามเขตตรวจ
     var P1 = page('รายงาน ส.ทล.2 กก.3 ' + per, 'ใบเตือนก่อนปรับ แยกตามเขตตรวจ');
-    var L = ab('d-card', 46, 250, 640, 790); add(P1, L);
+    var L = ab('d-card', 46, 250, 640, 766); add(P1, L);
     var big = ab('d-kv', 36, 40, 580, 170, 'font-size:150px;font-weight:800;line-height:1;color:' + BK.navy); big.textContent = fmtN(s.w); add(L, big);
     var bs = ab('d-kv', 40, 205, 580, 40, 'font-size:28px;color:#475569'); bs.textContent = 'ใบ รวมทั้งสถานี'; add(L, bs);
     [[fmtN(D.zones.filter(function (z) { return z.zone; }).length), 'เขตตรวจที่มีข้อมูล'], [fmtN(D.cars.length), 'รถที่มีข้อมูล'], [bkShare(s.w, s.all), 'สัดส่วนเตือน']].forEach(function (k, i) {
@@ -2643,7 +2643,7 @@
       add(b, h('div', { style: 'font-size:46px;font-weight:800;line-height:1.1', text: k[0] }), h('div', { style: 'font-size:19px;opacity:.9', text: k[1] })); add(L, b); });
     var nt = ab('d-kv', 36, 440, 570, 300, 'font-size:22px;color:#475569;white-space:normal;line-height:1.5');
     nt.textContent = 'ใบสั่งสายตรวจทั้งหมด ' + fmtN(s.all) + ' ใบ (ไม่รวมใบสั่งกล้อง)' + (D.bench ? '\n' + bkBenchText(D.bench) : ''); nt.style.whiteSpace = 'pre-line'; add(L, nt);
-    var R = ab('d-card', 706, 250, 1168, 790); add(P1, R);
+    var R = ab('d-card', 706, 250, 1168, 766); add(P1, R);
     var rt = ab('d-kv', 36, 26, 1100, 34, 'font-size:24px;font-weight:700;color:' + BK.navy); rt.textContent = 'เรียงตามเขตตรวจ (จำนวน · สัดส่วน) — แท่งสีเหลือง = สูงสุด'; add(R, rt);
     var zmax = Math.max.apply(null, D.zones.map(function (z) { return z.w; }).concat([1])), rh = Math.min(92, Math.floor(680 / Math.max(1, D.zones.length)));
     D.zones.forEach(function (z, i) {
@@ -2654,7 +2654,7 @@
     if (!D.zones.length) { var e = ab('d-note', 36, 100, 1000, null); e.textContent = 'ยังไม่มีข้อมูลใบเตือนก่อนปรับในช่วงนี้'; add(R, e); }
     // 2) ตารางเขต × รถ
     var P2 = page('รายละเอียด', 'ใบเตือนก่อนปรับ รายรถ ในแต่ละเขตตรวจ');
-    var T = ab('d-card', 46, 250, 1828, 790); add(P2, T);
+    var T = ab('d-card', 46, 250, 1828, 766); add(P2, T);
     var carsT = D.cars.map(function (c) { return c.car; }), cellOf = {}; D.zc.forEach(function (o) { cellOf[o.zone + '|' + o.car] = o; });
     var zr = D.zones.filter(function (z) { return z.zone; }).map(function (z) { return z.zone; }), cmax = 0, cmaxK = '';
     D.zc.forEach(function (o) { if (o.w > cmax) { cmax = o.w; cmaxK = o.zone + '|' + o.car; } });
@@ -2691,7 +2691,7 @@
     bb.textContent = zs.length ? zs[0].key + ' สูงสุด ' + zs[0].w + ' ใบ (' + bkShare(zs[0].w, s.w) + ') · ' + lowZ.key + ' น้อยสุด ' + lowZ.w + ' ใบ (' + bkShare(lowZ.w, s.w) + ')' : 'ยังไม่มีข้อมูล'; add(P3, bb);
     // 4) เปรียบเทียบใบสั่งทั้งหมด vs เตือน รายรถ
     var P4 = page('เปรียบเทียบ', 'ใบสั่งทั้งหมด เทียบ ใบเตือนก่อนปรับ รายรถ');
-    var Q = ab('d-card', 46, 250, 1828, 790); add(P4, Q);
+    var Q = ab('d-card', 46, 250, 1828, 766); add(P4, Q);
     var amax = Math.max.apply(null, D.cars.map(function (c) { return c.all; }).concat([1])), wmax = Math.max.apply(null, D.cars.map(function (c) { return c.w; }).concat([1])), qh = Math.min(56, Math.floor(600 / Math.max(1, D.cars.length)));
     [['รถ', 36], ['ใบสั่งทั้งหมด (แท่งน้ำเงิน)', 230], ['เตือนก่อนปรับ (แท่งเหลือง)', 1000], ['สัดส่วนเตือน', 1620]].forEach(function (k) { var e = ab('d-kv', k[1], 24, 520, 30, 'font-size:22px;font-weight:700;color:' + BK.navy2); e.textContent = k[0]; add(Q, e); });
     D.cars.forEach(function (c, i) {
@@ -2700,7 +2700,7 @@
       bar(Q, 1000, y + qh / 2 - 15, 460, 30, c.w, wmax, BK.gold); var v2 = ab('d-kv', 1475, y, 120, qh, 'font-size:26px;display:flex;align-items:center;color:' + BK.navy); v2.textContent = fmtN(c.w); add(Q, v2);
       var up = c.wr != null && D.avg != null && c.wr > D.avg, pl = ab('d-kv', 1620, y + qh / 2 - 21, 170, 42, 'border-radius:21px;font-size:24px;font-weight:800;display:flex;align-items:center;justify-content:center;' + (up ? 'background:' + BK.navy + ';color:' + BK.gold : 'background:#e6edf7;color:' + BK.navy)); pl.textContent = pct(c.wr); add(Q, pl);
     });
-    var n4 = ab('d-note', 36, 730, 1760, null, 'font-size:20px;white-space:normal'); n4.textContent = 'สัดส่วนเตือน = เตือนก่อนปรับ ÷ ใบสั่งสายตรวจทั้งหมด (ไม่รวมใบสั่งกล้อง) · เฉลี่ย ส.ทล.2 กก.3 ' + pct(D.avg) + ' · ป้ายพื้นน้ำเงินเข้ม = สูงกว่าค่าเฉลี่ยสถานี' + (D.bench ? ' · ' + bkBenchText(D.bench, true) : ''); add(Q, n4);
+    var n4 = ab('d-note', 36, 690, 1760, null, 'font-size:20px;white-space:normal'); n4.textContent = 'สัดส่วนเตือน = เตือนก่อนปรับ ÷ ใบสั่งสายตรวจทั้งหมด (ไม่รวมใบสั่งกล้อง) · เฉลี่ย ส.ทล.2 กก.3 ' + pct(D.avg) + ' · ป้ายพื้นน้ำเงินเข้ม = สูงกว่าค่าเฉลี่ยสถานี' + (D.bench ? ' · ' + bkBenchText(D.bench, true) : ''); add(Q, n4);
     // 5) ข้อสังเกต · เทียบกับใบสั่งทั้งหมด
     var P5 = page('ข้อสังเกต · เทียบกับใบสั่งทั้งหมด', 'ยอดเตือนน้อย ไม่ได้แปลว่าเตือนน้อยเสมอไป');
     var gw = 440;
