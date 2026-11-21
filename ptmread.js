@@ -400,7 +400,44 @@
     if (total != null && total !== rows.length) throw new R.FileProblem('CORRUPT', 'จำนวนรายการ (' + rows.length + ') ไม่ตรงกับยอดรวมในไฟล์ (' + total + ') — ไฟล์อาจไม่ครบ');
     return { kind: kind, label: KIND_LABEL[kind], date: date, total: rows.length, byType: byType, rows: rows };
   }
-  var api = { parseDaily: parseDaily, KIND_LABEL: KIND_LABEL, beIso: beIso };
+  // ===== การตอบสนองนโยบาย "ว่ากล่าวตักเตือนก่อนออกใบสั่ง" (v1.24) =====
+  // อ่านเลขประจำตัวเฉพาะในหน่วยความจำของเบราว์เซอร์เพื่อเทียบ → ส่งออกได้แค่ [เลขใบสั่ง, y/n/u, วันที่เคยถูกเตือน] ไม่มีเลขบัตร
+  /** รายงานสรุปการใช้ใบสั่ง → Map(เลขใบสั่ง → เลขประจำตัว) · ใช้ในเครื่องเท่านั้น */
+  function idMap(u8) {
+    var g = grid(u8), m = new Map();
+    var s = function (r, c) { var row = g.get(r); if (!row) return ''; var v = row.get(c); return v === undefined || v === null ? '' : String(v).trim(); };
+    var hr = -1; for (var r1 = 0; r1 < 12; r1++) if (/^วันที่/.test(s(r1, 0)) && s(r1, 1)) { hr = r1; break; }
+    if (hr < 0) return m;
+    var ct = -1, ci = -1;
+    for (var c = 0; c < 30; c++) { var h = s(hr, c).replace(/\s+/g, ' '); if (ct < 0 && /^เลขที่ใบสั่ง/.test(h)) ct = c; if (ci < 0 && /13\s*หลัก|เลขประจำตัว/.test(h)) ci = c; }
+    if (ct < 0 || ci < 0) return m;
+    var maxRow = Math.max.apply(null, Array.from(g.keys()));
+    for (var r = hr + 1; r <= maxRow; r++) { if (!DMY.test(s(r, 0))) continue; var t = s(r, ct); if (t) m.set(t, s(r, ci).replace(/\D/g, '')); }
+    return m;
+  }
+  function validId(id) { return /^\d{6,}$/.test(id || '') && !/^0+$/.test(id); }
+  /** used = [{ rows (parseDaily), ids (idMap) }] · warns = [{ date, rows }] → [[ticket, 'y'|'n'|'u'|'f'|'r', warnDate]] ใบสั่งสายตรวจ (ไม่ใช่กล้อง) + ใบตักเตือน */
+  function policyFlags(used, warns) {
+    var idOf = new Map(); used.forEach(function (u) { (u.ids || new Map()).forEach(function (v, k) { idOf.set(k, v); }); });
+    var warned = new Map(), wt = new Set();
+    warns.forEach(function (w) { (w.rows || []).forEach(function (x) { wt.add(x.t); var id = idOf.get(x.t); if (!validId(id)) return; var d = w.date; if (!warned.has(id) || d < warned.get(id)) warned.set(id, d); }); });
+    var out = [], seen = new Map(); // ตักเตือน: f = คนไม่เคยถูกเตือน (ถูกนโยบาย) · r = เคยถูกเตือนแล้ว (ควรออกใบสั่ง) · u = ไม่มีเลขบัตร
+    warns.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }).forEach(function (w) {
+      (w.rows || []).forEach(function (x) { if (!x.t) return; var id = idOf.get(x.t); if (!validId(id)) { out.push([x.t, 'u', '']); return; }
+        var prev = seen.get(id); out.push(prev && prev < w.date ? [x.t, 'r', prev] : [x.t, 'f', '']); if (!prev) seen.set(id, w.date); });
+    });
+    used.forEach(function (u) {
+      (u.rows || []).forEach(function (x) {
+        var ty = String(x.ty || '').replace(/\D/g, ''); if (ty.length === 1) ty = '0' + ty;
+        if (ty === '01' || ty === '02' || !x.t || wt.has(x.t)) return;
+        var id = idOf.get(x.t), when = x.id || x.rd || '';
+        if (!validId(id)) { out.push([x.t, 'u', '']); return; }
+        var wd = warned.get(id); out.push(wd && when && wd < when ? [x.t, 'y', wd] : [x.t, 'n', '']);
+      });
+    });
+    return out;
+  }
+  var api = { parseDaily: parseDaily, KIND_LABEL: KIND_LABEL, beIso: beIso, idMap: idMap, policyFlags: policyFlags };
   root.PtmDaily = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
