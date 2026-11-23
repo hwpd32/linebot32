@@ -849,3 +849,17 @@ input.diff-std { background: #fff7cc; border-color: #f59e0b; }
 .bk-t i { display: block; height: 100%; border-radius: 7px; }
 .bk-pill { display: inline-block; min-width: 54px; text-align: center; padding: 1px 8px; border-radius: 10px; background: #e6edf7; color: #0f2a5c; font-weight: 700; }
 .bk-pill.up { background: #0f2a5c; color: #f5c518; }
+/* v1.28 แบบ ตร.: 2 ส่วน + เป้ารายคันรายผลัด */
+.tr-g { display: grid; gap: 8px; margin-top: 6px; }
+.tr-p { border: 1px solid #e5e9f0; border-radius: 10px; padding: 8px; }
+.tr-h { font-weight: 700; font-size: 13px; color: #0f2a5c; margin-bottom: 6px; }
+.tr-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.tr-k { border-radius: 8px; padding: 6px 8px; border-left: 4px solid #a3adbb; background: #f4f6fa; }
+.tr-k small { display: block; font-size: 11px; color: #475569; }
+.tr-k b { font-size: 20px; }
+.tr-k.ok { border-color: #14a37f; background: #fff6dc; } .tr-k.bad { border-color: #d6293e; background: #fdeef0; }
+.tr-k.gd { border-color: #b7791f; background: #fff6dc; } .tr-k.gd2 { border-color: #b7791f; background: #fbf0c8; }
+.tr-t { border-collapse: collapse; font-size: 12px; } .tr-t th, .tr-t td { padding: 3px 4px; text-align: center; border-bottom: 1px solid #eef1f5; white-space: nowrap; }
+.tr-t td:first-child { text-align: left; }
+.tr-c { display: inline-block; min-width: 22px; padding: 1px 3px; margin: 1px; border-radius: 5px; font-weight: 700; }
+.tr-c.y { background: #dcfce7; color: #166534; } .tr-c.h { background: #fef3c7; color: #92400e; } .tr-c.x { background: #fee2e2; color: #b91c1c; }
