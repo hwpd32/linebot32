@@ -2565,7 +2565,7 @@
       clear(c); var s = p.station, g = p.goal || { green: 80, amber: 50 };
       add(c, h('h3', null, '🎯 นโยบาย "เตือนก่อน ใบสั่งทีหลัง"', h('span', { class: 'right', text: p.through ? 'PTM ถึง ' + th(p.end) : 'ยังไม่มี PTM' })));
       add(c, trSummary(p), warnMsgBox(function () { return warnMsg(p, from, to); }));
-      if (!brief) { var tg = shiftTargetBox(p); if (tg) add(c, tg); var nr = nonRespByPerson(p); if (nr) add(c, nr); }
+      if (!brief) { var tg = shiftTargetBox(p); if (tg) add(c, tg); var nr = nonRespByPerson(p); if (nr) add(c, nr); if (S.boot && S.boot.perms && S.boot.perms.admin) add(c, trBenchForm(p, from, to)); }
       add(c, h('details', { class: 'pol-list' }, h('summary', { text: 'ตัวชี้วัดเสริม: % ทำถูก (ตาราง 4 ช่อง · รายรถ/รายคน)' }), polHead(s, g), polMatrix(s)));
       var xtra = c.lastChild;
       var rows = brief ? p.zones.map(function (z) { z._lab = 'เขต ' + z.zone; return z; }) : p.cars.map(function (x) { x._lab = x.car; x._sub = x.zone ? 'เขต ' + x.zone : ''; return x; });
@@ -2603,6 +2603,22 @@
   // ===== v1.28 แบบเดียวกับภาพผู้บังคับบัญชา ตร./บก.ทล. — ส่วนที่ 1 ใบสั่งสนอง/ไม่สนอง/ตรวจสอบไม่ได้ · ส่วนที่ 2 ตักเตือน ไม่ระบุตัวตน/ระบุได้/รายใหม่ =====
   var TR = { navy: '#0f2a5c', ink: '#1f2937', red: '#d6293e', pink: '#f3a1ac', green: '#14a37f', grey: '#a3adbb', gold: '#b7791f', gold2: '#f2d79b', cream: '#fff6dc', hl: '#fbf0c8', band: '#f4f6fa' };
   function trPct(v) { return v == null ? '–' : (Math.round(v * 10) / 10).toFixed(1); }
+  /** v1.29 ข้อความเทียบค่าอ้างอิงภาพ ตร. (เฉพาะช่วงที่ตรงสัปดาห์ที่บันทึก) */
+  function trBenchY(b) { return b ? [b.kk != null ? 'กก.3 ' + trPct(b.kk) + '%' : '', b.bk != null ? 'บก.ทล. ' + trPct(b.bk) + '%' : '', b.tr != null ? 'ตร. ' + trPct(b.tr) + '%' : ''].filter(Boolean).join(' · ') : ''; }
+  function trBenchNew(b) { return b && b.kkNew != null ? 'กก.3 รายใหม่ ' + fmtN(b.kkNew) + (b.kkW ? '/' + fmtN(b.kkW) + ' ครั้ง (' + trPct(b.kkNew * 100 / b.kkW) + '%)' : ' ครั้ง') : ''; }
+  function trBenchForm(p, from, to) {
+    var d = h('details', { class: 'pol-list' }, h('summary', { text: '⚙️ ค่าอ้างอิงจากภาพ ตร./บก.ทล. รายสัปดาห์ (แอดมิน)' })), b = p.benchTR || {}, F = {};
+    add(d, h('div', { class: 'small muted', text: 'กรอกตามภาพ "ผลการดำเนินการตามนโยบาย" ของ ตร./บก.ทล. — แสดงเทียบในภาพ/การ์ด/ข้อความ เมื่อเลือกช่วงตรงกับสัปดาห์นั้น' }));
+    [['from', 'สัปดาห์ ตั้งแต่', 'date', from], ['to', 'ถึง', 'date', to], ['kk', 'สนองนโยบาย กก.3 (%)', 'number'], ['bk', 'สนองนโยบาย บก.ทล. (%)', 'number'], ['tr', 'สนองนโยบาย ตร. (%)', 'number'],
+      ['kkTk', 'กก.3 ใบสั่งทั้งหมด (ใบ)', 'number'], ['kkY', 'กก.3 สนองนโยบาย (ใบ)', 'number'], ['kkW', 'กก.3 ว่ากล่าวตักเตือนทั้งหมด (ครั้ง)', 'number'], ['kkWid', 'กก.3 ระบุตัวตนได้ (ครั้ง)', 'number'], ['kkNew', 'กก.3 รายใหม่ (ครั้ง)', 'number']].forEach(function (k) {
+      var v = b[k[0]] != null ? String(b[k[0]]) : (k[3] || ''); F[k[0]] = h('input', { type: k[2], step: 'any', value: v }); add(d, h('label', { class: 'small', style: 'display:block;margin-top:6px' }, k[1], F[k[0]])); });
+    add(d, h('div', { style: 'display:flex;gap:8px;margin-top:8px' }, h('button', { class: 'btn', onclick: function () { var x = {}; Object.keys(F).forEach(function (k) { x[k] = F[k].value; }); api('policy.benchTR', x).then(function () { toast('บันทึกค่าอ้างอิงแล้ว'); go(S.view, S.params, true, true); }, function (e) { toast(e.message, 4000); }); }, text: 'บันทึก' })));
+    (p.benchTRList || []).slice().reverse().forEach(function (x) {
+      add(d, h('div', { class: 'small', style: 'display:flex;gap:8px;align-items:center;margin-top:6px;border-top:1px dashed #e5e9f0;padding-top:4px' }, h('span', { style: 'flex:1', text: th(x.from) + ' – ' + th(x.to) + ' · ' + [trBenchY(x), trBenchNew(x)].filter(Boolean).join(' · ') }),
+        h('button', { class: 'btn gray small', onclick: function () { api('policy.benchTR', { clear: x.from }).then(function () { toast('ลบแล้ว'); go(S.view, S.params, true, true); }, function (e) { toast(e.message, 4000); }); }, text: 'ลบ' })));
+    });
+    return d;
+  }
   function trRows(p, level) {
     var src = level === 'cars' ? (p.cars || []).map(function (c) { var o = Object.assign({}, c); o.label = c.car; o.sub = c.zone ? 'เขต ' + c.zone : ''; return o; })
       : (p.zones || []).map(function (z) { var o = Object.assign({}, z); o.label = 'เขต ' + z.zone; o.sub = String(z.label || '').replace(/^เขต \d+\s*/, ''); return o; });
@@ -2634,10 +2650,10 @@
         var lb = ab('d-kv', x0 - 14, y + hh - 18, bw + 28, 20, 'font-size:13px;color:#64748b;text-align:center;' + (last ? 'font-weight:700;color:' + TR.ink : '')); lb.textContent = labels[i]; add(C, lb);
       });
     }
-    function box(C, x, y, w, hh, bg, bar, title, val, unit, l1, l2) {
+    function box(C, x, y, w, hh, bg, bar, title, val, unit, l1, l2, hl) {
       var b = ab('d-kv', x, y, w, hh, 'background:' + bg + ';border-radius:12px;border-left:6px solid ' + bar + ';padding:6px 10px;line-height:1.2;overflow:hidden'); add(C, b);
       add(b, h('div', { style: 'font-size:16px;font-weight:700;color:' + TR.ink, text: title }), h('div', null, h('b', { style: 'font-size:30px;color:' + TR.ink, text: fmtN(val) }), h('span', { style: 'font-size:15px', text: ' ' + unit })),
-        h('div', { style: 'font-size:13px;font-weight:700;color:' + TR.ink, text: l1 }), h('div', { style: 'font-size:12px;color:#475569', text: l2 }));
+        h('div', { style: 'font-size:13px;font-weight:700;color:' + TR.ink, text: l1 }), h('div', { style: hl ? 'font-size:13px;font-weight:800;color:' + TR.navy : 'font-size:12px;color:#475569', text: l2 }));
     }
     var wkLab = wk.map(function (w) { return thD(w.week, false).replace(/\s.*$/, '') + '–' + th(w.to).replace(/\s*\d{2}$/, ''); });
     // ส่วนที่ 1
@@ -2646,7 +2662,7 @@
     var tl1 = ab('d-kv', 330, 62, 550, 20, 'font-size:14px;font-weight:700;color:' + TR.ink); tl1.textContent = 'แนวโน้มรายสัปดาห์ · ร้อยละไม่สนองนโยบาย'; add(A, tl1);
     trend(A, 340, 84, 540, 100, wk.map(function (w) { return w.pN; }), wkLab, TR.pink, TR.red, function (v) { return v == null ? '–' : trPct(v); });
     var bw3 = (W - 40 - 20) / 3;
-    box(A, 20, 190, bw3, 124, TR.cream, TR.green, 'สนองนโยบาย', s.y, 'ใบ', 'ร้อยละ ' + trPct(s.pY) + ' ของใบสั่งทั้งหมด', 'พบประวัติการว่ากล่าวตักเตือนก่อนออกใบสั่ง');
+    box(A, 20, 190, bw3, 124, TR.cream, TR.green, 'สนองนโยบาย', s.y, 'ใบ', 'ร้อยละ ' + trPct(s.pY) + ' ของใบสั่งทั้งหมด', p.benchTR && trBenchY(p.benchTR) ? 'เทียบ ' + trBenchY(p.benchTR) : 'พบประวัติการว่ากล่าวตักเตือนก่อนออกใบสั่ง', !!(p.benchTR && trBenchY(p.benchTR)));
     box(A, 30 + bw3, 190, bw3, 124, '#fdeef0', TR.red, 'ไม่สนองนโยบาย', s.n, 'ใบ', 'ร้อยละ ' + trPct(s.pN) + ' ของใบสั่งทั้งหมด', 'ไม่พบประวัติการว่ากล่าวตักเตือนก่อนออกใบสั่ง');
     box(A, 40 + 2 * bw3, 190, bw3, 124, TR.band, TR.grey, 'ตรวจสอบไม่ได้', s.unv, 'ใบ', 'ร้อยละ ' + trPct(s.pU) + ' ของใบสั่งทั้งหมด', 'ไม่มีเลขประจำตัวที่ใช้ตรวจสอบได้');
     var r1 = rows.slice().sort(function (a, b) { return (b.pY == null ? -1 : b.pY) - (a.pY == null ? -1 : a.pY) || b.tk - a.tk; });
@@ -2660,7 +2676,7 @@
     trend(B, 340, 84, 540, 100, wk.map(function (w) { return w.f; }), wkLab, TR.gold2, TR.gold, function (v) { return fmtN(v || 0); });
     box(B, 20, 190, bw3, 124, TR.band, TR.grey, 'ไม่ระบุตัวตน', s.wun, 'ครั้ง', 'ร้อยละ ' + trPct(s.pWun) + ' ของการว่ากล่าวตักเตือนทั้งหมด', 'ไม่ได้บันทึกเลขประจำตัว 13 หลัก');
     box(B, 30 + bw3, 190, bw3, 124, TR.cream, TR.gold, 'ระบุตัวตนได้', s.wid, 'ครั้ง', 'ร้อยละ ' + trPct(s.pWid) + ' ของการว่ากล่าวตักเตือนทั้งหมด', 'บันทึกเลขประจำตัว 13 หลัก');
-    box(B, 40 + 2 * bw3, 190, bw3, 124, TR.cream, TR.gold, 'ระบุตัวตนได้และเป็นรายใหม่', s.f, 'ครั้ง', 'ร้อยละ ' + trPct(s.pNew) + ' ของการว่ากล่าวตักเตือนทั้งหมด', 'ไม่พบประวัติการว่ากล่าวตักเตือนมาก่อน');
+    box(B, 40 + 2 * bw3, 190, bw3, 124, TR.cream, TR.gold, 'ระบุตัวตนได้และเป็นรายใหม่', s.f, 'ครั้ง', 'ร้อยละ ' + trPct(s.pNew) + ' ของการว่ากล่าวตักเตือนทั้งหมด', p.benchTR && trBenchNew(p.benchTR) ? 'เทียบ ' + trBenchNew(p.benchTR) : 'ไม่พบประวัติการว่ากล่าวตักเตือนมาก่อน', !!(p.benchTR && trBenchNew(p.benchTR)));
     var r2 = rows.slice().sort(function (a, b) { return b.f - a.f || b.w - a.w; });
     var c2 = [[20, 40, 'ลำดับ'], [64, 120, level === 'cars' ? 'รถ' : 'เขต'], [186, 96, 'ว่ากล่าว\nทั้งหมด'], [282, 72, '(ครั้ง)'], [354, 76, '(ร้อยละ)'], [432, 96, 'ทั้งหมด'], [530, 90, 'รายใหม่'], [630, 250, '']];
     tableTR(B, c2, r2, function (o) { return [fmtN(o.w), fmtN(o.wun), trPct(o.pWun), fmtN(o.wid), fmtN(o.f)]; }, [3, 4],
@@ -2707,6 +2723,7 @@
       h('div', { class: 'tr-row' }, k('ok', 'สนองนโยบาย', s.y, 'ใบ', trPct(s.pY) + '%'), k('bad', 'ไม่สนองนโยบาย', s.n, 'ใบ', trPct(s.pN) + '%'), k('na', 'ตรวจสอบไม่ได้', s.unv, 'ใบ', trPct(s.pU) + '%'))),
       h('div', { class: 'tr-p' }, h('div', { class: 'tr-h', text: 'ส่วนที่ 2 · ว่ากล่าวตักเตือน ' + fmtN(s.w) + ' ครั้ง' }),
       h('div', { class: 'tr-row' }, k('na', 'ไม่ระบุตัวตน', s.wun, 'ครั้ง', trPct(s.pWun) + '%'), k('gd', 'ระบุตัวตนได้', s.wid, 'ครั้ง', trPct(s.pWid) + '%'), k('gd2', 'รายใหม่', s.f, 'ครั้ง', trPct(s.pNew) + '%'))));
+    var bt = p.benchTR; if (bt && (trBenchY(bt) || trBenchNew(bt))) add(g, h('div', { class: 'small muted', style: 'grid-column:1/-1', text: '📌 เทียบภาพ ตร. สัปดาห์ ' + th(bt.from) + '–' + th(bt.to) + ': สนองนโยบาย ' + [trBenchY(bt), trBenchNew(bt)].filter(Boolean).join(' · ') }));
     return g;
   }
   function shiftTargetBox(p) {
@@ -2756,9 +2773,11 @@
     L.push('   - สนองนโยบาย ' + fmtN(s.y) + ' ใบ (' + trPct(s.pY) + '%)');
     L.push('   - ไม่สนองนโยบาย ' + fmtN(s.n) + ' ใบ (' + trPct(s.pN) + '%)');
     L.push('   - ตรวจสอบไม่ได้ ' + fmtN(s.unv) + ' ใบ (' + trPct(s.pU) + '%)');
+    if (p.benchTR && trBenchY(p.benchTR)) L.push('   (เทียบภาพ ตร.: สนองนโยบาย ' + trBenchY(p.benchTR) + ')');
     L.push('3) การว่ากล่าวตักเตือน ' + fmtN(s.w) + ' ครั้ง');
     L.push('   - ระบุตัวตนได้ ' + fmtN(s.wid) + ' ครั้ง · รายใหม่ ' + fmtN(s.f) + ' ครั้ง (' + trPct(s.pNew) + '%)');
     L.push('   - ไม่ระบุตัวตน ' + fmtN(s.wun) + ' ครั้ง');
+    if (p.benchTR && trBenchNew(p.benchTR)) L.push('   (เทียบภาพ ตร.: ' + trBenchNew(p.benchTR) + ')');
     var sh = p.shifts || [], T = p.shiftTarget || 2; if (sh.length) L.push('   - เป้ารายใหม่ ' + T + ' ราย/คัน/ผลัด: ครบ ' + sh.filter(function (x) { return x.f >= T; }).length + ' จาก ' + sh.length + ' ผลัด');
     var wk = (p.weeks || []).filter(function (w) { return w.tk; }).slice(-3);
     if (wk.length > 1) L.push('   แนวโน้มไม่สนองนโยบายรายสัปดาห์: ' + wk.map(function (w) { return trPct(w.pN) + '%'; }).join(' → '));
