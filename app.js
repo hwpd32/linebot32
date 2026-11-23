@@ -2674,7 +2674,7 @@
   }
   /** ตารางจัดอันดับในการ์ด (ส่วนที่ 1/2) */
   function tableTR(C, cols, rows, vals, hiIdx, bar, s, g1, g2, g1x, g2x, legend, wOf) {
-    var y0 = 330, hh = 46, maxRows = rows.length, rh = Math.max(26, Math.min(56, Math.floor((766 - y0 - hh - 52 - 14) / Math.max(1, maxRows)))), fs = Math.min(22, Math.floor(rh * 0.52));
+    var y0 = 330, hh = 46, maxRows = rows.length, rh = Math.max(20, Math.min(56, Math.floor((766 - y0 - hh - 52 - 14) / Math.max(1, maxRows)))), fs = Math.max(13, Math.min(22, Math.floor(rh * 0.55)));
     var hiSet = Array.isArray(hiIdx) ? hiIdx : [hiIdx], mx = wOf ? Math.max.apply(null, rows.map(wOf).concat([wOf(s) ? 0 : 1, 1])) : 1;
     var gA = ab('d-kv', g1x[0], y0 - 2, g1x[1] - g1x[0], 18, 'font-size:14px;font-weight:700;text-align:center;border-bottom:1px solid #cbd5e1'); gA.textContent = g1; add(C, gA);
     var gB = ab('d-kv', g2x[0], y0 - 2, g2x[1] - g2x[0], 18, 'font-size:14px;font-weight:700;text-align:center;border-bottom:1px solid #cbd5e1'); gB.textContent = g2; add(C, gB);
